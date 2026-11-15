@@ -1,7 +1,7 @@
 /**
  * XTJSON parser and generator for JavaScript.
  *
- * Implements the XTJSON specification, draft 0.3 (docs/xtjson-spec-en.md).
+ * Implements the XTJSON specification, draft 0.4 (docs/xtjson-spec-en.md).
  * The API follows the global `JSON` object:
  *
  *     import XTJSON from '@cwkr/xtjson';
@@ -17,9 +17,9 @@
  * - Errors in the document throw `XTJSONError` (a `SyntaxError`) with line and
  *   column. Errors of the application (invalid options or arguments, values
  *   that cannot be written) throw `TypeError`.
- * - Custom named values, number suffixes (sections 6.4 and 9.5) and the
- *   I-JSON mode (section 12) are passed as options. `XTJSONOptions`
- *   validates them once and can be reused for many calls.
+ * - Custom named values (section 6.4) and the I-JSON mode (section 12) are
+ *   passed as options. `XTJSONOptions` validates them once and can be reused
+ *   for many calls. The number suffixes (section 9.5) are fixed.
  */
 
 // ---------------------------------------------------------------------------
@@ -62,9 +62,8 @@ const RBRACE = 0x7d;
 // Flags for ASCII characters
 const ID_START = 1; // ALPHA / "_" / "$"                       (7.2)
 const ID_PART = 2; // ALPHA / DIGIT / "_" / "$"                (7.2)
-const SUFFIX_FIRST = 4; // g-n p-w y z G-N P-W Y Z % $          (9.5)
-const SUFFIX_NEXT = 8; // a-z A-Z % $                           (9.5)
-const DIGIT = 16;
+const SUFFIX_FIRST = 4; // g-n p-w y z G-N P-W Y Z $            (9.5)
+const DIGIT = 8;
 
 const CHAR_FLAGS = new Uint8Array(128);
 /** Value of a hexadecimal digit, or -1. */
@@ -75,8 +74,7 @@ for (let c = 0; c < 128; c++) {
   let flags = 0;
   if (/[A-Za-z_$]/.test(ch)) flags |= ID_START | ID_PART;
   if (/[0-9]/.test(ch)) flags |= ID_PART | DIGIT;
-  if (/[g-np-wyzG-NP-WYZ%$]/.test(ch)) flags |= SUFFIX_FIRST;
-  if (/[a-zA-Z%$]/.test(ch)) flags |= SUFFIX_NEXT;
+  if (/[g-np-wyzG-NP-WYZ$]/.test(ch)) flags |= SUFFIX_FIRST;
   CHAR_FLAGS[c] = flags;
   if (/[0-9A-Fa-f]/.test(ch)) HEX_VALUE[c] = parseInt(ch, 16);
 }
@@ -116,14 +114,19 @@ const LINE_SEPARATOR = String.fromCharCode(0x2028);
 const PARAGRAPH_SEPARATOR = String.fromCharCode(0x2029);
 
 const IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
-const SUFFIX = /^[g-np-wyzG-NP-WYZ%$][a-zA-Z%$]?$/;
 const PREDEFINED_VALUES = new Set(['true', 'false', 'null']);
 
-/** Predefined number suffixes and their factors (9.5). */
-const PREDEFINED_SUFFIXES = new Map([
-  ['k', 1000], ['K', 1000],
-  ['kb', 1024], ['Kb', 1024], ['kB', 1024], ['KB', 1024],
-  ['mb', 1048576], ['Mb', 1048576], ['mB', 1048576], ['MB', 1048576],
+/**
+ * The number suffixes of 9.5; the table is exhaustive. Each suffix converts
+ * a value v to v * factor * 10^scale (the divisors 1000 and 100 are powers
+ * of ten, so the result can be computed exactly from the decimal digits).
+ */
+const SUFFIXES = new Map([
+  ['k', [1000, 0]], ['K', [1000, 0]],
+  ['kb', [1024, 0]], ['Kb', [1024, 0]], ['kB', [1024, 0]], ['KB', [1024, 0]],
+  ['mb', [1048576, 0]], ['Mb', [1048576, 0]], ['mB', [1048576, 0]], ['MB', [1048576, 0]],
+  ['ms', [1, -3]], ['s', [1, 0]], ['min', [60, 0]], ['h', [3600, 0]],
+  ['pct', [1, -2]], ['px', [1, 0]], ['L', [1, 0]], ['n', [1, 0]],
 ]);
 
 const RADIX_NAMES = { 2: 'binary', 8: 'octal', 10: 'decimal', 16: 'hexadecimal' };
@@ -199,40 +202,43 @@ function describeAt(text, offset) {
 }
 
 // ---------------------------------------------------------------------------
-// Options: definitions (6.4, 9.5) and I-JSON mode (12)
+// Options: named values (6.4) and I-JSON mode (12)
 
 /** Internal state of `XTJSONOptions` instances. */
 const OPTIONS = new WeakMap();
 
 /**
  * Validated, immutable options for `XTJSON.parse()` and `XTJSON.stringify()`:
- * custom named values (6.4), custom number suffixes (9.5) and the I-JSON
- * mode (12).
+ * custom named values (6.4) and the I-JSON mode (12). The number suffixes
+ * are fixed by section 9.5 and cannot be changed.
  *
  * Named values keep the order in which they are given. When several named
- * values have the same primitive value, `stringify` writes the one defined
- * last. Validate once and reuse the instance for many calls.
+ * values have the same value, `stringify` writes the one defined last.
+ * Validate once and reuse the instance for many calls.
  */
 export class XTJSONOptions {
   /**
-   * @param {{values?: object, suffixes?: object, ijson?: boolean}} [init]
-   *   `values`: identifier -> JSON value; `suffixes`: suffix -> conversion
-   *   function. Each as a plain object, a `Map` or an iterable of
-   *   `[key, value]` pairs. `ijson`: true for the I-JSON mode.
-   * @throws {TypeError} if a definition violates 6.4 or 9.5
+   * @param {{values?: object, ijson?: boolean}} [init]
+   *   `values`: identifier -> string, number, boolean or null, as a plain
+   *   object, a `Map` or an iterable of `[key, value]` pairs.
+   *   `ijson`: true for the I-JSON mode.
+   * @throws {TypeError} if a definition violates 6.4
    */
   constructor(init) {
     if (init !== undefined && init !== null && (typeof init !== 'object' || Array.isArray(init))) {
-      throw new TypeError('XTJSON options must be an object with the properties "values", "suffixes" and "ijson"');
+      throw new TypeError('XTJSON options must be an object with the properties "values" and "ijson"');
+    }
+    if (init?.suffixes !== undefined) {
+      throw new TypeError('Invalid XTJSON option: custom number suffixes are not supported; the suffixes are fixed by section 9.5 of the specification');
     }
     const ijson = init?.ijson ?? false;
     if (typeof ijson !== 'boolean') {
       throw new TypeError(`Invalid XTJSON option: "ijson" must be true or false, not ${quote(ijson)}`);
     }
     const values = new Map();
-    // Named values whose JSON value is not I-JSON conforming, with the reason.
+    // Named values whose value is not I-JSON conforming, with the reason.
     const ijsonIssues = new Map();
-    // For stringify: primitive value -> identifier; the last definition wins.
+    // For stringify: value -> identifier; the last definition wins.
     const names = new Map();
     for (const [id, value] of entries(init?.values, 'values')) {
       if (typeof id !== 'string' || !IDENTIFIER.test(id)) {
@@ -244,29 +250,15 @@ export class XTJSONOptions {
       if (values.has(id)) {
         throw new TypeError(`Invalid XTJSON definition: the named value '${id}' is defined more than once`);
       }
-      const frozen = freezeJSONValue(value, `named value '${id}'`, 0, []);
-      values.set(id, frozen);
-      const issue = ijsonValueIssue(frozen);
-      if (issue !== undefined) ijsonIssues.set(id, issue);
-      if (frozen === null || typeof frozen !== 'object') names.set(frozen, id);
+      checkNamedValue(value, id);
+      values.set(id, value);
+      if (typeof value === 'string') {
+        const issue = ijsonStringIssue(value);
+        if (issue !== undefined) ijsonIssues.set(id, issue);
+      }
+      names.set(value, id);
     }
-    const suffixes = new Map();
-    for (const [suffix, fn] of entries(init?.suffixes, 'suffixes')) {
-      if (typeof suffix !== 'string' || !SUFFIX.test(suffix)) {
-        throw new TypeError(`Invalid XTJSON definition: ${quote(suffix)} is not a valid number suffix (one or two characters; first g-z or G-Z except o, O, x, X, or % or $; then an ASCII letter, % or $)`);
-      }
-      if (PREDEFINED_SUFFIXES.has(suffix)) {
-        throw new TypeError(`Invalid XTJSON definition: the suffix '${suffix}' is predefined and cannot be redefined`);
-      }
-      if (suffixes.has(suffix)) {
-        throw new TypeError(`Invalid XTJSON definition: the suffix '${suffix}' is defined more than once`);
-      }
-      if (typeof fn !== 'function') {
-        throw new TypeError(`Invalid XTJSON definition: the suffix '${suffix}' needs a conversion function`);
-      }
-      suffixes.set(suffix, fn);
-    }
-    OPTIONS.set(this, { values, suffixes, ijson, ijsonIssues, names });
+    OPTIONS.set(this, { values, ijson, ijsonIssues, names });
     Object.freeze(this);
   }
 
@@ -280,20 +272,11 @@ export class XTJSONOptions {
   }
 
   /**
-   * The custom named values in their defined order. Returns a new `Map`;
-   * the values are deeply frozen.
-   * @returns {Map<string, unknown>}
+   * The custom named values in their defined order. Returns a new `Map`.
+   * @returns {Map<string, string | number | boolean | null>}
    */
   get values() {
     return new Map(OPTIONS.get(this).values);
-  }
-
-  /**
-   * The custom number suffixes. Returns a new `Map`.
-   * @returns {Map<string, (value: number) => number>}
-   */
-  get suffixes() {
-    return new Map(OPTIONS.get(this).suffixes);
   }
 
   get [Symbol.toStringTag]() {
@@ -302,7 +285,7 @@ export class XTJSONOptions {
 }
 
 const DEFAULT_OPTIONS = {
-  values: new Map(), suffixes: new Map(), ijson: false, ijsonIssues: new Map(), names: new Map(),
+  values: new Map(), ijson: false, ijsonIssues: new Map(), names: new Map(),
 };
 
 // ---------------------------------------------------------------------------
@@ -327,24 +310,6 @@ function ijsonStringIssue(s) {
     } else if ((c >= 0xfdd0 && c <= 0xfdef) || c >= 0xfffe) {
       return `the noncharacter ${hex4(c)}`;
     }
-  }
-  return undefined;
-}
-
-/** `ijsonStringIssue` for all names and strings in a JSON value. */
-function ijsonValueIssue(value) {
-  if (typeof value === 'string') return ijsonStringIssue(value);
-  if (value === null || typeof value !== 'object') return undefined;
-  if (Array.isArray(value)) {
-    for (const item of value) {
-      const issue = ijsonValueIssue(item);
-      if (issue !== undefined) return issue;
-    }
-    return undefined;
-  }
-  for (const key of Object.keys(value)) {
-    const issue = ijsonStringIssue(key) ?? ijsonValueIssue(value[key]);
-    if (issue !== undefined) return issue;
   }
   return undefined;
 }
@@ -380,60 +345,23 @@ function quote(x) {
 }
 
 /**
- * Validates that `value` is a JSON value (6.4) and returns a deeply frozen
- * copy of it.
+ * Validates the value of the named value `id` (6.4): a string, a finite
+ * number, true, false or null. Objects and arrays are not permitted.
  */
-function freezeJSONValue(value, where, depth, ancestors) {
+function checkNamedValue(value, id) {
   switch (typeof value) {
     case 'string':
     case 'boolean':
-      return value;
+      return;
     case 'number':
-      if (Number.isFinite(value)) return value;
-      throw new TypeError(`Invalid XTJSON definition: ${where} is ${value}, which is not a JSON number`);
-    case 'object': {
-      if (value === null) return null;
-      if (depth >= MAX_DEPTH) {
-        throw new TypeError(`Invalid XTJSON definition: ${where} is nested deeper than ${MAX_DEPTH} levels`);
-      }
-      if (ancestors.includes(value)) {
-        throw new TypeError(`Invalid XTJSON definition: ${where} contains a circular reference`);
-      }
-      ancestors.push(value);
-      let copy;
-      if (Array.isArray(value)) {
-        copy = [];
-        for (let i = 0; i < value.length; i++) {
-          if (!(i in value)) {
-            throw new TypeError(`Invalid XTJSON definition: ${where} is a sparse array`);
-          }
-          copy.push(freezeJSONValue(value[i], where, depth + 1, ancestors));
-        }
-      } else {
-        const proto = Object.getPrototypeOf(value);
-        if (proto !== Object.prototype && proto !== null) {
-          throw new TypeError(`Invalid XTJSON definition: ${where} contains an object that is neither a plain object nor an array`);
-        }
-        copy = {};
-        for (const key of Object.keys(value)) {
-          setMember(copy, key, freezeJSONValue(value[key], where, depth + 1, ancestors));
-        }
-      }
-      ancestors.pop();
-      return Object.freeze(copy);
-    }
+      if (Number.isFinite(value)) return;
+      throw new TypeError(`Invalid XTJSON definition: the named value '${id}' is ${value}, which is not a JSON number`);
+    case 'object':
+      if (value === null) return;
+      throw new TypeError(`Invalid XTJSON definition: the named value '${id}' is ${Array.isArray(value) ? 'an array' : 'an object'}; a named value must be a string, a number, true, false or null`);
     default:
-      throw new TypeError(`Invalid XTJSON definition: ${where} contains ${typeof value === 'undefined' ? 'undefined' : 'a ' + typeof value}, which is not a JSON value`);
+      throw new TypeError(`Invalid XTJSON definition: the named value '${id}' is ${typeof value === 'undefined' ? 'undefined' : 'a ' + typeof value}; a named value must be a string, a number, true, false or null`);
   }
-}
-
-/** Mutable deep copy of a validated (frozen) JSON value. */
-function cloneJSONValue(value) {
-  if (value === null || typeof value !== 'object') return value;
-  if (Array.isArray(value)) return value.map(cloneJSONValue);
-  const copy = {};
-  for (const key of Object.keys(value)) setMember(copy, key, cloneJSONValue(value[key]));
-  return copy;
 }
 
 /** Creates an own data property, also for the name "__proto__". */
@@ -451,7 +379,7 @@ function setMember(obj, name, value) {
 class Parser {
   /**
    * @param {string} text
-   * @param {{values: Map<string, unknown>, suffixes: Map<string, Function>, ijson: boolean, ijsonIssues: Map<string, string>}} options
+   * @param {{values: Map<string, unknown>, ijson: boolean, ijsonIssues: Map<string, string>}} options
    */
   constructor(text, options) {
     this.text = text;
@@ -459,7 +387,6 @@ class Parser {
     this.pos = 0;
     this.depth = 0;
     this.values = options.values;
-    this.suffixes = options.suffixes;
     this.ijson = options.ijson;
     this.ijsonIssues = options.ijsonIssues;
   }
@@ -622,7 +549,7 @@ class Parser {
           this.fail(`The value of the named value '${id}' contains ${issue}, which is not permitted in I-JSON mode`, start);
         }
       }
-      return cloneJSONValue(value);
+      return value;
     }
 
     let hint;
@@ -1060,25 +987,29 @@ class Parser {
         if (c === PLUS || c === MINUS) pos++;
         pos = this.scanDigits(pos, 10, 'in the exponent');
       }
+      // May be Infinity; the range is checked below, after the suffix
+      // (9.4: `4.4e308pct` is 4.4e306).
       value = Number(this.withoutUnderscores(start, pos));
-      if (!Number.isFinite(value)) this.fail('The number is out of range', start);
     }
 
     // 9.5: suffix
     let c = text.charCodeAt(pos);
     if (hasFlag(c, SUFFIX_FIRST)) {
+      // Longest match: all identifier characters belong to the suffix.
       const suffixStart = pos;
       pos++;
-      if (hasFlag(text.charCodeAt(pos), SUFFIX_NEXT)) pos++;
+      while (hasFlag(text.charCodeAt(pos), ID_PART)) pos++;
       const suffix = text.slice(suffixStart, pos);
       c = text.charCodeAt(pos);
-      if (hasFlag(c, ID_PART) || c === PERCENT || c === DOT) {
-        this.fail(`Unexpected ${describeAt(text, pos)} after the number suffix '${suffix}'; a suffix has at most two characters`, pos);
+      if (c === DOT || c === PERCENT) {
+        this.fail(`Unexpected '${String.fromCharCode(c)}' after the number suffix '${suffix}'`, pos);
       }
       // `value` is exact for non-decimal numbers (checked in radixValue) and
       // for decimal integers within the safe range; otherwise it may be rounded.
       const exact = radix !== 10 || (isInteger && Math.abs(value) <= Number.MAX_SAFE_INTEGER);
-      value = this.applySuffix(suffix, value, exact, start, suffixStart, pos);
+      value = this.applySuffix(suffix, value, exact, start, suffixStart);
+    } else if (c === PERCENT) {
+      this.fail("'%' is not permitted after a number; for a percentage use the suffix 'pct' (50pct is 0.5)", pos);
     } else if (c === DOT) {
       this.fail(radix === 10
         ? "Unexpected '.' in a number"
@@ -1090,6 +1021,7 @@ class Parser {
       if (c === UNDERSCORE) this.fail("'_' is only permitted between two digits", pos);
       this.fail(`Unexpected '${String.fromCharCode(c)}' after a number; a number suffix cannot begin with a to f, o or x`, pos);
     }
+    if (!Number.isFinite(value)) this.fail('The number is out of range', start);
 
     this.pos = pos;
     return value;
@@ -1145,50 +1077,59 @@ class Parser {
   }
 
   /**
-   * Applies a number suffix (9.5). `exact` tells whether `value` is exactly
-   * the number written between `start` and `suffixStart`.
+   * Applies a number suffix (9.5). The result is the exact product or
+   * quotient, rounded once to the nearest double. `exact` tells whether
+   * `value` is exactly the number written between `start` and `suffixStart`.
    */
-  applySuffix(suffix, value, exact, start, suffixStart, end) {
-    const factor = PREDEFINED_SUFFIXES.get(suffix);
+  applySuffix(suffix, value, exact, start, suffixStart) {
+    const conversion = SUFFIXES.get(suffix);
+    if (conversion === undefined) this.fail(unknownSuffixMessage(suffix), suffixStart);
+    const [factor, scale] = conversion;
+    if (factor === 1 && scale === 0) return value; // s, px, L, n
     let result;
-    if (factor !== undefined) {
-      result = exact
-        ? value * factor // both operands exact: the product is correctly rounded
-        : exactDecimalProduct(this.withoutUnderscores(start, suffixStart), factor);
+    if (exact && scale === 0) {
+      result = value * factor; // both operands exact: the product is correctly rounded
+    } else if (exact) {
+      // An exact value is an integer here.
+      result = scaledDecimal(value < 0 || Object.is(value, -0) ? '-' : '', BigInt(Math.abs(value)) * BigInt(factor), scale);
     } else {
-      const fn = this.suffixes.get(suffix);
-      if (fn === undefined) {
-        this.fail(`Undefined number suffix '${suffix}'`, suffixStart);
-      }
-      try {
-        result = fn(value);
-      } catch (error) {
-        const detail = error instanceof Error ? error.message : String(error);
-        this.fail(`The conversion of '${this.text.slice(start, end)}' failed: ${detail}`, start, error);
-      }
-      if (typeof result !== 'number' || !Number.isFinite(result)) {
-        this.fail(`The conversion function of the suffix '${suffix}' did not return a finite number`, suffixStart);
-      }
+      const m = /^(-?)(\d+)(?:\.(\d+))?(?:[eE]([+-]?\d+))?$/.exec(this.withoutUnderscores(start, suffixStart));
+      const fraction = m[3] ?? '';
+      const exponent = (m[4] === undefined ? 0 : Number(m[4])) - fraction.length;
+      result = scaledDecimal(m[1], BigInt(m[2] + fraction) * BigInt(factor), exponent + scale);
     }
-    if (!Number.isFinite(result)) this.fail('The number is out of range', start);
     return result;
   }
 }
 
 /**
- * Exact product of a decimal number written as text and an integer factor,
- * rounded once to the nearest double (9.5: `0.1kb` is 102.4).
+ * The double nearest to sign digits × 10^exponent (9.5: `0.1kb` is 102.4,
+ * `100ms` is 0.1). The sign is kept for zero (`-0ms` is -0).
  */
-function exactDecimalProduct(digits, factor) {
-  const m = /^(-?)(\d+)(?:\.(\d+))?(?:[eE]([+-]?\d+))?$/.exec(digits);
-  const fraction = m[3] ?? '';
-  let exponent = (m[4] === undefined ? 0 : Number(m[4])) - fraction.length;
+function scaledDecimal(sign, digits, exponent) {
   // Keep the exponent in a range that Number() parses; beyond it the result
   // is 0 or out of range anyway.
   exponent = Math.max(-1e7, Math.min(1e7, exponent));
-  const product = BigInt(m[2] + fraction) * BigInt(factor);
-  return Number(`${m[1]}${product}e${exponent}`);
+  return Number(`${sign}${digits}e${exponent}`);
 }
+
+/** Message for a suffix that is not in the table of 9.5, with a hint. */
+function unknownSuffixMessage(suffix) {
+  let hint = '';
+  const lower = suffix.toLowerCase();
+  const sameLetters = [...SUFFIXES.keys()].filter((s) => s.toLowerCase() === lower);
+  if (sameLetters.length > 0) {
+    hint = `; did you mean ${sameLetters.map((s) => `'${s}'`).join(' or ')}? Suffixes are case-sensitive`;
+  } else {
+    const prefix = [...SUFFIXES.keys()].filter((s) => suffix.startsWith(s)).sort((a, b) => b.length - a.length)[0];
+    if (prefix !== undefined) {
+      hint = `; '${suffix}' is read as one suffix, not as '${prefix}' followed by '${suffix.slice(prefix.length)}'`;
+    }
+  }
+  return `Unknown number suffix '${suffix}'${hint}. The suffixes are ${SUFFIX_LIST}`;
+}
+
+const SUFFIX_LIST = 'k, K, kb, Kb, kB, KB, mb, Mb, mB, MB, ms, s, min, h, pct, px, L and n';
 
 // ---------------------------------------------------------------------------
 // Reviver (as in JSON.parse, ECMA-262 InternalizeJSONProperty)
@@ -1594,7 +1535,7 @@ const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[
  *   a function transforms the result, as in `JSON.parse`; an object are the
  *   options
  * @param {XTJSONOptions | object | null} [options] custom named values,
- *   number suffixes and the I-JSON mode
+ *   and the I-JSON mode
  * @returns {any}
  * @throws {XTJSONError} if the text is not a valid XTJSON document
  * @throws {TypeError} if the arguments or the options are invalid
@@ -1640,7 +1581,7 @@ function parse(text, reviver, options) {
  *   indentation: a number of spaces (at most 10) or a string of spaces and
  *   tabs
  * @param {XTJSONOptions | object | null} [options] named values and the
- *   I-JSON mode; custom suffixes are not used for output
+ *   I-JSON mode
  * @returns {string | undefined} undefined if the value cannot be written
  *   (undefined, a function or a symbol), as in `JSON.stringify`
  * @throws {TypeError} for circular references, BigInt values, invalid

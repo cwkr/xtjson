@@ -17,12 +17,8 @@ export type JSONValue =
   | JSONValue[]
   | { [name: string]: JSONValue };
 
-/**
- * Conversion function of a number suffix (section 9.5). Receives the value
- * of the number including its sign and returns a finite number. An exception
- * thrown by it is reported as an error of the document.
- */
-export type SuffixFunction = (value: number) => number;
+/** The value of a named value (6.4): a string, a number, a boolean or null. */
+export type NamedValue = string | number | boolean | null;
 
 /**
  * Definitions given as a plain object, a `Map` or an iterable of
@@ -36,19 +32,17 @@ export type DefinitionEntries<T> =
 /** Options for `parse` and `stringify`. */
 export interface XTJSONOptionsInit {
   /**
-   * Named values (6.4): identifier → JSON value, in a fixed order.
-   * `true`, `false` and `null` are predefined and cannot be redefined.
-   * `stringify` writes a string, number, boolean or `null` as a named value
-   * if one has exactly this value; if several have it, the one defined last
-   * wins, and the predefined ones are used only if no custom one matches.
+   * Named values (6.4): identifier → string, number, boolean or `null`, in
+   * a fixed order; objects and arrays are not permitted. `true`, `false`
+   * and `null` are predefined and cannot be redefined.
+   * `stringify` writes a value as a named value if one has exactly this
+   * value; if several have it, the one defined last wins, and the predefined
+   * ones are used only if no custom one matches.
+   *
+   * There is no option for number suffixes: they are fixed by section 9.5,
+   * and an object with a `suffixes` property is rejected with a `TypeError`.
    */
-  values?: DefinitionEntries<JSONValue>;
-  /**
-   * Number suffixes (9.5): suffix → conversion function. The suffixes
-   * `k`, `K`, `kb`, `Kb`, `kB`, `KB`, `mb`, `Mb`, `mB`, `MB` are predefined
-   * and cannot be redefined. Only `parse` uses custom suffixes.
-   */
-  suffixes?: DefinitionEntries<SuffixFunction>;
+  values?: DefinitionEntries<NamedValue>;
   /**
    * I-JSON mode (section 12). `parse` rejects a document in which an object
    * contains a name twice, or in which a name or string value (also from a
@@ -64,12 +58,10 @@ export interface XTJSONOptionsInit {
  * call; plain `XTJSONOptionsInit` objects are validated again on each call.
  */
 export class XTJSONOptions implements XTJSONOptionsInit {
-  /** @throws {TypeError} if a definition violates section 6.4 or 9.5. */
+  /** @throws {TypeError} if a definition violates section 6.4. */
   constructor(init?: XTJSONOptionsInit | null);
-  /** The named values in their defined order (a new Map; values are frozen). */
-  get values(): Map<string, JSONValue>;
-  /** The custom number suffixes (a new Map). */
-  get suffixes(): Map<string, SuffixFunction>;
+  /** The named values in their defined order (a new Map). */
+  get values(): Map<string, NamedValue>;
   /** True for the I-JSON mode. */
   get ijson(): boolean;
   get [Symbol.toStringTag](): 'XTJSONOptions';
@@ -103,7 +95,7 @@ export type Options = XTJSONOptions | XTJSONOptionsInit;
  * @param text the document
  * @param reviver transforms the result, as in `JSON.parse`; `null` or
  *   `undefined` for none
- * @param options named values, number suffixes and the I-JSON mode
+ * @param options named values and the I-JSON mode
  * @throws {XTJSONError} if the text is not a valid XTJSON document
  * @throws {TypeError} if the arguments or the options are invalid
  */

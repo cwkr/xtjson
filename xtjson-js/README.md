@@ -3,7 +3,7 @@
 XTJSON parser and generator for JavaScript. XTJSON is a syntactic superset of
 JSON for files that are written and maintained by people, such as
 configuration files. See the specification in
-[`docs/xtjson-spec-en.md`](../docs/xtjson-spec-en.md) (draft 0.3).
+[`docs/xtjson-spec-en.md`](../docs/xtjson-spec-en.md) (draft 0.4).
 
 - A single ES module in plain JavaScript, with TypeScript declarations.
 - No dependencies. Runs in current browsers, Node.js (18 or later), Bun and Deno.
@@ -43,7 +43,7 @@ Parses an XTJSON document and returns its value.
   string. It must be decoded text; when reading bytes, decode them as UTF-8
   first (for example with `new TextDecoder('utf-8', { fatal: true })`).
 - `reviver`: optional, works exactly as in `JSON.parse`.
-- `options`: optional named values, number suffixes and I-JSON mode, see
+- `options`: optional named values and I-JSON mode, see
   [Options](#options).
 
 ```js
@@ -101,13 +101,13 @@ The output differs from `JSON.stringify` in these points:
   priority: `1000` is `1k`, `2048` is `2kb`, `5120000` is `5_000kb`,
   `67108864` is `64mb`. A suffix is used only if the remaining factor is at
   most 2⁵³ − 1, so that the text reads back as exactly the same number.
-  Custom suffixes are never used for output.
+  The other suffixes of section 9.5 (`ms`, `min`, `pct`, …) are never used
+  for output.
 - **Named values.** A string, number, `true`, `false` or `null` is written as
   a named value if one has exactly this value. If several match, the one
   defined last wins; the predefined `true`, `false` and `null` are used only
   if no custom named value matches. With `values: { nil: null }`, `null` is
-  always written as `nil`. Named values whose value is an object or an array
-  are not used for output, and names are never replaced.
+  always written as `nil`. Names are never replaced.
 
 A document that uses custom named values can only be read with the same
 options. The specification (section 11) recommends this only if the
@@ -115,44 +115,40 @@ recipient is certain to use the same definitions.
 
 ### Options
 
-Without options, only the predefined named values `true`, `false`, `null`
-and the predefined suffixes `k`, `K` (times 1000), `kb`, `Kb`, `kB`, `KB`
-(times 1024) and `mb`, `Mb`, `mB`, `MB` (times 1048576) are active. An
-application can define further ones:
+Without options, only the predefined named values `true`, `false` and `null`
+are active. An application can define further named values:
 
 ```js
 import XTJSON, { XTJSONOptions } from '@cwkr/xtjson';
 
 const options = new XTJSONOptions({
   values: { nil: null, unknown: 'not specified' },
-  suffixes: { '%': (x) => x / 100 },
 });
 
-XTJSON.parse('ratio: 50%\nowner: unknown\nboss: nil', options);
+XTJSON.parse('ratio: 50pct\nowner: unknown\nboss: nil', options);
 // { ratio: 0.5, owner: 'not specified', boss: null }
 
 XTJSON.stringify({ owner: 'not specified', boss: null }, options);
 // 'owner:unknown,boss:nil'
 ```
 
-- `values` maps identifiers to JSON values. The order of the named values is
-  fixed: it is the order in which they are given.
-- `suffixes` maps suffixes (one or two characters, see section 9.5) to
-  conversion functions. A conversion function receives the number including
-  its sign and must return a finite number. An exception thrown by it is
-  reported as an error of the document, with the original exception as
-  `cause`.
+- `values` maps identifiers to a string, a number, `true`, `false` or
+  `null` (section 6.4); objects and arrays are not permitted. The order of
+  the named values is fixed: it is the order in which they are given. They
+  can be given as a plain object, a `Map` or an iterable of `[key, value]`
+  pairs.
 - `ijson`: `true` for the I-JSON mode, see below. Default `false`.
-- `values` and `suffixes` can be given as a plain object, a `Map` or an
-  iterable of `[key, value]` pairs.
 
-`XTJSONOptions` validates the options once and makes a deeply frozen copy of
-the named values. Create it once and reuse it for `parse` and `stringify`.
-A plain object `{ values, suffixes, ijson }` can be passed as well, but it is
-validated again on every call.
+There is no option for number suffixes. The suffixes are fixed by section
+9.5 and always active: `k`, `K` (times 1000), `kb`, `Kb`, `kB`, `KB` (times
+1024), `mb`, `Mb`, `mB`, `MB` (times 1048576), `ms` (divided by 1000), `s`,
+`min` (times 60), `h` (times 3600), `pct` (divided by 100), `px`, `L` and
+`n`. `s`, `px`, `L` and `n` leave the value unchanged. Options with a
+`suffixes` property are a `TypeError`.
 
-Every named value in a result of `parse` is a fresh copy, so changing the
-result never changes the options.
+`XTJSONOptions` validates the options once. Create it once and reuse it for
+`parse` and `stringify`. A plain object `{ values, ijson }` can be passed as
+well, but it is validated again on every call.
 
 ### Telling the arguments apart
 
@@ -202,8 +198,8 @@ including texts with duplicate names.
   Unicode code points) and `offset` (0-based, in UTF-16 code units) give the
   details.
 - Errors of the application throw a `TypeError`: invalid options (for
-  example an attempt to redefine `true` or `kb`, an invalid identifier or
-  suffix, a named value that is not a JSON value), invalid arguments, and
+  example an attempt to redefine `true`, an invalid identifier, an object or
+  array as a named value, custom suffixes), invalid arguments, and
   values that `stringify` cannot write.
 
 ### Named exports
@@ -217,7 +213,10 @@ named exports.
 - Hexadecimal, octal and binary numbers are exact or an error: a value that a
   JavaScript number cannot represent exactly (for example `0x20000000000001`)
   is rejected, never rounded (section 9.4).
-- Predefined suffixes give the exact product, rounded once: `0.1kb` is `102.4`.
+- Suffixes give the exact product or quotient, rounded once: `0.1kb` is
+  `102.4`, `100ms` is `0.1`, `12.5pct` is `0.125`. A suffix that is not in
+  the table of section 9.5 is an error; suffixes are case-sensitive (`10MS`
+  and `10l` are errors).
 
 ## Not yet implemented
 
@@ -244,9 +243,9 @@ dependencies to install. The tests also run with `bun test` and
   python3 scripts/export_corpus.py --check   # fails if it is out of date
   ```
 
-  The conversion functions of the suffixes in `tests_definitionen.py` cannot
-  be exported; they are written again in `corpus.test.js`, which checks that
-  the suffix names match.
+  Of the rejected definitions in `tests_definitionen.py` only those that can
+  be written as JSON are exported; the others (`NaN`, sets, other objects)
+  are written again in `corpus.test.js`.
 - `test/parse.test.js` tests the API of `parse`, the I-JSON mode, error
   messages and positions, numbers and limits.
 - `test/stringify.test.js` tests `stringify`: the call forms, the behaviour

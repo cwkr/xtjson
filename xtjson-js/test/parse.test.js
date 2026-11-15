@@ -91,9 +91,9 @@ describe('reviver', () => {
 });
 
 describe('call forms', () => {
-  const init = { values: { nil: null }, suffixes: { '%': (x) => x / 100 } };
+  const init = { values: { nil: null } };
   const defs = new XTJSONOptions(init);
-  const text = '[nil, 50%, 1]';
+  const text = '[nil, 50pct, 1]';
   const expected = [null, 0.5, 1];
   const double = (k, v) => (typeof v === 'number' ? v * 2 : v);
 
@@ -124,24 +124,15 @@ describe('call forms', () => {
   });
 });
 
-describe('options: definitions', () => {
-  const init = {
-    values: { nil: null, zero: 0, list: [1, { a: 2 }] },
-    suffixes: { '%': (x) => x / 100 },
-  };
+describe('options: named values', () => {
+  const init = { values: { nil: null, zero: 0, yes: true, name: 'demo', half: 0.5 } };
 
   test('accepts a plain object, a Map or an iterable of pairs', () => {
-    const text = '[nil, zero, list, 50%]';
-    const expected = [null, 0, [1, { a: 2 }], 0.5];
+    const text = '[nil, zero, yes, name, half, 50pct]';
+    const expected = [null, 0, true, 'demo', 0.5, 0.5];
     assert.deepEqual(XTJSON.parse(text, null, init), expected);
-    assert.deepEqual(XTJSON.parse(text, null, {
-      values: new Map(Object.entries(init.values)),
-      suffixes: new Map(Object.entries(init.suffixes)),
-    }), expected);
-    assert.deepEqual(XTJSON.parse(text, null, {
-      values: Object.entries(init.values),
-      suffixes: Object.entries(init.suffixes),
-    }), expected);
+    assert.deepEqual(XTJSON.parse(text, null, { values: new Map(Object.entries(init.values)) }), expected);
+    assert.deepEqual(XTJSON.parse(text, null, { values: Object.entries(init.values) }), expected);
   });
 
   test('XTJSONOptions keeps the order of the named values', () => {
@@ -152,35 +143,40 @@ describe('options: definitions', () => {
   });
 
   test('XTJSONOptions is immutable and independent of its input', () => {
-    const source = { list: [1, 2] };
+    const source = { a: 1 };
     const defs = new XTJSONOptions({ values: source });
-    source.list.push(3);
+    source.a = 2;
     source.other = 1;
-    assert.deepEqual(XTJSON.parse('list', null, defs), [1, 2]);
+    assert.equal(XTJSON.parse('a', null, defs), 1);
     assert.ok(Object.isFrozen(defs));
-    assert.ok(Object.isFrozen(defs.values.get('list')));
     defs.values.set('other', 1); // a copy; does not change defs
     assert.throws(() => XTJSON.parse('other', null, defs), XTJSONError);
   });
 
   test('an XTJSONOptions instance can be used as init', () => {
-    const defs = new XTJSONOptions(init);
-    const copy = new XTJSONOptions(defs);
-    assert.deepEqual(XTJSON.parse('[list, 1%]', null, copy), [[1, { a: 2 }], 0.01]);
-  });
-
-  test('results are fresh copies', () => {
-    const defs = new XTJSONOptions(init);
-    const a = XTJSON.parse('[list, list]', null, defs);
-    assert.notEqual(a[0], a[1]);
-    a[0][1].a = 99;
-    assert.deepEqual(XTJSON.parse('list', null, defs), [1, { a: 2 }]);
+    const copy = new XTJSONOptions(new XTJSONOptions({ ...init, ijson: true }));
+    assert.deepEqual(XTJSON.parse('[name, 1pct]', null, copy), ['demo', 0.01]);
+    assert.equal(copy.ijson, true);
   });
 
   test('without definitions only the predefined ones are active', () => {
     assert.match(error('nil').message, /Undefined named value 'nil'/);
-    assert.match(error('50%').message, /Undefined number suffix '%'/);
     assert.equal(XTJSON.parse('10k'), 10000);
+  });
+
+  test('objects and arrays are not permitted as named values (6.4)', () => {
+    for (const value of [[], {}, [1, 2], { a: 1 }, [[]], new Date(), new Map()]) {
+      assert.throws(() => new XTJSONOptions({ values: { x: value } }),
+        (e) => e instanceof TypeError && /the named value 'x' is an? (array|object); a named value must be a string, a number, true, false or null/.test(e.message));
+    }
+  });
+
+  test('custom number suffixes are not supported (9.5)', () => {
+    for (const suffixes of [{ q: Math.abs }, {}, new Map(), []]) {
+      assert.throws(() => new XTJSONOptions({ suffixes }), /custom number suffixes are not supported/);
+      assert.throws(() => XTJSON.parse('1', { suffixes }), TypeError);
+    }
+    assert.equal('suffixes' in new XTJSONOptions(), false);
   });
 
   test('invalid options throw TypeError', () => {
@@ -190,37 +186,15 @@ describe('options: definitions', () => {
       [{ values: { x: () => 1 } }, /function/],
       [{ values: { x: 1n } }, /bigint/],
       [{ values: { x: Infinity } }, /not a JSON number/],
-      [{ values: { x: new Date() } }, /plain object/],
-      [{ values: { x: [1, , 3] } }, /sparse/], // eslint-disable-line no-sparse-arrays
+      [{ values: { x: NaN } }, /not a JSON number/],
       [{ values: 'abc' }, /must be an object/],
       [{ values: [1, 2] }, /pairs/],
-      [{ suffixes: { '%': 'x' } }, /conversion function/],
       ['abc', /must be an object/],
     ];
-    const cyclic = { a: [] };
-    cyclic.a.push(cyclic);
-    cases.push([{ values: { c: cyclic } }, /circular/]);
     for (const [defs, pattern] of cases) {
       assert.throws(() => new XTJSONOptions(defs), (e) => e instanceof TypeError && pattern.test(e.message));
       assert.throws(() => XTJSON.parse('1', null, defs), TypeError);
     }
-  });
-
-  test('errors in conversion functions are errors of the document', () => {
-    const cause = new RangeError('too large');
-    const defs = { suffixes: { q: () => { throw cause; }, r: () => '1', s: () => NaN } };
-    const e = error('a: 1\nb: 7q', defs);
-    assert.equal(e.cause, cause);
-    assert.match(e.message, /The conversion of '7q' failed: too large \(line 2, column 4\)/);
-    assert.match(error('1r', defs).message, /did not return a finite number/);
-    assert.match(error('1s', defs).message, /did not return a finite number/);
-  });
-
-  test('conversion functions receive the value including the sign', () => {
-    const seen = [];
-    const defs = { suffixes: { px: (x) => { seen.push(x); return x; } } };
-    XTJSON.parse('[-1.5px, 0x10px, 1_000px, -0px]', null, defs);
-    assert.deepEqual(seen, [-1.5, 16, 1000, -0]);
   });
 });
 
@@ -278,9 +252,9 @@ describe('I-JSON mode', () => {
   test('values of named values count as well', () => {
     const defs = new XTJSONOptions({
       ijson: true,
-      values: { bad: ['ok', { [String.fromCharCode(0xffff)]: 1 }], lone: '\uD800', good: { a: 'b' } },
+      values: { bad: 'ok' + String.fromCharCode(0xffff), lone: '\uD800', good: 'b' },
     });
-    assert.deepEqual(XTJSON.parse('[good]', defs), [{ a: 'b' }]);
+    assert.deepEqual(XTJSON.parse('[good]', defs), ['b']);
     const e = error('x: 1\ny: [good, bad]', defs);
     assert.match(e.message, /The value of the named value 'bad' contains the noncharacter U\+FFFF/);
     assert.deepEqual([e.line, e.column], [2, 11]);
@@ -319,7 +293,43 @@ describe('numbers', () => {
     assert.ok(Object.is(XTJSON.parse('-0x0'), -0));
   });
 
-  test('predefined suffixes give the exact product (9.5)', () => {
+  test('suffixes give the exact product or quotient (9.5)', () => {
+    assert.equal(XTJSON.parse('100ms'), 0.1);
+    assert.equal(XTJSON.parse('0.3ms'), 0.0003);
+    assert.equal(XTJSON.parse('7pct'), 0.07);
+    assert.equal(XTJSON.parse('0.07pct'), 0.0007);
+    assert.equal(XTJSON.parse('1.1min'), 66);
+    assert.equal(XTJSON.parse('0.1h'), 360);
+    assert.equal(XTJSON.parse('0x10ms'), 0.016);
+    assert.equal(XTJSON.parse('9007199254740993ms'), 9007199254740.993);
+    assert.equal(XTJSON.parse('0.1px'), 0.1);
+    assert.ok(Object.is(XTJSON.parse('-0ms'), -0));
+    assert.ok(Object.is(XTJSON.parse('-0.0pct'), -0));
+    assert.ok(Object.is(XTJSON.parse('-0x0h'), -0));
+  });
+
+  test('the result of a suffix must be in range', () => {
+    assert.match(error('1e308k').message, /out of range/);
+    assert.match(error('1e305h').message, /out of range/);
+    assert.match(error('1e400px').message, /out of range/);
+    // only the result counts (9.4)
+    assert.equal(XTJSON.parse('4.4e308pct'), 4.4e306);
+    assert.equal(XTJSON.parse('-1e310ms'), -1e307);
+    assert.equal(XTJSON.parse('1e-400k'), 0);
+  });
+
+  test('all suffixes of the table in 9.5', () => {
+    const table = {
+      k: 2000, K: 2000, kb: 2048, Kb: 2048, kB: 2048, KB: 2048,
+      mb: 2097152, Mb: 2097152, mB: 2097152, MB: 2097152,
+      ms: 0.002, s: 2, min: 120, h: 7200, pct: 0.02, px: 2, L: 2, n: 2,
+    };
+    for (const [suffix, expected] of Object.entries(table)) {
+      assert.equal(XTJSON.parse('2' + suffix), expected, suffix);
+    }
+  });
+
+  test('predefined factors give the exact product (9.5)', () => {
     assert.equal(XTJSON.parse('0.1kb'), 102.4);
     assert.equal(XTJSON.parse('0.3k'), 300);
     assert.equal(XTJSON.parse('1.1mb'), 1153433.6);
@@ -422,8 +432,14 @@ describe('error messages', () => {
     ['.5', /must not begin with '\.'/, 1, 1],
     ['5.', /Expected a decimal digit after '\.'/, 1, 3],
     ['10e', /Expected a decimal digit in the exponent/, 1, 4],
-    ['10q', /Undefined number suffix 'q'/, 1, 3],
-    ['10kbs', /Unexpected 's' after the number suffix 'kb'/, 1, 5],
+    ['10q', /Unknown number suffix 'q'\. The suffixes are k, K, kb, .* L and n/, 1, 3],
+    ['10kbs', /Unknown number suffix 'kbs'; 'kbs' is read as one suffix, not as 'kb' followed by 's'/, 1, 3],
+    ['10MS', /Unknown number suffix 'MS'; did you mean 'ms'\? Suffixes are case-sensitive/, 1, 3],
+    ['10kB_', /Unknown number suffix 'kB_'/, 1, 3],
+    ['10l', /did you mean 'L'\?/, 1, 3],
+    ['50%', /'%' is not permitted after a number; for a percentage use the suffix 'pct'/, 1, 3],
+    ['10k%', /Unexpected '%' after the number suffix 'k'/, 1, 4],
+    ['10_k', /'_' is only permitted between two digits/, 1, 3],
     ['10ab', /a number suffix cannot begin with a to f, o or x/, 1, 3],
     ['10x', /a number suffix cannot begin with a to f, o or x/, 1, 3],
   ];

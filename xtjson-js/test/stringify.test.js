@@ -206,15 +206,19 @@ describe('output format', () => {
     }
   });
 
-  test('custom suffixes are not used', () => {
-    assert.equal(XTJSON.stringify([0.5, 1000], { suffixes: { '%': (x) => x / 100 } }), '[0.5,1k]');
+  test('suffixes other than mb, kb and k are not used', () => {
+    assert.equal(XTJSON.stringify([0.5, 0.001, 60, 3600, 7200000]), '[0.5,0.001,60,3_600,7_200k]');
+  });
+
+  test('custom suffixes are a TypeError', () => {
+    assert.throws(() => XTJSON.stringify([1], { suffixes: { q: Math.abs } }), /custom number suffixes are not supported/);
   });
 });
 
 describe('named values', () => {
   test('primitive values are written as named values', () => {
     const options = new XTJSONOptions({
-      values: { nil: null, yes: true, no: false, zero: 0, unknown: 'not specified', list: [1], obj: { a: 1 } },
+      values: { nil: null, yes: true, no: false, zero: 0, unknown: 'not specified' },
     });
     const value = { a: null, b: true, c: false, d: 0, e: -0, f: 'not specified', g: [1], h: { a: 1 }, nil: 'x' };
     const text = XTJSON.stringify(value, options);

@@ -14,27 +14,11 @@ import XTJSON, { XTJSONError } from '../xtjson.js';
 const corpus = JSON.parse(readFileSync(new URL('./corpus.json', import.meta.url), 'utf8'));
 
 /** Definitions of scripts/tests_definitionen.py (`D`). */
-const D = {
-  values: corpus.c_values,
-  suffixes: {
-    '%': (x) => x / 100,
-    '$': (x) => x * 100,
-    px: (x) => x,
-    y: (x) => x,
-    wx: (x) => x,
-    '%%': (x) => x / 10000,
-    'k%': (x) => x * 10,
-    q: () => 'kein Zahlwert',
-    r: () => Infinity,
-    s: () => true,
-    t: () => { throw new Error('division by zero'); },
-  },
-};
+const D = { values: corpus.c_values };
 
 /** Definitions that the examples in the specification assume (EXAMPLE_DEFS). */
 const EXAMPLE_DEFS = {
   values: { nil: null, zero: 0, unbekannt: 'keine Angaben', unknown: 'not specified' },
-  suffixes: { '%': (x) => x / 100 },
 };
 
 function defsFor(label) {
@@ -104,10 +88,6 @@ test('I-JSON mode: valid texts give the same value or an I-JSON error', () => {
   assert.ok(rejected > 0 && rejected < 10, `rejected ${rejected}`);
 });
 
-test('tests_definitionen.py: the suffixes of D are reproduced here', () => {
-  assert.deepEqual(Object.keys(D.suffixes).sort(), [...corpus.c_suffixes].sort());
-});
-
 test('tests_definitionen.py: valid texts', () => {
   for (const [text, label, expected] of corpus.c_valid) assertValid(text, expected, defsFor(label));
 });
@@ -118,29 +98,20 @@ test('tests_definitionen.py: invalid texts', () => {
 
 test('tests_definitionen.py: invalid definitions are a TypeError, not an XTJSONError', () => {
   const bad = [
-    { values: { true: 1 } }, { values: { false: false } }, { values: { null: null } },
-    { values: { 'a-b': 1 } }, { values: { '1a': 1 } }, { values: { '': 1 } }, { values: { 'ä': 1 } },
+    ...corpus.c_bad_values.map((values) => ({ values })),
+    // BAD_DEFS that cannot be exported as JSON
     { values: { x: NaN } }, { values: { x: new (class X {})() } }, { values: { x: new Set([1, 2]) } },
-    { suffixes: { k: Math.abs } }, { suffixes: { K: Math.abs } }, { suffixes: { KB: Math.abs } },
-    { suffixes: { mB: Math.abs } }, { suffixes: { a: Math.abs } }, { suffixes: { e: Math.abs } },
-    { suffixes: { F: Math.abs } }, { suffixes: { abc: Math.abs } }, { suffixes: { ghi: Math.abs } },
-    { suffixes: { k1: Math.abs } }, { suffixes: { '': Math.abs } }, { suffixes: { g_: Math.abs } },
-    { suffixes: { '%': null } }, { suffixes: { px: 2 } },
-    { suffixes: { x: Math.abs } }, { suffixes: { X: Math.abs } }, { suffixes: { o: Math.abs } },
-    { suffixes: { O: Math.abs } }, { suffixes: { xy: Math.abs } }, { suffixes: { Ox: Math.abs } },
   ];
+  assert.ok(bad.length > 10);
   for (const defs of bad) {
     assert.throws(() => XTJSON.parse('1', null, defs), (error) => {
       return error instanceof TypeError && !(error instanceof XTJSONError);
-    }, JSON.stringify(Object.keys(defs.values ?? defs.suffixes)));
+    }, JSON.stringify(defs.values));
   }
 });
 
-test('tests_definitionen.py: results do not change the definitions', () => {
-  const a = XTJSON.parse('liste', null, D);
-  a.push(99);
-  a[1].a = 3;
-  assert.deepEqual(XTJSON.parse('liste', null, D), [1, { a: 2 }]);
+test('tests_definitionen.py: custom suffixes are not accepted', () => {
+  assert.throws(() => XTJSON.parse('1', null, { suffixes: { q: Math.abs } }), TypeError);
 });
 
 // Examples of the specification (as in xtjson_ref.py): every block tagged
