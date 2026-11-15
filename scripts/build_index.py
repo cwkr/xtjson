@@ -245,7 +245,8 @@ DIAGRAMS = {
         Seq(Choice(T('x'), T('X')), Loop(C('0–9 a–f A–F'), underscore())),
         Seq(Choice(T('o'), T('O')), Loop(C('0–7'), underscore())),
         Seq(Choice(T('b'), T('B')), Loop(C('0 1'), underscore())))),
-    'suffix': Seq(C('g–n p–w y z G–N P–W Y Z % $'), Opt(C('a–z A–Z % $'))),
+    'suffix': Seq(Choice(C('g–n p–w y z G–N P–W Y Z'), T('$')),
+                  Many(Choice(C('a–z A–Z'), C('0–9'), T('_'), T('$')))),
     'white space': Many(Choice(C('white space character'), N('line break'), N('comment'))),
     'comment': Choice(
         Seq(Choice(T('//'), T('#')), Many(C('any character except LF and CR'))),

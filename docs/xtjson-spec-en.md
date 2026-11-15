@@ -1,6 +1,6 @@
 # XTJSON
 
-**Specification, draft 0.3** · Date: 15 November 2026
+**Specification, draft 0.4** · Date: 15 November 2026
 
 ## Contents
 
@@ -46,7 +46,7 @@ The extensions over JSON are:
 | E10 | Additional white space characters: all white space characters of ECMAScript | [5.1](#51-white-space) |
 | E11 | Multi-line strings with `"""` or `'''` | [8.3](#83-multi-line-strings) |
 | E12 | Named values: identifiers as values, aliases for JSON values defined in the parser (`nil`) | [6.4](#64-named-values) |
-| E13 | Number suffixes (`10k`, `64mb`, `50%`) | [9.5](#95-number-suffixes) |
+| E13 | Number suffixes (`10k`, `64mb`, `50pct`) | [9.5](#95-number-suffixes) |
 
 Non-goals: XTJSON introduces no new data types, no expressions and no references (see [Appendix C](#appendix-c--deliberately-not-included)). XTJSON is not an interchange format between machines; for that purpose JSON or I-JSON remains the format of choice.
 
@@ -66,7 +66,7 @@ The grammar is written in ABNF [RFC5234]. The rules in sections 5–9 are excerp
 | white space character | one of the characters in the table in 5.1 |
 | line break | U+000A, U+000D or the sequence U+000D U+000A (5.2) |
 | escaped, unescaped | escaped: written as an escape sequence according to 8.2; unescaped: written as the character itself |
-| definition | the assignment of a JSON value to a named value (6.4) or of a conversion function to a number suffix (9.5) |
+| definition | the assignment of a JSON value to a named value (6.4) |
 | predefined | fixed by this specification and not changeable |
 | custom definition | a definition that the application passes to the parser |
 | JSON equivalent | the JSON text onto which an XTJSON document is mapped according to [section 10](#10-mapping-to-json) |
@@ -79,7 +79,7 @@ This section is normative. It states what "fully compatible" with [RFC8259] (STD
 
 **K2 – Preservation of meaning.** As an XTJSON document, a JSON text denotes the same value as it does as a JSON text. No extension changes the meaning of a text that is already valid JSON.
 
-**K3 – Unchanged data model.** Every XTJSON document has, relative to the definitions with which it is read (6.4, 9.5), a JSON equivalent ([section 10](#10-mapping-to-json)) that determines its value. Named values and number suffixes are only other notations for JSON values. A value that cannot be represented in JSON cannot be represented in XTJSON either.
+**K3 – Unchanged data model.** Every XTJSON document has, relative to the definitions with which it is read (6.4), a JSON equivalent ([section 10](#10-mapping-to-json)) that determines its value. Named values and number suffixes are only other notations for JSON values. A value that cannot be represented in JSON cannot be represented in XTJSON either.
 
 **K4 – Inherited semantics.** Everything that this specification does not explicitly extend applies as in [RFC8259]: the meaning of `true`, `false` and `null`, the escape sequences of JSON, the treatment of number range and precision, the insignificance of member order, and string comparison.
 
@@ -205,7 +205,7 @@ A value is an object or an array (section 7), a string (section 8), a number (se
 A named value is an identifier (7.2) at a value position. It therefore consists of the same characters as a name without quotation marks. It stands for the JSON value that a definition assigns to it.
 
 - **Predefined** are exactly three named values: `true`, `false` and `null`, with the meaning they have in JSON. They MUST NOT be redefined, overridden or removed.
-- **Custom definitions.** The application can pass further named values to the parser. Each definition assigns exactly one JSON value to an identifier: an object, an array, a string, a number, `true`, `false` or `null`.
+- **Custom definitions.** The application can pass further named values to the parser. Each definition assigns exactly one JSON value to an identifier: a string, a number, `true`, `false` or `null`. An object or an array MUST NOT be assigned.
 - **Alias, not a data type.** In the JSON equivalent, the assigned JSON value appears in place of the named value. A named value is only another notation for that value; no new data types arise.
 - **Case is significant.** `nil`, `Nil` and `NIL` are three different named values, and `True` is not `true`.
 - **Undefined is an error.** An identifier at a value position for which there is no definition is an error. A parser MUST NOT interpret it as a string or in any other way instead.
@@ -546,55 +546,62 @@ Like [RFC8259] and [ECMA-404], XTJSON does not prescribe a number type; implemen
 ### 9.5 Number suffixes
 
 ```abnf
-suffix        = suffix-first [ suffix-next ]
-suffix-first  = %x67-6E / %x70-77 / %x79-7A /     ; g-n p-w y z
+suffix        = suffix-start *id-continue
+suffix-start  = %x67-6E / %x70-77 / %x79-7A /     ; g-n p-w y z
                 %x47-4E / %x50-57 / %x59-5A /     ; G-N P-W Y Z
-                "%" / "$"
-suffix-next   = %x61-7A / %x41-5A / "%" / "$"     ; a-z A-Z % $
+                "$"
 ```
 
-A suffix of one or two characters may be appended to a number. The suffix stands for a conversion function: it receives the value of the number including the sign and yields a number. In the JSON equivalent, the result appears in place of the number with the suffix.
+A suffix may be appended to a number. The suffix stands for a conversion: it is applied to the value of the number including the sign and yields a number. In the JSON equivalent, the result appears in place of the number with the suffix. All suffixes are predefined; the table in this section lists them completely.
 
 **Notation**
 
 - The suffix follows the last digit immediately. White space, comments and `_` between the number and the suffix are an error.
-- The first character is a letter from `g` to `z` or from `G` to `Z` except `o`, `O`, `x` and `X`, a `%` or a `$`.
-- No suffix therefore begins with `a` to `f` (hexadecimal digits; `e` also introduces the exponent) or with `o` or `x` (number prefixes `0o` and `0x`), in either case.
-- The second character, if present, is any ASCII letter, a `%` or a `$`.
-- Case is significant: `k` and `K` are two different suffixes, as are `mb`, `Mb`, `mB` and `MB`.
-- The longest match applies: `10kb` carries the suffix `kb`, not `k` followed by `b`. No further letter, no digit and no `_`, `%` or `$` may follow the suffix immediately (`10kbs` and `10k5` are errors).
+- A suffix consists of the same characters as an identifier (7.2): it begins with an ASCII letter or `$`; after that, ASCII digits and `_` are permitted as well. Its length is not limited.
+- In addition: no suffix begins with `a` to `f` (hexadecimal digits; `e` also introduces the exponent) or with `o` or `x` (number prefixes `0o` and `0x`), in either case.
+- Case is significant: `k` and `K` are two different suffixes, as are `mb`, `Mb`, `mB` and `MB`. `L` is a suffix, `l` is not.
+- The longest match applies: all letters, digits, `_` and `$` that follow its first character immediately belong to the suffix. `10kb` carries the suffix `kb`, not `k` followed by `b`. `10kbs` carries the suffix `kbs` and `10k5` the suffix `k5`; neither exists.
+- Unlike an identifier, a suffix does not begin with `_`. A `_` immediately after a digit is therefore always digit grouping (9.3) or an error: `1_0` is the number 10, `10_k` is an error.
 - Suffixes are permitted on all number forms, including after an exponent and on hexadecimal, octal and binary numbers: `1e3k`, `0x10kb`.
 
-**Predefined suffixes**
+**Overview of the suffixes**
 
-| Suffix | Conversion |
-|---|---|
-| `k`, `K` | number times 1000 |
-| `kb`, `Kb`, `kB`, `KB` | number times 1024 |
-| `mb`, `Mb`, `mB`, `MB` | number times 1048576 |
+| Suffix | Conversion | Example | Result |
+|---|---|---|---|
+| `k`, `K` | number times 1000 | `10k` | `10000` |
+| `kb`, `Kb`, `kB`, `KB` | number times 1024 | `4kb` | `4096` |
+| `mb`, `Mb`, `mB`, `MB` | number times 1048576 | `64mb` | `67108864` |
+| `ms` | number divided by 1000 | `100ms` | `0.1` |
+| `s` | none; the value remains unchanged | `30s` | `30` |
+| `min` | number times 60 | `5min` | `300` |
+| `h` | number times 3600 | `2h` | `7200` |
+| `pct` | number divided by 100 | `50pct` | `0.5` |
+| `px` | none; the value remains unchanged | `12px` | `12` |
+| `L` | none; the value remains unchanged | `100L` | `100` |
+| `n` | none; the value remains unchanged | `10n` | `10` |
 
-- The predefined suffixes MUST NOT be redefined, overridden or removed.
-- Their result is the exact product. The JSON equivalent contains its decimal representation: `1.5k` yields `1500`, `0.5kb` yields `512`, `0.1kb` yields `102.4`, `-2k` yields `-2000`, `0x10kb` yields `16384`.
+- The table is exhaustive. A suffix that is not listed in it is an error (`10q`, `10m`, `10MS`).
+- The suffixes MUST NOT be redefined, overridden or removed. A parser MUST NOT know further suffixes or accept any from the application.
+- The result is the exact product or the exact quotient. In the JSON equivalent its decimal representation appears: `1.5k` yields `1500`, `0.5kb` yields `512`, `0.1kb` yields `102.4`, `-2k` yields `-2000`, `0x10kb` yields `16384`, `1.5h` yields `5400`, `1ms` yields `0.001`, `12.5pct` yields `0.125`.
+- For `s`, `px`, `L` and `n` the result is the value of the number itself: `12px` and `12` denote the same value. The suffix contributes no information to the value of the document.
+- `ms`, `s`, `min` and `h` convert a time into seconds.
+- The result is always a number. A suffix cannot produce a string or any other data type.
 
-**Custom suffixes**
-
-- The application can pass further suffixes to the parser. For every custom suffix a conversion function MUST be supplied.
-- The conversion function MUST, for every number, either yield a finite number or report an error; the parser then reports this error as an error of the document. It SHOULD depend only on the value of the number and have no side effects.
-- The result is always a number. A suffix cannot produce a string or any other data type. The precision with which a custom conversion function calculates is determined by the application.
-- Example: the suffix `%` with the conversion "number divided by 100". Then `50%` yields the value `0.5` and `110%` the value `1.1`.
-- A suffix for which there is no definition is an error.
-- Like named values, suffix definitions belong to the configuration of the parser and not to the document.
-
-The following example uses the predefined suffixes and the custom suffix `%`:
+Example:
 
 ```xtjson
 {
-  timeout_ms: 30k
+  timeout: 30s
+  interval: 5min
+  lifetime: 12h
+  delay: 250ms
   cache: 64mb
   block: 0x10kb
   half: 0.5K
-  ratio: 50%
-  markup: 110%
+  ratio: 50pct
+  surcharge: 110pct
+  width: 320px
+  counter: 100L
 }
 ```
 
@@ -602,25 +609,30 @@ JSON equivalent:
 
 ```json
 {
-  "timeout_ms": 30000,
+  "timeout": 30,
+  "interval": 300,
+  "lifetime": 43200,
+  "delay": 0.25,
   "cache": 67108864,
   "block": 16384,
   "half": 500,
   "ratio": 0.5,
-  "markup": 1.1
+  "surcharge": 1.1,
+  "width": 320,
+  "counter": 100
 }
 ```
 
 ## 10. Mapping to JSON
 
-The **JSON equivalent** of an XTJSON document is obtained by the following steps. They also define the meaning of every XTJSON document. If the document contains named values or number suffixes, the JSON equivalent is relative to the definitions with which the document is read.
+The **JSON equivalent** of an XTJSON document is obtained by the following steps. They also define the meaning of every XTJSON document. If the document contains named values, the JSON equivalent is relative to the definitions with which the document is read.
 
 1. **Comments** are removed. **White space characters** that JSON does not have are replaced by a space (U+0020).
 2. **Implicit root object:** the members are enclosed in `{` `}`.
 3. **Separators:** between any two consecutive items there is exactly one comma. Trailing commas are dropped.
 4. **Names:** an identifier at a name position becomes the JSON string with the same character sequence.
 5. **Strings:** a `'` string becomes the `"` string with the same content; unescaped `"` become `\"`. Escape sequences that JSON does not have are replaced in all string forms: `\'` by `'`, `\v` by `\u000B`, `\0` by `\u0000`, `\xHH` by `\u00HH`, `\u{…}` by the `\uXXXX` sequence of the same code point, above U+FFFF by the corresponding surrogate pair. A multi-line string becomes the `"` string that represents the value according to 8.3; characters that may not appear unescaped in a JSON string (`"`, `\` and control characters such as line break and tab) are escaped in the process.
-6. **Numbers:** all `_` are removed from decimal numbers; otherwise the notation remains unchanged. Hexadecimal, octal and binary numbers become the decimal integer of the same value, with a leading minus sign if preceded by `-`. A number with a suffix is replaced by the result of the conversion function, written as a JSON number (9.5).
+6. **Numbers:** all `_` are removed from decimal numbers; otherwise the notation remains unchanged. Hexadecimal, octal and binary numbers become the decimal integer of the same value, with a leading minus sign if preceded by `-`. A number with a suffix is replaced by the result of the conversion, written as a JSON number (9.5).
 7. **Named values:** `true`, `false` and `null` remain unchanged. Every other named value is replaced by the JSON value that its definition assigns to it (6.4).
 
 The JSON equivalent is unique up to white space and the choice of equivalent escape sequences. If it contains an object with duplicate names, the rule from 7.2 applies to its value: the last member applies. Two XTJSON documents are **equivalent** if their JSON equivalents denote the same value. A document that is already a JSON text is its own JSON equivalent (up to white space).
@@ -629,17 +641,17 @@ An example with a side-by-side comparison is given in [Appendix B.1](#b1-complet
 
 ## 11. Conformance
 
-**Document.** A text is a conforming XTJSON document if it is encoded according to section 4 and conforms to the rule `XTJSON-text`. A conforming document is **valid with respect to a set of definitions** if each of its named values and each of its number suffixes is defined in it. It is **portable** if it uses only predefined named values and suffixes; a portable document can be read by every conforming parser.
+**Document.** A text is a conforming XTJSON document if it is encoded according to section 4, conforms to the rule `XTJSON-text` and each of its number suffixes is listed in the table in 9.5. A conforming document is **valid with respect to a set of definitions** if each of its named values is defined in it. It is **portable** if it uses only predefined named values; a portable document can be read by every conforming parser.
 
 **Parser.** A conforming XTJSON parser
 
 - MUST accept every conforming XTJSON document that is valid with respect to its definitions and deliver the value of its JSON equivalent – and thus also every JSON text and every I-JSON message – unless a limit or restriction according to the fourth item applies;
-- MUST reject as an error every text that is not a conforming XTJSON document or that contains an undefined named value or an undefined suffix, and MUST NOT silently accept any further syntax extensions;
-- MUST know the predefined named values and suffixes, MUST NOT allow them to be redefined, and MUST reject custom definitions that violate 6.4 or 9.5. It SHOULD enable the application to define custom named values and suffixes. Without action by the application, only the predefined ones are active;
+- MUST reject as an error every text that is not a conforming XTJSON document or that contains an undefined named value, and MUST NOT silently accept any further syntax extensions;
+- MUST know the predefined named values and all suffixes from 9.5, MUST NOT allow them to be redefined or further suffixes to be added, and MUST reject custom definitions that violate 6.4. It SHOULD enable the application to define custom named values. Without action by the application, only the predefined named values are active;
 - MAY set limits on document size, nesting depth, number range and precision, and string length, and enforce semantic restrictions (for example in the I-JSON mode according to section 12);
 - SHOULD offer an I-JSON mode according to section 12.
 
-**Generator.** An XTJSON generator MUST output conforming XTJSON documents. Every JSON generator that outputs UTF-8 is therefore also an XTJSON generator. If the recipient is a program, JSON SHOULD be output. Custom named values and suffixes SHOULD be output only if it is certain that the recipient uses the same definitions.
+**Generator.** An XTJSON generator MUST output conforming XTJSON documents. Every JSON generator that outputs UTF-8 is therefore also an XTJSON generator. If the recipient is a program, JSON SHOULD be output. Custom named values SHOULD be output only if it is certain that the recipient uses the same definitions.
 
 **Converter.** A converter from XTJSON to JSON MUST produce the JSON equivalent according to section 10, relative to the definitions passed to it; its output MUST conform strictly to the grammar of [RFC8259].
 
@@ -661,7 +673,7 @@ The recommendations of [I-JSON] for protocols also apply unchanged to XTJSON doc
 - **No `eval`.** XTJSON is not a subset of JavaScript or of any other programming language and MUST NOT be read by evaluating it as program code.
 - **Resource limits.** Deeply nested structures, very long strings or numbers, and unterminated block comments and multi-line strings can overload parsers. Parsers SHOULD set limits (section 11).
 - **Divergent interpretation.** If two components process the same document differently, checks can be bypassed. This concerns above all duplicate names, which other JSON tools may treat differently from what 7.2 specifies, and numbers outside the exact range. Where a document controls security-relevant decisions, the I-JSON profile is RECOMMENDED.
-- **Definitions.** The meaning of a document with custom named values or suffixes depends on the definitions of the parser. Two parsers with different definitions read the same document differently, or one of them rejects it. Custom definitions are therefore part of the interface between author and application and SHOULD be documented. Conversion functions are program code of the application; a document can bring along neither definitions nor code.
+- **Definitions.** The meaning of a document with custom named values depends on the definitions of the parser. Two parsers with different definitions read the same document differently, or one of them rejects it. Custom definitions are therefore part of the interface between author and application and SHOULD be documented. The conversions of the suffixes are fixed by this specification alone; a document can bring along neither definitions nor code.
 - **Confusion with JSON.** An XTJSON document that is passed off as JSON leads to errors with strict recipients and to inconsistent behaviour with lenient ones. Hence the delimitation in K5.
 - **Comments.** Comments are lost in the mapping to JSON and are not seen by programs. Invisible characters and characters that control text direction in comments and strings can make the displayed text differ from the processed text; tools SHOULD point this out.
 - **U+2028 and U+2029.** Some editors display these characters as a line change. In XTJSON they neither end a line comment nor separate items. Text that is displayed below a line comment can therefore still belong to the comment and is then not processed. Tools SHOULD make these characters visible outside strings or warn about them.
@@ -741,11 +753,10 @@ SQUOTE         = %x27                        ; '
 
 ; ---------- Numbers ----------
 number         = [ minus ] ( hex-int / oct-int / bin-int / decimal ) [ suffix ]
-suffix         = suffix-first [ suffix-next ]
-suffix-first   = %x67-6E / %x70-77 / %x79-7A /       ; g-n p-w y z
+suffix         = suffix-start *id-continue   ; only the suffixes from 9.5
+suffix-start   = %x67-6E / %x70-77 / %x79-7A /       ; g-n p-w y z
                  %x47-4E / %x50-57 / %x59-5A /       ; G-N P-W Y Z
-                 "%" / "$"
-suffix-next    = %x61-7A / %x41-5A / "%" / "$"       ; a-z A-Z % $
+                 "$"
 decimal        = int [ frac ] [ exp ]
 int            = zero / ( digit1-9 *( [ "_" ] DIGIT ) )
 frac           = "." digits
@@ -765,9 +776,9 @@ e              = %x65 / %x45                 ; e E
 Notes on tokenization (informative):
 
 - The longest match applies. `0x1e3` is a single hexadecimal number.
-- Two conditions apply in addition to the grammar: no decimal digit follows `null-escape`, and the value in `codepoint-escape` is not in the range D800 to DFFF.
-- Two values always need a separator according to 7.3. Character sequences such as `0755`, `1_`, `0b102`, `123abc` or `10kbs` can therefore never be read as a valid sequence of several tokens and are errors.
-- Whether a `named-value` or a `suffix` is defined is decided not by the grammar but by the set of definitions (6.4, 9.5).
+- Three conditions apply in addition to the grammar: no decimal digit follows `null-escape`, the value in `codepoint-escape` is not in the range D800 to DFFF, and every `suffix` is listed in the table in 9.5.
+- Two values always need a separator according to 7.3. Character sequences such as `0755`, `1_`, `0b102`, `123abc` or `10_k` can therefore never be read as a valid sequence of several tokens and are errors.
+- Whether a `named-value` is defined is decided not by the grammar but by the set of definitions (6.4).
 - A line comment always extends to the next line break: `eol` requires a `newline` after it, and `non-eol` excludes only U+000A and U+000D. Only at the end of the document may the line break be missing.
 - The sequence CR LF is always a single `newline`, never two.
 - For multi-line strings the grammar describes only the notation. Their value results from the steps in 8.3.
@@ -798,8 +809,9 @@ limits: {
   file_mode: 0o644
   feature_mask: 0b1010_0101
   magic: 0xDEAD_BEEF
-  cache_bytes: 64mb     // predefined suffix: times 1048576
-  rate_limit: 5k        // predefined suffix: times 1000
+  cache_bytes: 64mb     // suffix: times 1048576
+  rate_limit: 5k        // suffix: times 1000
+  idle_timeout: 5min    // suffix: times 60
   "retry-after": 30     // a name with a hyphen needs quotation marks
   banner: 'Welcome to demo-service\x21'
 }
@@ -832,6 +844,7 @@ JSON equivalent:
     "magic": 3735928559,
     "cache_bytes": 67108864,
     "rate_limit": 5000,
+    "idle_timeout": 300,
     "retry-after": 30,
     "banner": "Welcome to demo-service!"
   },
@@ -916,9 +929,10 @@ In the tables `⏎` stands for a line break. The tables apply to a parser withou
 | `- 1` | white space between sign and digits |
 | `+1`, `.5`, `5.` | invalid as in JSON |
 | `NaN`, `Infinity` | not numbers; not defined as named values |
-| `10q` and `50%` | suffix not defined |
+| `10q`, `10m` and `10MS` | not a suffix from the table in 9.5; case is significant |
 | `10 k` and `10_k` | white space or `_` between number and suffix |
-| `10kbs` and `10k5` | character immediately after the suffix |
+| `10kbs` and `10k5` | the suffixes `kbs` and `k5` do not exist |
+| `50%` | `%` is not permitted in a suffix |
 | `10ab` and `10e` | `a` to `f` cannot start a suffix; `e` introduces the exponent |
 | `10x` and `10oz` | `x` and `o` cannot start a suffix |
 
@@ -927,8 +941,9 @@ In the tables `⏎` stands for a line break. The tables apply to a parser withou
 The following extensions, known from other JSON dialects, are **not** part of XTJSON. A conforming parser rejects them.
 
 - freely chosen values without quotation marks (`colour: red`); an identifier at a value position is valid only as a defined named value
+- objects and arrays as named values
 - definitions inside the document: a document cannot define named values or suffixes
-- suffixes with more than two characters, with digits, or with white space before the suffix; suffixes that yield anything other than a number
+- custom suffixes of the application; suffixes with characters other than those of an identifier (`50%`), or with white space before the suffix; suffixes that yield anything other than a number
 - line continuation with `\`, heredocs and raw strings without escape sequences
 - `\` before arbitrary characters (`\a` for `a`) and octal escape sequences (`\1`, `\012`)
 - `+` as a sign, `.5`, `5.`, and `Infinity` and `NaN` as numbers
@@ -974,11 +989,14 @@ Informative. Decisions at points where several solutions were possible, with the
 | Sign on non-decimal numbers | `-` permitted, `+` not | Consistent with the JSON rule `[ minus ]`. |
 | `_` in numbers | single, only between two digits | A simple rule that is easy to check. |
 | Named values | only defined identifiers, no free text | A typo such as `ture` is reported as an error instead of being read as a string. |
-| Named values: result | any JSON value | Aliases create no new data types; the data model remains that of JSON. |
+| Named values: result | a string, a number, `true`, `false` or `null`; no object and no array | A named value is an alias for a simple value. The structure of a document, made of objects and arrays, is thus written entirely in the document itself and does not depend on the definitions. |
 | `true`, `false`, `null` | predefined, not changeable | Otherwise a valid JSON text could change its meaning (K2). |
-| Suffix: permitted characters | first `g`–`z` or `G`–`Z` except `o`, `O`, `x`, `X`, or `%` or `$`; then any ASCII letter, `%` or `$` | `a`–`f` are excluded as the first character because they are hexadecimal digits and `e` introduces the exponent; `o` and `x` because they introduce number prefixes. A forgotten digit part (`0x`) thus remains an error without a special rule. Capital letters are needed because predefined suffixes such as `K`, `kB` and `MB` contain them. |
+| Suffix: permitted characters | the same as in an identifier, but not `_` and not `a`–`f`, `A`–`F`, `o`, `O`, `x`, `X` at the beginning | A single character rule for names, named values and suffixes. `a`–`f` are excluded as the first character because they are hexadecimal digits and `e` introduces the exponent; `o` and `x` because they introduce number prefixes. A forgotten digit part (`0x`) thus remains an error without a special rule. |
+| Suffix: `_` at the beginning | not permitted | A `_` after a digit thus always belongs to digit grouping. `1_0` cannot be read as `1` with the suffix `_0`, and the rules of 9.3 apply without exception. |
+| Suffixes: where defined | exclusively by this specification; no custom suffixes | A number with a suffix has the same value with every parser, and a parser executes no conversion functions of the application. |
+| Suffixes without effect | `s`, `px`, `L` and `n` leave the value unchanged | A number can be written with its unit, or in a form familiar from other languages, without its value changing. |
 | Suffix: result | always a number | A suffix converts; it does not create another data type. |
-| Predefined suffixes | exact result | `0.1kb` should yield `102.4` and not depend on the floating-point arithmetic of the parser. |
+| Suffix: precision | exact result | `0.1kb` should yield `102.4` and `100ms` should yield `0.1`, independent of the floating-point arithmetic of the parser. |
 | Definitions | part of the configuration of the parser, not of the document | A document can neither change meanings nor inject code. Without custom definitions all parsers behave the same. |
 
 ## References
@@ -1000,6 +1018,15 @@ Informative. Decisions at points where several solutions were possible, with the
 - RFC 4648, "The Base16, Base32, and Base64 Data Encodings".
 
 ## Changes
+
+**Draft 0.4**
+
+- 6.4: a custom definition can no longer assign an object or an array to a named value; permitted are a string, a number, `true`, `false` and `null`.
+- 9.5: suffixes are now defined only by this specification; custom suffixes of the application no longer exist.
+- 9.5: a suffix consists of the same characters as an identifier and is no longer limited to two characters; as before it does not begin with `a`–`f`, `o` or `x`, in either case, nor with `_`. `%` is no longer permitted in a suffix; digits and, except at the beginning, `_` now are.
+- 9.5: new suffixes `ms` (divided by 1000), `min` (times 60), `h` (times 3600) and `pct` (divided by 100) as well as `s`, `px`, `L` and `n` (without effect on the value). New overview table of all suffixes.
+- 2, 3, 10, 11, 13: the term "definition" now refers only to named values. A conforming document uses only suffixes from 9.5; whether a document is portable now depends only on its named values.
+- Appendices A to D are adapted to these changes.
 
 **Draft 0.3**
 

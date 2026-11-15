@@ -15,7 +15,7 @@
     <h1>Introducing XTJSON</h1>
     <p class="tagline">A syntactic superset of JSON for files that are written and maintained by people.</p>
     <p class="meta">
-      Specification draft 0.3 · 15 November 2026 ·
+      Specification draft 0.4 · 15 November 2026 ·
       <a href="https://github.com/cwkr/xtjson/blob/main/docs/xtjson-spec-en.md">Specification (English)</a> ·
       <a href="https://github.com/cwkr/xtjson/blob/main/docs/xtjson-spec-de.md">Spezifikation (Deutsch)</a> ·
       <a href="https://github.com/cwkr/xtjson">GitHub</a>
@@ -45,7 +45,7 @@
     <li><strong>More escape sequences:</strong> <code>\'</code>, <code>\v</code>, <code>\0</code>, <code>\xHH</code> and <code>\u{…}</code>.</li>
     <li><strong>Hexadecimal, octal and binary integers:</strong> <code>0xFF</code>, <code>0o755</code>, <code>0b1010</code>.</li>
     <li><strong>Digit grouping</strong> with <code>_</code>: <code>1_000_000</code>.</li>
-    <li><strong>Number suffixes:</strong> <code>10k</code>, <code>64mb</code>.</li>
+    <li><strong>Number suffixes:</strong> <code>10k</code>, <code>64mb</code>, <code>250ms</code>.</li>
     <li><strong>Named values:</strong> identifiers that the application defines as aliases for JSON values, such as <code>nil</code>.</li>
     <li><strong>More white space characters:</strong> all white space characters of ECMAScript.</li>
   </ul>
@@ -75,8 +75,9 @@ limits: {
   file_mode: 0o644
   feature_mask: 0b1010_0101
   magic: 0xDEAD_BEEF
-  cache_bytes: 64mb     // predefined suffix: times 1048576
-  rate_limit: 5k        // predefined suffix: times 1000
+  cache_bytes: 64mb     // suffix: times 1048576
+  rate_limit: 5k        // suffix: times 1000
+  idle_timeout: 5min    // suffix: times 60
   &quot;retry-after&quot;: 30     // a name with a hyphen needs quotation marks
   banner: &#x27;Welcome to demo-service\x21&#x27;
 }
@@ -107,6 +108,7 @@ tags: [
     &quot;magic&quot;: 3735928559,
     &quot;cache_bytes&quot;: 67108864,
     &quot;rate_limit&quot;: 5000,
+    &quot;idle_timeout&quot;: 300,
     &quot;retry-after&quot;: 30,
     &quot;banner&quot;: &quot;Welcome to demo-service!&quot;
   },
@@ -321,7 +323,7 @@ tags: [
 
   <section class="form" id="named-value">
     <h3>named value</h3>
-    <p>A <dfn>named value</dfn> is an <a href="#identifier">identifier</a> at a value position. It is another notation for the JSON value that a definition assigns to it. <code>true</code>, <code>false</code> and <code>null</code> are predefined and cannot be changed. The application can pass further definitions to the parser, for example <code>nil</code> for <code>null</code>. A document cannot define named values itself, case is significant, and an identifier without a definition is an error; it is never read as a string.</p>
+    <p>A <dfn>named value</dfn> is an <a href="#identifier">identifier</a> at a value position. It is another notation for the JSON value that a definition assigns to it. <code>true</code>, <code>false</code> and <code>null</code> are predefined and cannot be changed. The application can pass further definitions to the parser, for example <code>nil</code> for <code>null</code>; the assigned value is a string, a number, <code>true</code>, <code>false</code> or <code>null</code>, never an object or an array. A document cannot define named values itself, case is significant, and an identifier without a definition is an error; it is never read as a string.</p>
     <div class="diagram"><svg class="rr" viewBox="0 0 380 136" width="380" height="136" role="img" aria-label="Railroad diagram: named value">
 <path class="cap" d="M8 12v16m4 -16v16"/>
 <path d="M12 20H30"/>
@@ -960,24 +962,74 @@ tags: [
 
   <section class="form" id="suffix">
     <h3>suffix</h3>
-    <p>A <dfn>suffix</dfn> of one or two characters directly after the last digit stands for a conversion function that turns the number into another number. Predefined and not changeable are <code>k</code> and <code>K</code> (times 1000), <code>kb</code>, <code>Kb</code>, <code>kB</code> and <code>KB</code> (times 1024), and <code>mb</code>, <code>Mb</code>, <code>mB</code> and <code>MB</code> (times 1048576). The application can pass further suffixes to the parser, for example <code>%</code> for "divided by 100". Case is significant, the longest match applies, and an undefined suffix is an error.</p>
-    <div class="diagram"><svg class="rr" viewBox="0 0 423 60" width="423" height="60" role="img" aria-label="Railroad diagram: suffix">
+    <p>A <dfn>suffix</dfn> directly after the last digit stands for a conversion that turns the number into another number. It consists of the same characters as an <a href="#identifier">identifier</a>, but cannot begin with <code>_</code>. Case is significant and the longest match applies.</p>
+    <div class="diagram"><svg class="rr" viewBox="0 0 466 164" width="466" height="164" role="img" aria-label="Railroad diagram: suffix">
 <path class="cap" d="M8 12v16m4 -16v16"/>
 <path d="M12 20H30"/>
-<rect class="c" x="30" y="8" width="214" height="24" rx="4"/>
-<text class="c" x="137" y="20">g–n p–w y z G–N P–W Y Z % $</text>
-<path d="M244 20H254"/>
-<path d="M254 20H274"/>
-<path d="M373 20H393"/>
-<path d="M274 20H373"/>
-<path d="M254 20a10 10 0 0 1 10 10v0a10 10 0 0 0 10 10"/>
-<path d="M373 40a10 10 0 0 0 10 -10v0a10 10 0 0 1 10 -10"/>
-<rect class="c" x="274" y="28" width="99" height="24" rx="4"/>
-<text class="c" x="323.5" y="40">a–z A–Z % $</text>
-<path d="M393 20H411"/>
-<path class="cap" d="M411 12v16m4 -16v16"/>
+<path d="M30 20H50"/>
+<path d="M236 20H256"/>
+<rect class="c" x="50" y="8" width="186" height="24" rx="4"/>
+<text class="c" x="143" y="20">g–n p–w y z G–N P–W Y Z</text>
+<path d="M30 20a10 10 0 0 1 10 10v12a10 10 0 0 0 10 10"/>
+<path d="M236 52a10 10 0 0 0 10 -10v-12a10 10 0 0 1 10 -10"/>
+<rect class="t" x="50" y="40" width="28" height="24" rx="12"/>
+<text class="t" x="64" y="52">$</text>
+<path d="M78 52H236"/>
+<path d="M256 20H266"/>
+<path d="M266 20H286"/>
+<path d="M416 20H436"/>
+<path d="M286 20H416"/>
+<path d="M266 20a10 10 0 0 1 10 10v0a10 10 0 0 0 10 10"/>
+<path d="M416 40a10 10 0 0 0 10 -10v0a10 10 0 0 1 10 -10"/>
+<path d="M286 40H296"/>
+<path d="M296 40H316"/>
+<path d="M386 40H406"/>
+<rect class="c" x="316" y="28" width="70" height="24" rx="4"/>
+<text class="c" x="351" y="40">a–z A–Z</text>
+<path d="M296 40a10 10 0 0 1 10 10v12a10 10 0 0 0 10 10"/>
+<path d="M386 72a10 10 0 0 0 10 -10v-12a10 10 0 0 1 10 -10"/>
+<rect class="c" x="316" y="60" width="42" height="24" rx="4"/>
+<text class="c" x="337" y="72">0–9</text>
+<path d="M358 72H386"/>
+<path d="M296 40a10 10 0 0 1 10 10v44a10 10 0 0 0 10 10"/>
+<path d="M386 104a10 10 0 0 0 10 -10v-44a10 10 0 0 1 10 -10"/>
+<rect class="t" x="316" y="92" width="28" height="24" rx="12"/>
+<text class="t" x="330" y="104">_</text>
+<path d="M344 104H386"/>
+<path d="M296 40a10 10 0 0 1 10 10v76a10 10 0 0 0 10 10"/>
+<path d="M386 136a10 10 0 0 0 10 -10v-76a10 10 0 0 1 10 -10"/>
+<rect class="t" x="316" y="124" width="28" height="24" rx="12"/>
+<text class="t" x="330" y="136">$</text>
+<path d="M344 136H386"/>
+<path d="M406 40H416"/>
+<path d="M406 40a10 10 0 0 1 10 10v96a10 10 0 0 1 -10 10"/>
+<path d="M296 156a10 10 0 0 1 -10 -10v-96a10 10 0 0 1 10 -10"/>
+<path d="M296 156H351"/>
+<path d="M351 156H406"/>
+<path d="M436 20H454"/>
+<path class="cap" d="M454 12v16m4 -16v16"/>
 </svg></div>
-    <p>The first character cannot be <code>a</code> to <code>f</code>, <code>o</code> or <code>x</code> in either case, so a suffix is never confused with a hexadecimal digit, an exponent or a number prefix.</p>
+    <p>The first character cannot be <code>a</code> to <code>f</code>, <code>o</code> or <code>x</code> in either case, and it cannot be <code>_</code>, so a suffix is never confused with a hexadecimal digit, an exponent, a number prefix or digit grouping.</p>
+    <p>All suffixes are predefined and cannot be changed; the application cannot add any. A suffix that is not in this table is an error:</p>
+    <div class="table"><table>
+      <thead>
+        <tr><th>Suffix</th><th>Conversion</th><th>Example</th><th>Result</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>k</code>, <code>K</code></td><td>number times 1000</td><td><code>10k</code></td><td><code>10000</code></td></tr>
+        <tr><td><code>kb</code>, <code>Kb</code>, <code>kB</code>, <code>KB</code></td><td>number times 1024</td><td><code>4kb</code></td><td><code>4096</code></td></tr>
+        <tr><td><code>mb</code>, <code>Mb</code>, <code>mB</code>, <code>MB</code></td><td>number times 1048576</td><td><code>64mb</code></td><td><code>67108864</code></td></tr>
+        <tr><td><code>ms</code></td><td>number divided by 1000</td><td><code>100ms</code></td><td><code>0.1</code></td></tr>
+        <tr><td><code>s</code></td><td>none; the value remains unchanged</td><td><code>30s</code></td><td><code>30</code></td></tr>
+        <tr><td><code>min</code></td><td>number times 60</td><td><code>5min</code></td><td><code>300</code></td></tr>
+        <tr><td><code>h</code></td><td>number times 3600</td><td><code>2h</code></td><td><code>7200</code></td></tr>
+        <tr><td><code>pct</code></td><td>number divided by 100</td><td><code>50pct</code></td><td><code>0.5</code></td></tr>
+        <tr><td><code>px</code></td><td>none; the value remains unchanged</td><td><code>12px</code></td><td><code>12</code></td></tr>
+        <tr><td><code>L</code></td><td>none; the value remains unchanged</td><td><code>100L</code></td><td><code>100</code></td></tr>
+        <tr><td><code>n</code></td><td>none; the value remains unchanged</td><td><code>10n</code></td><td><code>10</code></td></tr>
+      </tbody>
+    </table></div>
+    <p>The result is exact: <code>0.1kb</code> is <code>102.4</code>.</p>
   </section>
 
   <section class="form" id="white-space">
@@ -1111,8 +1163,8 @@ tags: [
 <section id="principles">
   <h2>Principles</h2>
   <ul>
-    <li><strong>Definitions belong to the parser, not to the document.</strong> A document can define neither named values nor suffixes. A document that uses only the predefined ones is portable: every conforming parser can read it.</li>
-    <li><strong>Errors instead of guessing.</strong> Unknown escape sequences, undefined identifiers, undefined suffixes and mixed indentation are errors and are not silently interpreted.</li>
+    <li><strong>Definitions belong to the parser, not to the document.</strong> A document can define neither named values nor suffixes. Named values can be defined by the application; suffixes are fixed by the specification. A document that uses only the predefined named values is portable: every conforming parser can read it.</li>
+    <li><strong>Errors instead of guessing.</strong> Unknown escape sequences, undefined identifiers, unknown suffixes and mixed indentation are errors and are not silently interpreted.</li>
     <li><strong>Never code.</strong> XTJSON is not a subset of a programming language and is never read by evaluating it as program code.</li>
   </ul>
 </section>
@@ -1195,11 +1247,10 @@ SQUOTE         = %x27                        ; &#x27;
 
 ; ---------- Numbers ----------
 number         = [ minus ] ( hex-int / oct-int / bin-int / decimal ) [ suffix ]
-suffix         = suffix-first [ suffix-next ]
-suffix-first   = %x67-6E / %x70-77 / %x79-7A /       ; g-n p-w y z
+suffix         = suffix-start *id-continue   ; only the suffixes from 9.5
+suffix-start   = %x67-6E / %x70-77 / %x79-7A /       ; g-n p-w y z
                  %x47-4E / %x50-57 / %x59-5A /       ; G-N P-W Y Z
-                 &quot;%&quot; / &quot;$&quot;
-suffix-next    = %x61-7A / %x41-5A / &quot;%&quot; / &quot;$&quot;       ; a-z A-Z % $
+                 &quot;$&quot;
 decimal        = int [ frac ] [ exp ]
 int            = zero / ( digit1-9 *( [ &quot;_&quot; ] DIGIT ) )
 frac           = &quot;.&quot; digits
@@ -1220,7 +1271,7 @@ e              = %x65 / %x45                 ; e E</code></pre>
 
 <footer>
   <div class="wrap">
-    <p>XTJSON specification draft 0.3 · <a href="https://github.com/cwkr/xtjson">github.com/cwkr/xtjson</a></p>
+    <p>XTJSON specification draft 0.4 · <a href="https://github.com/cwkr/xtjson">github.com/cwkr/xtjson</a></p>
   </div>
 </footer>
 

@@ -45,7 +45,7 @@
     <li><strong>More escape sequences:</strong> <code>\'</code>, <code>\v</code>, <code>\0</code>, <code>\xHH</code> and <code>\u{…}</code>.</li>
     <li><strong>Hexadecimal, octal and binary integers:</strong> <code>0xFF</code>, <code>0o755</code>, <code>0b1010</code>.</li>
     <li><strong>Digit grouping</strong> with <code>_</code>: <code>1_000_000</code>.</li>
-    <li><strong>Number suffixes:</strong> <code>10k</code>, <code>64mb</code>.</li>
+    <li><strong>Number suffixes:</strong> <code>10k</code>, <code>64mb</code>, <code>250ms</code>.</li>
     <li><strong>Named values:</strong> identifiers that the application defines as aliases for JSON values, such as <code>nil</code>.</li>
     <li><strong>More white space characters:</strong> all white space characters of ECMAScript.</li>
   </ul>
@@ -108,7 +108,7 @@
 
   <section class="form" id="named-value">
     <h3>named value</h3>
-    <p>A <dfn>named value</dfn> is an <a href="#identifier">identifier</a> at a value position. It is another notation for the JSON value that a definition assigns to it. <code>true</code>, <code>false</code> and <code>null</code> are predefined and cannot be changed. The application can pass further definitions to the parser, for example <code>nil</code> for <code>null</code>. A document cannot define named values itself, case is significant, and an identifier without a definition is an error; it is never read as a string.</p>
+    <p>A <dfn>named value</dfn> is an <a href="#identifier">identifier</a> at a value position. It is another notation for the JSON value that a definition assigns to it. <code>true</code>, <code>false</code> and <code>null</code> are predefined and cannot be changed. The application can pass further definitions to the parser, for example <code>nil</code> for <code>null</code>; the assigned value is a string, a number, <code>true</code>, <code>false</code> or <code>null</code>, never an object or an array. A document cannot define named values itself, case is significant, and an identifier without a definition is an error; it is never read as a string.</p>
     <div class="diagram">{{rr:named value}}</div>
   </section>
 
@@ -175,9 +175,29 @@
 
   <section class="form" id="suffix">
     <h3>suffix</h3>
-    <p>A <dfn>suffix</dfn> of one or two characters directly after the last digit stands for a conversion function that turns the number into another number. Predefined and not changeable are <code>k</code> and <code>K</code> (times 1000), <code>kb</code>, <code>Kb</code>, <code>kB</code> and <code>KB</code> (times 1024), and <code>mb</code>, <code>Mb</code>, <code>mB</code> and <code>MB</code> (times 1048576). The application can pass further suffixes to the parser, for example <code>%</code> for "divided by 100". Case is significant, the longest match applies, and an undefined suffix is an error.</p>
+    <p>A <dfn>suffix</dfn> directly after the last digit stands for a conversion that turns the number into another number. It consists of the same characters as an <a href="#identifier">identifier</a>, but cannot begin with <code>_</code>. Case is significant and the longest match applies.</p>
     <div class="diagram">{{rr:suffix}}</div>
-    <p>The first character cannot be <code>a</code> to <code>f</code>, <code>o</code> or <code>x</code> in either case, so a suffix is never confused with a hexadecimal digit, an exponent or a number prefix.</p>
+    <p>The first character cannot be <code>a</code> to <code>f</code>, <code>o</code> or <code>x</code> in either case, and it cannot be <code>_</code>, so a suffix is never confused with a hexadecimal digit, an exponent, a number prefix or digit grouping.</p>
+    <p>All suffixes are predefined and cannot be changed; the application cannot add any. A suffix that is not in this table is an error:</p>
+    <div class="table"><table>
+      <thead>
+        <tr><th>Suffix</th><th>Conversion</th><th>Example</th><th>Result</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>k</code>, <code>K</code></td><td>number times 1000</td><td><code>10k</code></td><td><code>10000</code></td></tr>
+        <tr><td><code>kb</code>, <code>Kb</code>, <code>kB</code>, <code>KB</code></td><td>number times 1024</td><td><code>4kb</code></td><td><code>4096</code></td></tr>
+        <tr><td><code>mb</code>, <code>Mb</code>, <code>mB</code>, <code>MB</code></td><td>number times 1048576</td><td><code>64mb</code></td><td><code>67108864</code></td></tr>
+        <tr><td><code>ms</code></td><td>number divided by 1000</td><td><code>100ms</code></td><td><code>0.1</code></td></tr>
+        <tr><td><code>s</code></td><td>none; the value remains unchanged</td><td><code>30s</code></td><td><code>30</code></td></tr>
+        <tr><td><code>min</code></td><td>number times 60</td><td><code>5min</code></td><td><code>300</code></td></tr>
+        <tr><td><code>h</code></td><td>number times 3600</td><td><code>2h</code></td><td><code>7200</code></td></tr>
+        <tr><td><code>pct</code></td><td>number divided by 100</td><td><code>50pct</code></td><td><code>0.5</code></td></tr>
+        <tr><td><code>px</code></td><td>none; the value remains unchanged</td><td><code>12px</code></td><td><code>12</code></td></tr>
+        <tr><td><code>L</code></td><td>none; the value remains unchanged</td><td><code>100L</code></td><td><code>100</code></td></tr>
+        <tr><td><code>n</code></td><td>none; the value remains unchanged</td><td><code>10n</code></td><td><code>10</code></td></tr>
+      </tbody>
+    </table></div>
+    <p>The result is exact: <code>0.1kb</code> is <code>102.4</code>.</p>
   </section>
 
   <section class="form" id="white-space">
@@ -217,8 +237,8 @@
 <section id="principles">
   <h2>Principles</h2>
   <ul>
-    <li><strong>Definitions belong to the parser, not to the document.</strong> A document can define neither named values nor suffixes. A document that uses only the predefined ones is portable: every conforming parser can read it.</li>
-    <li><strong>Errors instead of guessing.</strong> Unknown escape sequences, undefined identifiers, undefined suffixes and mixed indentation are errors and are not silently interpreted.</li>
+    <li><strong>Definitions belong to the parser, not to the document.</strong> A document can define neither named values nor suffixes. Named values can be defined by the application; suffixes are fixed by the specification. A document that uses only the predefined named values is portable: every conforming parser can read it.</li>
+    <li><strong>Errors instead of guessing.</strong> Unknown escape sequences, undefined identifiers, unknown suffixes and mixed indentation are errors and are not silently interpreted.</li>
     <li><strong>Never code.</strong> XTJSON is not a subset of a programming language and is never read by evaluating it as program code.</li>
   </ul>
 </section>

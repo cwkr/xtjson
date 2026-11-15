@@ -1,7 +1,5 @@
-"""Referenz-Parser fuer XTJSON (Entwurf 0.3) + Pruefung der Beispiele der Spezifikation."""
-import copy
+"""Referenz-Parser fuer XTJSON (Entwurf 0.4) + Pruefung der Beispiele der Spezifikation."""
 import json
-import math
 import re
 import sys
 from decimal import Decimal, localcontext
@@ -23,54 +21,46 @@ CP = re.compile(r'\{0*([0-9A-Fa-f]{1,5}|10[0-9A-Fa-f]{4})\}')
 ESC = {'"': '"', "'": "'", '\\': '\\', '/': '/', 'b': '\b', 'f': '\f',
        'n': '\n', 'r': '\r', 't': '\t', 'v': '\v'}
 
-SUF = re.compile(r'[g-np-wyzG-NP-WYZ%$][a-zA-Z%$]?')
+SUF = re.compile(r'[g-np-wyzG-NP-WYZ$][A-Za-z0-9_$]*')
 FIXED_VALUES = {'true': True, 'false': False, 'null': None}
-FIXED_SUFFIXES = {}
-for _names, _factor in (('k K', 1000), ('kb Kb kB KB', 1024), ('mb Mb mB MB', 1048576)):
+# Suffixe nach 9.5: Suffix -> (Faktor, Teiler). Die Tabelle ist abschliessend.
+SUFFIXES = {}
+for _names, _factor, _divisor in (
+        ('k K', 1000, 1), ('kb Kb kB KB', 1024, 1), ('mb Mb mB MB', 1048576, 1),
+        ('ms', 1, 1000), ('s', 1, 1), ('min', 60, 1), ('h', 3600, 1),
+        ('pct', 1, 100), ('px', 1, 1), ('L', 1, 1), ('n', 1, 1)):
     for _n in _names.split():
-        FIXED_SUFFIXES[_n] = _factor
+        SUFFIXES[_n] = (_factor, _divisor)
 
 
-def check_definitions(values, suffixes):
-    """Prueft eigene Definitionen (6.4, 9.5). Verstoesse sind Fehler der Anwendung (ValueError)."""
+def check_definitions(values):
+    """Prueft eigene Definitionen (6.4). Verstoesse sind Fehler der Anwendung (ValueError)."""
     for name, val in values.items():
         if not isinstance(name, str) or not ID.fullmatch(name):
             raise ValueError('kein gueltiger Bezeichner: %r' % (name,))
         if name in FIXED_VALUES:
             raise ValueError('%r ist vordefiniert und nicht aenderbar' % name)
+        if isinstance(val, (dict, list, tuple)):
+            raise ValueError('%r: Objekte und Arrays sind als benannter Wert nicht erlaubt' % name)
         try:
             json.dumps(val, allow_nan=False)          # muss ein JSON-Wert sein
         except (TypeError, ValueError):
             raise ValueError('%r ist kein JSON-Wert zugeordnet' % name) from None
-    for suf, fn in suffixes.items():
-        if not isinstance(suf, str) or not SUF.fullmatch(suf):
-            raise ValueError('kein gueltiges Suffix: %r' % (suf,))
-        if suf in FIXED_SUFFIXES:
-            raise ValueError('Suffix %r ist vordefiniert und nicht aenderbar' % suf)
-        if not callable(fn):
-            raise ValueError('Suffix %r braucht eine Umrechnungsfunktion' % suf)
 
 
-def apply_suffix(text, value, suf, suffixes):
+def apply_suffix(text, value, suf):
     """text: Zahl ohne '_' und ohne Suffix; value: ihr Wert (int oder float)."""
-    if suf in FIXED_SUFFIXES:
-        if isinstance(value, int):
-            return value * FIXED_SUFFIXES[suf]
-        with localcontext() as ctx:                   # exakte Dezimalrechnung
-            ctx.prec = 2000
-            r = Decimal(text) * FIXED_SUFFIXES[suf]
-            return int(r) if r == r.to_integral_value() else float(r)
-    if suf not in suffixes:
-        raise XTJSONError('Suffix %r ist nicht definiert' % suf)
-    try:
-        r = suffixes[suf](value)
-    except XTJSONError:
-        raise
-    except Exception as ex:                            # Fehler der Funktion = Fehler des Dokuments
-        raise XTJSONError('Umrechnung mit %r fehlgeschlagen: %s' % (suf, ex)) from None
-    if isinstance(r, bool) or not isinstance(r, (int, float)) or (isinstance(r, float) and not math.isfinite(r)):
-        raise XTJSONError('Umrechnungsfunktion fuer %r liefert keine endliche Zahl' % suf)
-    return r
+    if suf not in SUFFIXES:
+        raise XTJSONError('Suffix %r gibt es nicht' % suf)
+    factor, divisor = SUFFIXES[suf]
+    if factor == divisor:                             # Suffix ohne Wirkung
+        return value
+    if isinstance(value, int) and divisor == 1:
+        return value * factor
+    with localcontext() as ctx:                       # exakte Dezimalrechnung
+        ctx.prec = 2000
+        r = (Decimal(value) if isinstance(value, int) else Decimal(text)) * factor / divisor
+        return int(r) if r == r.to_integral_value() else float(r)
 
 
 def ml_value(out, rawidx, nlidx):
@@ -105,7 +95,7 @@ def ml_value(out, rawidx, nlidx):
     return '\n'.join(''.join(ch for ch, _ in ln) for ln in lines)   # 4. Zusammensetzen
 
 
-def tokenize(s, suffixes=None):
+def tokenize(s):
     toks, i, n, nl = [], 0, len(s), False
     while i < n:
         c = s[i]
@@ -199,7 +189,7 @@ def tokenize(s, suffixes=None):
             i = m.end()
             ms = SUF.match(s, i)
             if ms:
-                v = apply_suffix(t, v, ms.group(), suffixes or {})
+                v = apply_suffix(t, v, ms.group())
                 i = ms.end()
             toks.append(('num', v, nl))
             nl = False
@@ -218,11 +208,10 @@ def tokenize(s, suffixes=None):
 
 
 class Parser:
-    def __init__(self, text, ijson=False, values=None, suffixes=None):
+    def __init__(self, text, ijson=False, values=None):
         self.values = dict(values or {})
-        suffixes = dict(suffixes or {})
-        check_definitions(self.values, suffixes)
-        self.t = tokenize(text, suffixes)
+        check_definitions(self.values)
+        self.t = tokenize(text)
         self.p = 0
         self.ijson = ijson
 
@@ -261,7 +250,7 @@ class Parser:
             if v in FIXED_VALUES:
                 return FIXED_VALUES[v]
             if v in self.values:
-                return copy.deepcopy(self.values[v])
+                return self.values[v]
             raise XTJSONError('benannter Wert %r ist nicht definiert' % (v,))
         raise XTJSONError('Wert erwartet, gefunden %r' % (v,))
 
@@ -303,19 +292,17 @@ class Parser:
                 return arr
 
 
-def parse(text, ijson=False, values=None, suffixes=None):
+def parse(text, ijson=False, values=None):
     """Liest ein XTJSON-Dokument.
 
-    values:   eigene benannte Werte, {Bezeichner: JSON-Wert}
-    suffixes: eigene Zahlen-Suffixe, {Suffix: Umrechnungsfunktion}
+    values: eigene benannte Werte, {Bezeichner: JSON-Wert}; keine Objekte und Arrays
     """
-    return Parser(text, ijson, values, suffixes).document()
+    return Parser(text, ijson, values).document()
 
 
-# Definitionen, die die Beispiele der Spezifikation voraussetzen (6.4, 9.5)
+# Definitionen, die die Beispiele der Spezifikation voraussetzen (6.4)
 EXAMPLE_DEFS = dict(
     values={'nil': None, 'zero': 0, 'unbekannt': 'keine Angaben', 'unknown': 'not specified'},
-    suffixes={'%': lambda x: x / 100},
 )
 
 
@@ -355,7 +342,7 @@ def main(spec_path):
         '"\\\t"', '"a\x0bb"', '[1\x0b2]', '[1\x0c2]', '"a\\', '0XG', '0B2', '0O8',
         '"\\9"', 'a: 1\x0bb: 2', '[1\u20282]', '[1\u20292]', '[1\xa02]', '{a: 1 /* x\n */ b: 2}', '[1 /* \n */ 2]',
         '[1 // /* \n */ 2]', 'a: 1 /*\n*/ b: 2', '[1, // /* \n */ 2]', "[1,\u200b2]", "[1,\u00852]", "[1,\u180e2]", "[1\u30002]", "[1\ufeff2]", "a: 1\u2003b: 2",
-        '"\\u{110000}"', '"\\u{}"', '"\\u{1_F600}"', '"\\u{ 41 }"', '"\\U{41}"', '"\\u{41"', '"\\u{G}"', '"\\u{0000110000}"', '[_1]', '-', '--1', '0x1E+3', '[0xg]', '{a 1}', '{"a" "b"}',
+        '"\\u{110000}"', '"\\u{}"', '"\\u{1_F600}"', '"\\u{ 41 }"', '"\\U{41}"', '"\\u{41"', '"\\u{G}"', '"\\u{0000110000}"', '[_1]', '-', '--1', '0x1E+3', '[0xg]', '50%', '10q', '10kbs', '10_k', '10MS', '1_s', '{a 1}', '{"a" "b"}',
         '{a: 1 /* x */ b: 2}', 'a:', ': 1', '1: 2', '[1] [2]', '1 2', '{} {}',
         '"a\\\nb"', '"a\\\r\nb"', '"a\\\rb"', "'a\\\n  b'", '"\\ x"', '"\\a"', '"\\N"', '"\\-"',
         '"\\X41"', '"\\ "', 'a: "x\\\ny"\nb: 2', '"\\e"', '"\\U0041"', "'\\.'",
@@ -397,6 +384,8 @@ def main(spec_path):
         ('[1,\x0b\x0c2]', [1, 2]), ('\x0c{a\x0b:\x0c1}\x0b', {'a': 1}), ('[1 //k\x0b\x0c\n2]', [1, 2]),
         ('/**/1', 1), ('/***/1', 1), ('/* * / */1', 1), ('#!shebang\n[1]', [1]),
         ('"\\ud83d\\ude00"', '\U0001F600'), ('\ufeff{"a":1}', {'a': 1}),
+        ('5min', 300), ('100ms', 0.1), ('50pct', 0.5), ('12px', 12), ('100L', 100), ('10n', 10),
+        ('30s', 30), ('2h', 7200), ('1_0', 10),
         ('[[1,2\n3],{a:[{}]}]', [[1, 2, 3], {'a': [{}]}]),
     ]
     for t, exp in valid:

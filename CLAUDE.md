@@ -123,8 +123,8 @@ No change may give up these properties:
 
 - **Superset.** Every UTF-8 encoded JSON text is a valid XTJSON document with the same meaning (K1, K2). An extension may only occupy notations that are a syntax error in JSON.
 - **JSON data model.** Every document has a JSON equivalent (section 10). There are no new data types, no expressions, no references.
-- **Predefined and not changeable** are `true`, `false`, `null` and the suffixes `k`, `K`, `kb`, `Kb`, `kB`, `KB`, `mb`, `Mb`, `mB`, `MB`.
-- **Definitions belong to the parser, not to the document.** A document can define neither named values nor suffixes. Anything undefined is an error.
+- **Predefined and not changeable** are `true`, `false`, `null` and all number suffixes. The table in 9.5 is exhaustive: `k`, `K`, `kb`, `Kb`, `kB`, `KB`, `mb`, `Mb`, `mB`, `MB`, `ms`, `s`, `min`, `h`, `pct`, `px`, `L`, `n`.
+- **Definitions belong to the parser, not to the document.** A document can define neither named values nor suffixes. The application can define named values (a string, a number, `true`, `false` or `null`; never an object or an array), but no suffixes: those are defined only by the specification. Anything undefined is an error.
 - **Errors instead of guessing.** When in doubt, an input is an error and is not silently interpreted (unknown escape sequences, undefined identifiers, mixed indentation).
 - **Narrow rules first.** Where several solutions are possible, choose the narrower one and give the rationale in Appendix D. Loosening later is compatible; restricting is not.
 
@@ -135,7 +135,8 @@ Do not simply implement proposals that touch one of these principles. Present th
 An implementation in this repository is a conforming XTJSON parser, generator or converter in the sense of section 11 of the specification. In particular:
 
 - **No dialects.** Accept exactly what the grammar in Appendix A allows, and reject everything else. Do not add convenience extensions, lenient modes or fallbacks that the specification does not define. Options that restrict (for example an I-JSON mode according to section 12) are fine.
-- **Only predefined definitions by default.** Without action by the application, only `true`, `false`, `null` and the predefined suffixes are active. Offer an API for custom named values and custom suffixes; reject definitions that violate 6.4 or 9.5, including any attempt to redefine a predefined one. Report such misuse as an error of the application, distinct from an error of the document.
+- **Only predefined definitions by default.** Without action by the application, only `true`, `false` and `null` are active as named values. Offer an API for custom named values; reject definitions that violate 6.4: a name that is not an identifier, an object or an array as the value, and any attempt to redefine a predefined one. Report such misuse as an error of the application, distinct from an error of the document.
+- **No custom suffixes.** Know exactly the suffixes in the table in 9.5. Do not offer an API to add, change or remove suffixes.
 - **Behaviour that is easy to get wrong:**
   - Duplicate names: the member that comes last in the document applies (7.2); forbidden in I-JSON mode.
   - Line break: LF, CR or CR LF, with CR LF counting as one. U+2028 and U+2029 are white space, not line breaks, and do not end a line comment.
@@ -143,9 +144,9 @@ An implementation in this repository is a conforming XTJSON parser, generator or
   - Multi-line strings: follow the four steps in 8.3 exactly, including removal of unescaped trailing spaces and tabs, removal of indentation only when the string begins with an empty line, the last line always counting, and the error for differing removed characters. Multi-line strings are not permitted as names.
   - Escapes: only those in the table in 8.2. `\0` must not be followed by a digit, `\u{…}` must not exceed 10FFFF or lie in D800 to DFFF, every other `\` sequence is an error.
   - Numbers: prefixes `0x`, `0o`, `0b` in either case; `_` only singly between two digits; a leading-zero form such as `0755` is an error. Hexadecimal, octal and binary numbers are exact or an error, never rounded.
-  - Suffixes: one or two characters, longest match, no white space before them; the first character excludes `a`–`f`, `o` and `x` in either case. Predefined suffixes yield the exact product (`0.1kb` is `102.4`).
+  - Suffixes: the characters of an identifier, any length, longest match, no white space before them; the first character excludes `_` and, in either case, `a`–`f`, `o` and `x`. A `_` after a digit is digit grouping or an error (`1_0` is 10, `10_k` is an error). Case is significant (`L` exists, `l` does not), and a suffix that is not in the table in 9.5 is an error. Results are exact (`0.1kb` is `102.4`, `100ms` is `0.1`).
 - **Limits are allowed, silent truncation is not.** An implementation may limit document size, nesting depth, number range and string length (section 11), but it must report an error when a limit is hit.
-- **Never evaluate a document as code**, and never let a document supply definitions or conversion functions (section 13).
+- **Never evaluate a document as code**, and never let a document supply definitions (section 13).
 - **Test against the shared cases.** The cases in `scripts/tests_*.py` and the built-in lists in `scripts/xtjson_ref.py` are the conformance corpus. Every implementation must accept the valid texts with the expected values and reject the invalid ones. When an implementation bug is found, first add a case to the shared tests and confirm the reference parser handles it as the specification says, then fix the implementation.
 - **Use the reference parser as the oracle**, not as a template. It is written for clarity, has known gaps (see below) and is not meant to be ported line by line. Where an implementation and the reference parser disagree, check the specification text before changing either.
 - **Follow each implementation's own conventions** for style, tooling, dependencies and tests, as documented in its directory. Do not introduce new dependencies or reformat existing code without need.
@@ -157,17 +158,17 @@ An implementation in this repository is a conforming XTJSON parser, generator or
   `grep -c 'u0061\|u00e4\|u00e9\|uD83D\|u00E4\|u000B\|uDEAD' docs/*.md` must report the same count for both versions (currently 6 each).
 - **White space at the end of lines.** In examples with multi-line strings it matters, or is removed by rule. It is made visible in tables with `·` for a space and `⏎` for a line break, never by real spaces at the end of a line. Editors and formatters must not re-wrap the Markdown files or strip white space.
 - **Fence tags.** Complete, valid documents go in blocks tagged `xtjson`, JSON equivalents directly after them in `json`, grammar in `abnf`. Invalid examples and fragments are written as inline code or in tables, never in an `xtjson` block.
-- **Examples with custom definitions.** The examples in 6.4 and 9.5 assume definitions (`nil`, `zero`, `unbekannt` / `unknown`, the suffix `%`). They are listed in `EXAMPLE_DEFS` in `scripts/xtjson_ref.py`. If you add an example with further definitions, add them there and name them in the text.
+- **Examples with custom definitions.** The example in 6.4 assumes definitions (`nil`, `zero`, `unbekannt` / `unknown`). They are listed in `EXAMPLE_DEFS` in `scripts/xtjson_ref.py`. If you add an example with further definitions, add them there and name them in the text.
 - **Translated examples.** Names and texts in examples are translated; structure and numbers are not. `compare_versions.py` checks that the values have the same shape.
 - **Line endings.** The Markdown files use LF. Tests for CR and CR LF are written as escape sequences in the Python files.
 
 ## Reference parser
 
-- Interface: `parse(text, ijson=False, values=None, suffixes=None)`. `values` maps identifiers to JSON values, `suffixes` maps suffixes to conversion functions.
+- Interface: `parse(text, ijson=False, values=None)`. `values` maps identifiers to JSON values that are not objects or arrays. The suffixes are fixed in `SUFFIXES`.
 - Invalid documents raise `XTJSONError`. Invalid definitions passed by the application raise `ValueError` but not `XTJSONError`.
 - Known gaps compared with the specification; do not treat them as done:
   - The I-JSON mode checks only duplicate names, not surrogates, noncharacters or number ranges.
-  - Decimal numbers with a fraction part or an exponent become `float` (binary64). Exact arithmetic is used only for integers and for predefined suffixes.
+  - Decimal numbers with a fraction part or an exponent become `float` (binary64). Exact arithmetic is used only for integers and for suffixes.
   - It expects text that is already decoded; checking UTF-8 is left to the caller.
 - Messages, comments and test file names in `scripts/` are in German, written without umlauts. Keep that as it is; do not translate or rename them as a side effect of other work.
 
