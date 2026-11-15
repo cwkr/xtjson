@@ -283,6 +283,27 @@ describe('numbers', () => {
     }
   });
 
+  test('decimal numbers are correctly rounded at every length', () => {
+    // Numbers of up to 15 digits take a fast path in the parser; the texts
+    // cover both sides of that limit.
+    const texts = ['-0.0', '0.1', '0.3', '1.005', '123.456', '999999999999999', '9999999999999999',
+      '0.000000000000001', '0.0000000000000001', '99999999.9999999', '99999999.99999999',
+      '9007199254740993', '0.1234567890123456789012', '4.35', '-8.41', '1.7976931348623157e308'];
+    let seed = 1;
+    for (let i = 0; i < 2000; i++) {
+      seed = (seed * 48271) % 2147483647;
+      const digits = String(seed) + String(seed % 9973);
+      const point = seed % (digits.length + 1);
+      texts.push((seed % 3 === 0 ? '-' : '') + (digits.slice(0, point) || '0').replace(/^0+(?=\d)/, '') + '.' + (digits.slice(point) || '0'));
+    }
+    for (const text of texts) {
+      assert.ok(Object.is(XTJSON.parse(text), JSON.parse(text)), text);
+      assert.ok(Object.is(XTJSON.parse(`[${text}]`)[0], JSON.parse(text)), text);
+      // 9.5: the quotient is rounded once, like the decimal with a shifted point.
+      if (!text.includes('e')) assert.ok(Object.is(XTJSON.parse(text + 'ms'), Number(text + 'e-3')), text + 'ms');
+    }
+  });
+
   test('decimal numbers out of range are an error, not Infinity', () => {
     assert.match(error('1e400').message, /out of range/);
     assert.match(error('-1e400').message, /out of range/);

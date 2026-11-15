@@ -135,6 +135,12 @@ const SUFFIXES = new Map([
   ['pct', [1, -2]], ['px', [1, 0]], ['L', [1, 0]], ['n', [1, 0]],
 ]);
 
+/** 10^0 to 10^22, the powers of ten that a JavaScript number holds exactly. */
+const POWERS_OF_TEN = [
+  1e0, 1e1, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8, 1e9, 1e10, 1e11,
+  1e12, 1e13, 1e14, 1e15, 1e16, 1e17, 1e18, 1e19, 1e20, 1e21, 1e22,
+];
+
 const RADIX_NAMES = { 2: 'binary', 8: 'octal', 10: 'decimal', 16: 'hexadecimal' };
 const BITS_PER_DIGIT = { 2: 1, 8: 3, 16: 4 };
 const RADIX_PREFIX = { 2: '0b', 8: '0o', 16: '0x' };
@@ -488,27 +494,35 @@ class Parser {
     const len = this.len;
     let pos = this.pos;
     let newline = false;
+    // The tests are ordered by the frequency of the characters: a space,
+    // then the first character of a token, then a line break.
     while (pos < len) {
       const c = text.charCodeAt(pos);
-      if (c === SPACE || c === TAB) {
+      if (c === SPACE) {
         pos++;
-      } else if (c === LF || c === CR) {
-        newline = true;
-        pos++;
-      } else if (c === SLASH) {
-        const d = text.charCodeAt(pos + 1);
-        if (d === SLASH) {
-          pos = this.skipLineComment(pos + 2);
-        } else if (d === STAR) {
-          const end = text.indexOf('*/', pos + 2);
-          if (end < 0) this.fail('Unterminated block comment', pos);
-          pos = end + 2;
+      } else if (c > SPACE) {
+        if (c === SLASH) {
+          const d = text.charCodeAt(pos + 1);
+          if (d === SLASH) {
+            pos = this.skipLineComment(pos + 2);
+          } else if (d === STAR) {
+            const end = text.indexOf('*/', pos + 2);
+            if (end < 0) this.fail('Unterminated block comment', pos);
+            pos = end + 2;
+          } else {
+            break;
+          }
+        } else if (c === HASH) {
+          pos = this.skipLineComment(pos + 1);
+        } else if (c >= 0x80 && isBlank(c)) {
+          pos++;
         } else {
           break;
         }
-      } else if (c === HASH) {
-        pos = this.skipLineComment(pos + 1);
-      } else if (isBlank(c)) {
+      } else if (c === LF || c === CR) {
+        newline = true;
+        pos++;
+      } else if (c === TAB || c === VT || c === FF) {
         pos++;
       } else {
         break;
@@ -586,7 +600,9 @@ class Parser {
         return this.parseArray();
       case DQUOTE:
       case SQUOTE:
-        return this.atTripleQuote(c) ? this.readMultiLineString(c) : this.readSingleLineString(c);
+        return this.text.charCodeAt(this.pos + 1) === c && this.text.charCodeAt(this.pos + 2) === c
+          ? this.readMultiLineString(c)
+          : this.readSingleLineString(c);
       case MINUS:
         return this.parseNumber();
       default:
@@ -725,8 +741,12 @@ class Parser {
    */
   separator(closer, start) {
     const before = this.pos;
-    const newline = this.skipSpace();
-    const c = this.peek();
+    let newline = false;
+    let c = this.text.charCodeAt(before);
+    if (c !== COMMA) {
+      newline = this.skipSpace();
+      c = this.peek();
+    }
     if (c === COMMA) {
       this.pos++;
       this.skipSpace();
@@ -763,9 +783,10 @@ class Parser {
     const text = this.text;
     const start = this.pos;
     let pos = start + 1;
-    while (hasFlag(text.charCodeAt(pos), ID_PART)) pos++;
+    let c;
+    // At the end of the text `c` is NaN, which ends the loop.
+    while ((c = text.charCodeAt(pos)) < 128 && (CHAR_FLAGS[c] & ID_PART) !== 0) pos++;
     this.pos = pos;
-    const c = pos < this.len ? text.charCodeAt(pos) : EOF;
     if (c === MINUS || c === DOT || (c >= 0x80 && !isBlank(c))) {
       this.fail(`Unexpected ${describeAt(text, pos)} in an identifier; identifiers consist of ASCII letters, digits, "_" and "$", other names must be written in quotation marks`);
     }
@@ -783,11 +804,13 @@ class Parser {
     let chunk = pos;
     let out = '';
     for (;;) {
-      if (pos >= len) this.fail('Unterminated string', start);
-      const c = text.charCodeAt(pos);
+      let c;
+      // Ordinary characters. At the end of the text `c` is NaN, which ends
+      // the loop as well.
+      while ((c = text.charCodeAt(pos)) >= SPACE && c !== q && c !== BACKSLASH) pos++;
       if (c === q) {
         this.pos = pos + 1;
-        const value = out + text.slice(chunk, pos);
+        const value = chunk === start + 1 ? text.slice(chunk, pos) : out + text.slice(chunk, pos);
         if (this.ijson) this.checkIJSONString(value, start);
         return value;
       }
@@ -796,13 +819,13 @@ class Parser {
         this.pos = pos;
         out += this.readEscape();
         pos = chunk = this.pos;
-      } else if (c < SPACE) {
+      } else if (pos >= len) {
+        this.fail('Unterminated string', start);
+      } else {
         if (c === LF || c === CR) {
           this.fail('Line break in a single-line string; write \\n or use a multi-line string (""" or \'\'\')', pos);
         }
         this.fail(`Control character ${hex4(c)} must be escaped in a string`, pos);
-      } else {
-        pos++;
       }
     }
   }
@@ -913,11 +936,15 @@ class Parser {
     let pos = start + 3;
 
     // Step 1: form lines. For each line we keep its decoded text, the number
-    // of unescaped spaces and tabs at its beginning (`lead`) and at its end
-    // (`trail`), and its offset for error messages.
+    // of unescaped spaces and tabs at its beginning (`lead`) and its offset
+    // for error messages. `trail` counts the unescaped spaces and tabs at
+    // the end of the current line.
+    //
+    // Step 2 is done on the way: unescaped white space at the end of every
+    // line but the last is removed. It always lies at the end of the current
+    // chunk of raw text, because an escape sequence resets `trail`.
     const lines = [];
     const leads = [];
-    const trails = [];
     const offsets = [];
     let line = '';
     let chunk = pos;
@@ -930,9 +957,8 @@ class Parser {
       if (pos >= len) this.fail('Unterminated multi-line string', start);
       const c = text.charCodeAt(pos);
       if (c === q && text.charCodeAt(pos + 1) === q && text.charCodeAt(pos + 2) === q) {
-        lines.push(line + text.slice(chunk, pos));
+        lines.push(chunk === pos ? line : line + text.slice(chunk, pos)); // the last line keeps its white space
         leads.push(lead);
-        trails.push(trail);
         this.pos = pos + 3;
         break;
       }
@@ -941,9 +967,8 @@ class Parser {
         trail++;
         pos++;
       } else if (c === LF || c === CR) {
-        lines.push(line + text.slice(chunk, pos));
-        leads.push(lead);
-        trails.push(trail);
+        lines.push(chunk === pos - trail ? line : line + text.slice(chunk, pos - trail));
+        leads.push(leading ? 0 : lead); // a line of white space only is empty now
         pos += c === CR && text.charCodeAt(pos + 1) === LF ? 2 : 1;
         offsets.push(pos);
         line = '';
@@ -969,37 +994,29 @@ class Parser {
     const last = lines.length - 1;
     if (last === 0) return lines[0];
 
-    // Step 2: remove unescaped white space at the end of every line but the last.
-    for (let k = 0; k < last; k++) {
-      if (trails[k] > 0) {
-        lines[k] = lines[k].slice(0, lines[k].length - trails[k]);
-        if (leads[k] > lines[k].length) leads[k] = lines[k].length;
-      }
-    }
-
     // Step 3: remove indentation, only if the string begins with an empty line.
     if (lines[0] !== '') return lines.join('\n');
     let indent = Infinity;
     for (let k = 1; k <= last; k++) {
       if (lines[k] !== '' || k === last) indent = Math.min(indent, leads[k]);
     }
-    if (indent > 0) {
-      let prefix;
-      for (let k = 1; k <= last; k++) {
-        // Empty lines stay empty. (An empty last line would make indent 0.)
-        if (lines[k] === '') continue;
-        const p = lines[k].slice(0, indent);
-        if (prefix === undefined) prefix = p;
-        else if (p !== prefix) {
+
+    // Step 4: join the lines after the first with LF.
+    let prefix;
+    let value = '';
+    for (let k = 1; k <= last; k++) {
+      let content = lines[k];
+      // Empty lines stay empty. (An empty last line would make indent 0.)
+      if (indent > 0 && content !== '') {
+        if (prefix === undefined) prefix = content.slice(0, indent);
+        else if (!content.startsWith(prefix)) {
           this.fail('Inconsistent indentation in a multi-line string: the removed indentation must consist of the same characters in all lines (do not mix tabs and spaces)', offsets[k]);
         }
-        lines[k] = lines[k].slice(indent);
+        content = content.slice(indent);
       }
+      value = k === 1 ? content : value + '\n' + content;
     }
-
-    // Step 4: join the lines with LF.
-    lines.shift();
-    return lines.join('\n');
+    return value;
   }
 
   // ----- Numbers (9) ------------------------------------------------------
@@ -1008,6 +1025,50 @@ class Parser {
     const text = this.text;
     const start = this.pos;
     let pos = start;
+
+    // Fast path for the common notations: a decimal integer or a decimal
+    // fraction with at most 15 digits, without `_`, exponent or suffix. The
+    // digits then form an exact integer, and dividing it by an exact power
+    // of ten gives the correctly rounded value. Everything else, including
+    // every error, is left to the general path below.
+    {
+      const negative = text.charCodeAt(pos) === MINUS;
+      if (negative) pos++;
+      const first = pos;
+      let c = text.charCodeAt(pos);
+      if (c >= DIGIT_0 && c <= DIGIT_9) {
+        let n = c - DIGIT_0;
+        c = text.charCodeAt(++pos);
+        if (n !== 0) {
+          while (c >= DIGIT_0 && c <= DIGIT_9) {
+            n = n * 10 + (c - DIGIT_0);
+            c = text.charCodeAt(++pos);
+          }
+        }
+        let digits = pos - first;
+        let fraction = 0;
+        if (c === DOT) {
+          const fractionStart = pos + 1;
+          c = text.charCodeAt(++pos);
+          while (c >= DIGIT_0 && c <= DIGIT_9) {
+            n = n * 10 + (c - DIGIT_0);
+            c = text.charCodeAt(++pos);
+          }
+          fraction = pos - fractionStart;
+          digits += fraction;
+          if (fraction === 0) digits = Infinity; // an error, reported below
+        }
+        // The number ends here unless the next character continues it or is
+        // an error after a number.
+        if (digits <= 15 && (!(c < 128) || (c !== DOT && c !== PERCENT && (CHAR_FLAGS[c] & ID_PART) === 0))) {
+          this.pos = pos;
+          if (fraction !== 0) n /= POWERS_OF_TEN[fraction];
+          return negative ? -n : n;
+        }
+      }
+      pos = start;
+    }
+
     if (text.charCodeAt(pos) === MINUS) {
       pos++;
       const c = text.charCodeAt(pos);
@@ -1202,16 +1263,44 @@ class Parser {
   applySuffix(suffix, value, exact, start, suffixStart) {
     const conversion = SUFFIXES.get(suffix);
     if (conversion === undefined) this.fail(unknownSuffixMessage(suffix), suffixStart);
-    const [factor, scale] = conversion;
+    const factor = conversion[0];
+    const scale = conversion[1];
     if (factor === 1 && scale === 0) return value; // s, px, L, n
     let result;
     if (exact && scale === 0) {
       result = value * factor; // both operands exact: the product is correctly rounded
     } else if (exact) {
-      // An exact value is an integer here.
-      result = scaledDecimal(value < 0 || Object.is(value, -0) ? '-' : '', BigInt(Math.abs(value)) * BigInt(factor), scale);
+      // An exact value is an integer here, and the factor is 1 (ms, pct):
+      // the quotient of two exact numbers is correctly rounded.
+      result = value / POWERS_OF_TEN[-scale];
     } else {
-      const m = /^(-?)(\d+)(?:\.(\d+))?(?:[eE]([+-]?\d+))?$/.exec(this.withoutUnderscores(start, suffixStart));
+      const number = this.withoutUnderscores(start, suffixStart);
+      // Fast path for a decimal fraction with at most 15 digits and without
+      // an exponent: if digits x factor is a safe integer, dividing it by an
+      // exact power of ten gives the correctly rounded result.
+      if (number.length <= 17) {
+        const negative = number.charCodeAt(0) === MINUS;
+        let mantissa = 0;
+        let fraction = -1; // number of digits after the '.', -1 before it
+        let i = negative ? 1 : 0;
+        for (; i < number.length; i++) {
+          const c = number.charCodeAt(i);
+          if (c >= DIGIT_0 && c <= DIGIT_9) {
+            mantissa = mantissa * 10 + (c - DIGIT_0);
+            if (fraction >= 0) fraction++;
+          } else if (c === DOT && fraction < 0) {
+            fraction = 0;
+          } else {
+            break; // an exponent
+          }
+        }
+        const product = mantissa * factor;
+        if (i === number.length && fraction > 0 && product <= Number.MAX_SAFE_INTEGER) {
+          result = product / POWERS_OF_TEN[fraction - scale];
+          return negative ? -result : result;
+        }
+      }
+      const m = /^(-?)(\d+)(?:\.(\d+))?(?:[eE]([+-]?\d+))?$/.exec(number);
       const fraction = m[3] ?? '';
       const exponent = (m[4] === undefined ? 0 : Number(m[4])) - fraction.length;
       result = scaledDecimal(m[1], BigInt(m[2] + fraction) * BigInt(factor), exponent + scale);
@@ -1289,6 +1378,7 @@ const DIVIDING_SUFFIXES = [['pct', 2], ['ms', 3]];
 
 /** Integers with at least this magnitude get `_` between groups of digits. */
 const GROUPING_THRESHOLD = 10000;
+const GROUPING_DIGITS = String(GROUPING_THRESHOLD).length;
 
 /** Maximum length of the indentation, as in JSON.stringify. */
 const MAX_GAP = 10;
@@ -1314,7 +1404,10 @@ function quoteString(s) {
  * but `"` unescaped and `'` escaped.
  */
 function singleQuoteString(s) {
-  const body = quoteString(s).slice(1, -1).replace(/\\.|'/g, (m) => {
+  const json = quoteString(s);
+  // Without a backslash and a "'" only the delimiters differ.
+  if (!json.includes('\\') && !json.includes("'")) return "'" + json.slice(1, -1) + "'";
+  const body = json.slice(1, -1).replace(/\\.|'/g, (m) => {
     if (m === "'") return "\\'";
     return m === '\\"' ? '"' : m;
   });
@@ -1341,7 +1434,9 @@ function formatBigInt(n) {
  */
 function formatNumber(n, writeNumberSuffixes) {
   if (n === 0) return '0'; // also for -0, as in JSON.stringify
-  if (!writeNumberSuffixes) return groupDigits(String(n));
+  if (!writeNumberSuffixes) {
+    return n > -GROUPING_THRESHOLD && n < GROUPING_THRESHOLD ? String(n) : groupDigits(String(n));
+  }
   if (Number.isInteger(n)) {
     for (const [suffix, factor] of MULTIPLYING_SUFFIXES) {
       if (n % factor === 0 && Math.abs(n / factor) <= Number.MAX_SAFE_INTEGER) {
@@ -1366,9 +1461,28 @@ function formatNumber(n, writeNumberSuffixes) {
 
 /** Inserts `_` into an integer part of 10000 or more (9.3). */
 function groupDigits(text) {
-  const m = /^(-?)(\d+)(.*)$/.exec(text);
-  if (m[2].length < String(GROUPING_THRESHOLD).length) return text;
-  return m[1] + m[2].replace(/\B(?=(\d{3})+$)/g, '_') + m[3];
+  const start = text.charCodeAt(0) === MINUS ? 1 : 0;
+  let end = start;
+  while (isDigit(text.charCodeAt(end))) end++;
+  const length = end - start;
+  if (length < GROUPING_DIGITS) return text;
+  const first = start + (length % 3 || 3);
+  let out = text.slice(0, first);
+  for (let i = first; i < end; i += 3) out += '_' + text.slice(i, i + 3);
+  return out + text.slice(end);
+}
+
+/** True if `s` can be written as a name without quotation marks (7.2). */
+function isIdentifier(s) {
+  const length = s.length;
+  if (length === 0) return false;
+  let c = s.charCodeAt(0);
+  if (!(c < 128) || (CHAR_FLAGS[c] & ID_START) === 0) return false;
+  for (let i = 1; i < length; i++) {
+    c = s.charCodeAt(i);
+    if (!(c < 128) || (CHAR_FLAGS[c] & ID_PART) === 0) return false;
+  }
+  return true;
 }
 
 function isBlankCode(c) {
@@ -1402,37 +1516,36 @@ function escapeCode(c) {
 function escapeMultiLineText(text, trailingBlank, beforeDelimiter, quote) {
   const n = text.length;
   let out = '';
+  let chunk = 0; // start of the text that is not yet copied to `out`
   let quotes = 0; // unescaped quotation marks in a row
   for (let i = 0; i < n; i++) {
     const c = text.charCodeAt(i);
+    let escape = false;
     if (c === quote) {
       if (quotes === 2 || (beforeDelimiter && i === n - 1)) {
-        out += escapeCode(quote);
+        escape = true;
         quotes = 0;
       } else {
-        out += text[i];
         quotes++;
       }
-      continue;
-    }
-    quotes = 0;
-    if (isBlankCode(c)) {
-      out += trailingBlank && i === n - 1 ? escapeCode(c) : text[i];
-    } else if (c < SPACE || c === BACKSLASH || c === 0x2028 || c === 0x2029) {
-      out += escapeCode(c);
-    } else if (c >= 0xd800 && c <= 0xdfff) {
-      const d = text.charCodeAt(i + 1);
-      if (c <= 0xdbff && d >= 0xdc00 && d <= 0xdfff) {
-        out += text[i] + text[i + 1];
-        i++;
-      } else {
-        out += escapeCode(c);
-      }
     } else {
-      out += text[i];
+      quotes = 0;
+      if (isBlankCode(c)) {
+        escape = trailingBlank && i === n - 1;
+      } else if (c < SPACE || c === BACKSLASH || c === 0x2028 || c === 0x2029) {
+        escape = true;
+      } else if (c >= 0xd800 && c <= 0xdfff) {
+        const d = text.charCodeAt(i + 1);
+        if (c <= 0xdbff && d >= 0xdc00 && d <= 0xdfff) i++; // a surrogate pair
+        else escape = true;
+      }
+    }
+    if (escape) {
+      out += text.slice(chunk, i) + escapeCode(c);
+      chunk = i + 1;
     }
   }
-  return out;
+  return chunk === 0 ? text : out + text.slice(chunk);
 }
 
 /**
@@ -1477,7 +1590,9 @@ class Generator {
     this.replacer = replacer;
     this.propertyList = propertyList;
     this.gap = gap;
-    this.names = options.names;
+    this.colon = gap === '' ? ':' : ': ';
+    // Undefined without custom named values, which saves the lookups.
+    this.names = options.names.size > 0 ? options.names : undefined;
     this.ijson = options.ijson;
     this.maxDepth = options.maxDepth;
     this.writeNumberSuffixes = options.writeNumberSuffixes;
@@ -1487,27 +1602,30 @@ class Generator {
 
   /** The document, or undefined if the value cannot be written. */
   document(value) {
-    const root = this.prepare({ '': value }, '');
+    const root = this.prepare({ '': value }, '', value);
     if (root !== null && typeof root === 'object' && !Array.isArray(root) && !IS_RAW_JSON(root)) {
       // 6.2: an object at the top level is written without braces, unless
       // it is empty.
       this.enter(root);
       const members = this.members(root, '');
       this.leave();
-      if (members.length === 0) return '{}';
-      return members.join(this.gap === '' ? ',' : '\n');
+      return members === '' ? '{}' : members;
     }
     return this.write(root, '');
   }
 
-  /** Value of `holder[key]` after toJSON, the replacer and unwrapping. */
-  prepare(holder, key) {
-    let value = holder[key];
+  /**
+   * `value`, which is `holder[key]`, after toJSON, the replacer and
+   * unwrapping. `key` is a string or the index of an array item.
+   */
+  prepare(holder, key, value) {
     if ((value !== null && typeof value === 'object') || typeof value === 'bigint') {
       const toJSON = value.toJSON;
-      if (typeof toJSON === 'function') value = toJSON.call(value, key);
+      if (typeof toJSON === 'function') value = toJSON.call(value, typeof key === 'number' ? String(key) : key);
     }
-    if (this.replacer !== undefined) value = this.replacer.call(holder, key, value);
+    if (this.replacer !== undefined) {
+      value = this.replacer.call(holder, typeof key === 'number' ? String(key) : key, value);
+    }
     if (value !== null && typeof value === 'object') {
       if (value instanceof Number) value = Number(value);
       else if (value instanceof String) value = String(value);
@@ -1526,7 +1644,11 @@ class Generator {
         return this.string(value, indent);
       case 'number':
         if (!Number.isFinite(value)) return this.literal(null); // as JSON
-        return this.names.get(value) ?? formatNumber(value, this.writeNumberSuffixes);
+        if (this.names !== undefined) {
+          const name = this.names.get(value);
+          if (name !== undefined) return name;
+        }
+        return formatNumber(value, this.writeNumberSuffixes);
       case 'boolean':
         return this.literal(value);
       case 'bigint':
@@ -1542,13 +1664,15 @@ class Generator {
 
   /** `true`, `false` or `null`, or a custom named value for it. */
   literal(value) {
-    return this.names.get(value) ?? String(value);
+    return this.names?.get(value) ?? String(value);
   }
 
   string(value, indent) {
     if (this.ijson) this.checkIJSON(value, 'a string');
-    const name = this.names.get(value);
-    if (name !== undefined) return name;
+    if (this.names !== undefined) {
+      const name = this.names.get(value);
+      if (name !== undefined) return name;
+    }
     if (this.gap !== '' && value.includes('\n')) return multiLineString(value, indent + this.gap, this.quote);
     return this.quoted(value);
   }
@@ -1556,7 +1680,7 @@ class Generator {
   /** A name (7.2): an identifier if possible, otherwise a string. */
   name(key) {
     if (this.ijson) this.checkIJSON(key, 'the name');
-    return IDENTIFIER.test(key) ? key : this.quoted(key);
+    return isIdentifier(key) ? key : this.quoted(key);
   }
 
   /** A single-line string in the configured quotation marks. */
@@ -1585,16 +1709,29 @@ class Generator {
     this.stack.pop();
   }
 
-  /** Members of an object, each written as `name: value`. */
+  /**
+   * Members of an object, each written as `name: value`. They are separated
+   * by a comma or, with indentation, by a line break and `indent` (7.3).
+   * The text is built by concatenation, which the engines handle better
+   * than collecting the parts in an array.
+   */
   members(value, indent) {
     const keys = this.propertyList ?? Object.keys(value);
-    const separator = this.gap === '' ? ':' : ': ';
-    const members = [];
-    for (const key of keys) {
-      const text = this.write(this.prepare(value, key), indent);
-      if (text !== undefined) members.push(this.name(key) + separator + text);
+    const colon = this.colon;
+    const separator = this.gap === '' ? ',' : '\n' + indent;
+    const always = this.replacer !== undefined;
+    let out = '';
+    for (let i = 0; i < keys.length; i++) {
+      const key = keys[i];
+      let item = value[key];
+      const type = typeof item;
+      if (always || type === 'object' || type === 'bigint') item = this.prepare(value, key, item);
+      const text = this.write(item, indent);
+      if (text === undefined) continue;
+      const member = this.name(key) + colon + text;
+      out = out === '' ? member : out + separator + member;
     }
-    return members;
+    return out;
   }
 
   object(value, indent) {
@@ -1608,20 +1745,26 @@ class Generator {
   array(value, indent) {
     this.enter(value);
     const inner = indent + this.gap;
-    const items = [];
+    const separator = this.gap === '' ? ',' : '\n' + inner;
+    const always = this.replacer !== undefined;
     const length = value.length;
+    let out = '';
     for (let i = 0; i < length; i++) {
-      items.push(this.write(this.prepare(value, String(i)), inner) ?? this.literal(null));
+      let item = value[i];
+      const type = typeof item;
+      if (always || type === 'object' || type === 'bigint') item = this.prepare(value, i, item);
+      const text = this.write(item, inner) ?? this.literal(null);
+      out = i === 0 ? text : out + separator + text;
     }
     this.leave();
-    return this.block('[', items, ']', indent, inner);
+    return this.block('[', out, ']', indent, inner);
   }
 
-  /** Items in brackets: compact with commas, or one per line without (7.3). */
+  /** Items in brackets: compact, or one per line (7.3). */
   block(open, items, close, indent, inner) {
-    if (items.length === 0) return open + close;
-    if (this.gap === '') return open + items.join(',') + close;
-    return `${open}\n${inner}${items.join('\n' + inner)}\n${indent}${close}`;
+    if (items === '') return open + close;
+    if (this.gap === '') return open + items + close;
+    return open + '\n' + inner + items + '\n' + indent + close;
   }
 }
 
@@ -1677,18 +1820,20 @@ const STRINGIFY_ARGUMENTS = [
  * in the order of `kinds`; null and undefined are skipped.
  */
 function readArguments(caller, args, kinds) {
-  const result = kinds.map(() => undefined);
-  const expected = kinds.map((kind) => kind.description).join(', ');
+  const result = new Array(kinds.length).fill(undefined);
+  const expected = () => kinds.map((kind) => kind.description).join(', ');
   let next = 0;
-  for (const arg of args) {
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
     if (arg === undefined || arg === null) continue;
-    const k = kinds.findIndex((kind) => kind.test(arg));
-    if (k < 0) {
-      throw new TypeError(`${caller}: unexpected argument of type ${typeof arg}; expected ${expected}, in this order`);
+    let k = 0;
+    while (k < kinds.length && !kinds[k].test(arg)) k++;
+    if (k === kinds.length) {
+      throw new TypeError(`${caller}: unexpected argument of type ${typeof arg}; expected ${expected()}, in this order`);
     }
     if (k < next) {
       const problem = result[k] !== undefined ? 'given twice' : 'in the wrong position';
-      throw new TypeError(`${caller}: the ${kinds[k].name} is ${problem}; expected ${expected}, in this order`);
+      throw new TypeError(`${caller}: the ${kinds[k].name} is ${problem}; expected ${expected()}, in this order`);
     }
     result[k] = arg;
     next = k + 1;
@@ -1724,7 +1869,11 @@ const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[
  * @throws {TypeError} if the arguments or the options are invalid
  */
 function parse(text, reviver, options) {
-  [reviver, options] = readArguments('XTJSON.parse', [reviver, options], PARSE_ARGUMENTS);
+  if (reviver !== undefined || options !== undefined) {
+    const args = readArguments('XTJSON.parse', [reviver, options], PARSE_ARGUMENTS);
+    reviver = args[0];
+    options = args[1];
+  }
   const resolved = resolveOptions(options);
   const source = String(text);
   if (typeof source.isWellFormed === 'function' ? !source.isWellFormed() : LONE_SURROGATE.test(source)) {
@@ -1789,7 +1938,12 @@ function parse(text, reviver, options) {
  *   I-JSON mode
  */
 function stringify(value, replacer, space, options) {
-  [replacer, space, options] = readArguments('XTJSON.stringify', [replacer, space, options], STRINGIFY_ARGUMENTS);
+  if (replacer !== undefined || space !== undefined || options !== undefined) {
+    const args = readArguments('XTJSON.stringify', [replacer, space, options], STRINGIFY_ARGUMENTS);
+    replacer = args[0];
+    space = args[1];
+    options = args[2];
+  }
   const resolved = resolveOptions(options);
   const generator = new Generator(
     typeof replacer === 'function' ? replacer : undefined,

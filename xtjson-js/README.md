@@ -287,3 +287,19 @@ dependencies to install. The tests also run with `bun test` and
 - `test/stringify.test.js` tests `stringify`: the call forms, the behaviour
   of `JSON.stringify`, the output format, named values, multi-line strings,
   and a round trip of random values through `stringify` and `parse`.
+
+### Benchmark
+
+```sh
+npm run bench                 # node bench/bench.js
+deno run bench/bench.js
+bun bench/bench.js
+```
+
+`bench/bench.js` measures `parse` and `stringify` on generated documents
+(JSON texts, a configuration file that uses all extensions, strings,
+numbers, a small document) and prints calls per second. `JSON.parse` and
+`JSON.stringify` run on the same data as a point of reference. An argument
+selects the cases whose name contains it (`node bench/bench.js stringify`),
+`--json` prints the results as JSON. The numbers vary with the load of the
+machine; to compare two versions, run them alternately.
