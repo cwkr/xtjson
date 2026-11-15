@@ -1,0 +1,40 @@
+{
+  "name": "@cwkr/xtjson",
+  "version": "0.1.0",
+  "description": "XTJSON parser: a superset of JSON for files maintained by people, with an API like JSON",
+  "keywords": [
+    "xtjson",
+    "json",
+    "parser",
+    "configuration",
+    "comments"
+  ],
+  "homepage": "https://github.com/cwkr/xtjson/tree/main/xtjson-js#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cwkr/xtjson.git",
+    "directory": "xtjson-js"
+  },
+  "bugs": "https://github.com/cwkr/xtjson/issues",
+  "type": "module",
+  "main": "./xtjson.js",
+  "types": "./xtjson.d.ts",
+  "exports": {
+    ".": {
+      "types": "./xtjson.d.ts",
+      "default": "./xtjson.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "xtjson.js",
+    "xtjson.d.ts"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node --test test/corpus.test.js test/parse.test.js"
+  }
+}
