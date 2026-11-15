@@ -1,21 +1,25 @@
 /**
- * XTJSON parser for JavaScript.
+ * XTJSON parser and generator for JavaScript.
  *
  * Implements the XTJSON specification, draft 0.3 (docs/xtjson-spec-en.md).
  * The API follows the global `JSON` object:
  *
  *     import XTJSON from '@cwkr/xtjson';
- *     const value = XTJSON.parse(text, reviver, definitions);
- *     const value = XTJSON.parse(text, definitions);
+ *     const value = XTJSON.parse(text, reviver, options);
+ *     const value = XTJSON.parse(text, options);
+ *     const text = XTJSON.stringify(value, replacer, space, options);
+ *     const text = XTJSON.stringify(value, space, options);
+ *     const text = XTJSON.stringify(value, options);
  *
  * Design notes:
  * - Single-pass recursive descent parser working directly on UTF-16 code
  *   units of the input; no token array is built.
  * - Errors in the document throw `XTJSONError` (a `SyntaxError`) with line and
- *   column. Errors of the application (invalid definitions) throw `TypeError`.
- * - Custom named values and number suffixes are passed as definitions
- *   (sections 6.4 and 9.5). `XTJSONDefinitions` validates them once and can be
- *   reused for many calls.
+ *   column. Errors of the application (invalid options or arguments, values
+ *   that cannot be written) throw `TypeError`.
+ * - Custom named values, number suffixes (sections 6.4 and 9.5) and the
+ *   I-JSON mode (section 12) are passed as options. `XTJSONOptions`
+ *   validates them once and can be reused for many calls.
  */
 
 // ---------------------------------------------------------------------------
@@ -195,19 +199,21 @@ function describeAt(text, offset) {
 }
 
 // ---------------------------------------------------------------------------
-// Definitions (6.4, 9.5)
+// Options: definitions (6.4, 9.5) and I-JSON mode (12)
 
-/** Internal state of `XTJSONDefinitions` instances. */
-const DEFINITIONS = new WeakMap();
+/** Internal state of `XTJSONOptions` instances. */
+const OPTIONS = new WeakMap();
 
 /**
- * A validated, immutable set of custom definitions: named values (6.4),
- * number suffixes (9.5) and the I-JSON mode (12).
+ * Validated, immutable options for `XTJSON.parse()` and `XTJSON.stringify()`:
+ * custom named values (6.4), custom number suffixes (9.5) and the I-JSON
+ * mode (12).
  *
- * Named values keep the order in which they are given. Validate once and
- * reuse the instance for many calls of `XTJSON.parse()`.
+ * Named values keep the order in which they are given. When several named
+ * values have the same primitive value, `stringify` writes the one defined
+ * last. Validate once and reuse the instance for many calls.
  */
-export class XTJSONDefinitions {
+export class XTJSONOptions {
   /**
    * @param {{values?: object, suffixes?: object, ijson?: boolean}} [init]
    *   `values`: identifier -> JSON value; `suffixes`: suffix -> conversion
@@ -217,15 +223,17 @@ export class XTJSONDefinitions {
    */
   constructor(init) {
     if (init !== undefined && init !== null && (typeof init !== 'object' || Array.isArray(init))) {
-      throw new TypeError('XTJSON definitions must be an object with the properties "values", "suffixes" and "ijson"');
+      throw new TypeError('XTJSON options must be an object with the properties "values", "suffixes" and "ijson"');
     }
     const ijson = init?.ijson ?? false;
     if (typeof ijson !== 'boolean') {
-      throw new TypeError(`Invalid XTJSON definition: "ijson" must be true or false, not ${quote(ijson)}`);
+      throw new TypeError(`Invalid XTJSON option: "ijson" must be true or false, not ${quote(ijson)}`);
     }
     const values = new Map();
     // Named values whose JSON value is not I-JSON conforming, with the reason.
     const ijsonIssues = new Map();
+    // For stringify: primitive value -> identifier; the last definition wins.
+    const names = new Map();
     for (const [id, value] of entries(init?.values, 'values')) {
       if (typeof id !== 'string' || !IDENTIFIER.test(id)) {
         throw new TypeError(`Invalid XTJSON definition: ${quote(id)} is not an identifier (ASCII letters, digits, "_" and "$", not beginning with a digit)`);
@@ -240,6 +248,7 @@ export class XTJSONDefinitions {
       values.set(id, frozen);
       const issue = ijsonValueIssue(frozen);
       if (issue !== undefined) ijsonIssues.set(id, issue);
+      if (frozen === null || typeof frozen !== 'object') names.set(frozen, id);
     }
     const suffixes = new Map();
     for (const [suffix, fn] of entries(init?.suffixes, 'suffixes')) {
@@ -257,7 +266,7 @@ export class XTJSONDefinitions {
       }
       suffixes.set(suffix, fn);
     }
-    DEFINITIONS.set(this, { values, suffixes, ijson, ijsonIssues });
+    OPTIONS.set(this, { values, suffixes, ijson, ijsonIssues, names });
     Object.freeze(this);
   }
 
@@ -267,7 +276,7 @@ export class XTJSONDefinitions {
    * @returns {boolean}
    */
   get ijson() {
-    return DEFINITIONS.get(this).ijson;
+    return OPTIONS.get(this).ijson;
   }
 
   /**
@@ -276,7 +285,7 @@ export class XTJSONDefinitions {
    * @returns {Map<string, unknown>}
    */
   get values() {
-    return new Map(DEFINITIONS.get(this).values);
+    return new Map(OPTIONS.get(this).values);
   }
 
   /**
@@ -284,15 +293,17 @@ export class XTJSONDefinitions {
    * @returns {Map<string, (value: number) => number>}
    */
   get suffixes() {
-    return new Map(DEFINITIONS.get(this).suffixes);
+    return new Map(OPTIONS.get(this).suffixes);
   }
 
   get [Symbol.toStringTag]() {
-    return 'XTJSONDefinitions';
+    return 'XTJSONOptions';
   }
 }
 
-const NO_DEFINITIONS = { values: new Map(), suffixes: new Map(), ijson: false, ijsonIssues: new Map() };
+const DEFAULT_OPTIONS = {
+  values: new Map(), suffixes: new Map(), ijson: false, ijsonIssues: new Map(), names: new Map(),
+};
 
 // ---------------------------------------------------------------------------
 // I-JSON (12)
@@ -338,12 +349,12 @@ function ijsonValueIssue(value) {
   return undefined;
 }
 
-/** Internal maps for the `definitions` argument of `parse`. */
-function resolveDefinitions(definitions) {
-  if (definitions === undefined || definitions === null) return NO_DEFINITIONS;
-  const state = DEFINITIONS.get(definitions);
+/** Internal state for the `options` argument of `parse` and `stringify`. */
+function resolveOptions(options) {
+  if (options === undefined || options === null) return DEFAULT_OPTIONS;
+  const state = OPTIONS.get(options);
   if (state !== undefined) return state;
-  return DEFINITIONS.get(new XTJSONDefinitions(definitions));
+  return OPTIONS.get(new XTJSONOptions(options));
 }
 
 /** Entries of a plain object, a Map or an iterable of pairs. */
@@ -440,17 +451,17 @@ function setMember(obj, name, value) {
 class Parser {
   /**
    * @param {string} text
-   * @param {{values: Map<string, unknown>, suffixes: Map<string, Function>, ijson: boolean, ijsonIssues: Map<string, string>}} definitions
+   * @param {{values: Map<string, unknown>, suffixes: Map<string, Function>, ijson: boolean, ijsonIssues: Map<string, string>}} options
    */
-  constructor(text, definitions) {
+  constructor(text, options) {
     this.text = text;
     this.len = text.length;
     this.pos = 0;
     this.depth = 0;
-    this.values = definitions.values;
-    this.suffixes = definitions.suffixes;
-    this.ijson = definitions.ijson;
-    this.ijsonIssues = definitions.ijsonIssues;
+    this.values = options.values;
+    this.suffixes = options.suffixes;
+    this.ijson = options.ijson;
+    this.ijsonIssues = options.ijsonIssues;
   }
 
   // ----- Errors -----------------------------------------------------------
@@ -1203,6 +1214,366 @@ function reviveMember(obj, key, reviver) {
 }
 
 // ---------------------------------------------------------------------------
+// Generator
+
+/** Suffixes that stringify writes, in the order of priority (9.5). */
+const OUTPUT_SUFFIXES = [['mb', 1048576], ['kb', 1024], ['k', 1000]];
+
+/** Maximum length of the indentation, as in JSON.stringify. */
+const MAX_GAP = 10;
+
+const IS_RAW_JSON = typeof JSON.isRawJSON === 'function' ? JSON.isRawJSON : () => false;
+
+const LINE_SEPARATORS = new RegExp(`[${LINE_SEPARATOR}${PARAGRAPH_SEPARATOR}]`, 'g');
+
+/**
+ * A string in double quotation marks (8.1). Uses the escapes of
+ * JSON.stringify and in addition escapes U+2028 and U+2029, which some
+ * editors display as a line break (section 13).
+ */
+function quoteString(s) {
+  const json = JSON.stringify(s);
+  return json.includes(LINE_SEPARATOR) || json.includes(PARAGRAPH_SEPARATOR)
+    ? json.replace(LINE_SEPARATORS, (c) => (c === LINE_SEPARATOR ? '\\u2028' : '\\u2029'))
+    : json;
+}
+
+/**
+ * A number as a decimal with `_` between groups of three digits of the
+ * integer part (9.3). Integers that are multiples of 1048576, 1024 or 1000
+ * get the suffix `mb`, `kb` or `k` (in this order of priority), as long as
+ * the remaining factor is a safe integer so that the text reads back as
+ * exactly the same number.
+ */
+function formatNumber(n) {
+  if (n !== 0 && Number.isInteger(n)) {
+    for (const [suffix, factor] of OUTPUT_SUFFIXES) {
+      if (n % factor === 0 && Math.abs(n / factor) <= Number.MAX_SAFE_INTEGER) {
+        return groupDigits(String(n / factor)) + suffix;
+      }
+    }
+  }
+  return groupDigits(String(n)); // String(-0) is "0", as in JSON.stringify
+}
+
+function groupDigits(text) {
+  const m = /^(-?)(\d+)(.*)$/.exec(text);
+  if (m[2].length <= 3) return text;
+  return m[1] + m[2].replace(/\B(?=(\d{3})+$)/g, '_') + m[3];
+}
+
+function isBlankCode(c) {
+  return c === SPACE || c === TAB;
+}
+
+/** Escape sequence for a single character in a multi-line string. */
+function escapeCode(c) {
+  switch (c) {
+    case SPACE: return '\\x20';
+    case TAB: return '\\t';
+    case 0x08: return '\\b';
+    case FF: return '\\f';
+    case CR: return '\\r';
+    case BACKSLASH: return '\\\\';
+    case DQUOTE: return '\\"';
+    default: return '\\u' + c.toString(16).toUpperCase().padStart(4, '0');
+  }
+}
+
+/**
+ * Text of one line of a multi-line string (8.3). Escapes what would end the
+ * string or change its value: backslashes, control characters except tab,
+ * unpaired surrogates, U+2028 and U+2029, the third of three quotation
+ * marks in a row, a quotation mark directly before the closing delimiter
+ * (`beforeDelimiter`) and a space or tab at the end of a line that step 2
+ * would remove (`trailingBlank`).
+ */
+function escapeMultiLineText(text, trailingBlank, beforeDelimiter) {
+  const n = text.length;
+  let out = '';
+  let quotes = 0; // unescaped quotation marks in a row
+  for (let i = 0; i < n; i++) {
+    const c = text.charCodeAt(i);
+    if (c === DQUOTE) {
+      if (quotes === 2 || (beforeDelimiter && i === n - 1)) {
+        out += '\\"';
+        quotes = 0;
+      } else {
+        out += '"';
+        quotes++;
+      }
+      continue;
+    }
+    quotes = 0;
+    if (isBlankCode(c)) {
+      out += trailingBlank && i === n - 1 ? escapeCode(c) : text[i];
+    } else if (c < SPACE || c === BACKSLASH || c === 0x2028 || c === 0x2029) {
+      out += escapeCode(c);
+    } else if (c >= 0xd800 && c <= 0xdfff) {
+      const d = text.charCodeAt(i + 1);
+      if (c <= 0xdbff && d >= 0xdc00 && d <= 0xdfff) {
+        out += text[i] + text[i + 1];
+        i++;
+      } else {
+        out += escapeCode(c);
+      }
+    } else {
+      out += text[i];
+    }
+  }
+  return out;
+}
+
+/**
+ * A multi-line string (8.3) whose lines are indented with `indent`. The
+ * text begins with an empty line, so that exactly `indent` is removed again
+ * when it is read.
+ */
+function multiLineString(value, indent) {
+  const parts = value.split('\n');
+  const last = parts.length - 1;
+  const lines = [];
+  for (let i = 0; i < last; i++) {
+    lines.push(parts[i] === '' ? '' : indent + escapeMultiLineText(parts[i], true, false));
+  }
+  if (parts[last] === '') {
+    // The value ends with a line break: the closing delimiter gets its own line.
+    lines.push(indent + '"""');
+  } else {
+    let text = escapeMultiLineText(parts[last], false, true);
+    // The last line counts towards the smallest indentation. If it and all
+    // other lines begin with white space, more than `indent` would be
+    // removed; escaping its first character prevents that.
+    if (isBlankCode(text.charCodeAt(0)) &&
+        lines.every((line) => line === '' || isBlankCode(line.charCodeAt(indent.length)))) {
+      text = escapeCode(text.charCodeAt(0)) + text.slice(1);
+    }
+    lines.push(indent + text + '"""');
+  }
+  return '"""\n' + lines.join('\n');
+}
+
+/** Serialization as in JSON.stringify (ECMA-262 SerializeJSONProperty). */
+class Generator {
+  /**
+   * @param {Function | undefined} replacer replacer function
+   * @param {string[] | undefined} propertyList names from a replacer array
+   * @param {string} gap indentation of one level ('' for compact output)
+   * @param {{names: Map<unknown, string>, ijson: boolean}} options
+   */
+  constructor(replacer, propertyList, gap, options) {
+    this.replacer = replacer;
+    this.propertyList = propertyList;
+    this.gap = gap;
+    this.names = options.names;
+    this.ijson = options.ijson;
+    this.stack = [];
+  }
+
+  /** The document, or undefined if the value cannot be written. */
+  document(value) {
+    const root = this.prepare({ '': value }, '');
+    if (root !== null && typeof root === 'object' && !Array.isArray(root) && !IS_RAW_JSON(root)) {
+      // 6.2: an object at the top level is written without braces, unless
+      // it is empty.
+      this.enter(root);
+      const members = this.members(root, '');
+      this.leave();
+      if (members.length === 0) return '{}';
+      return members.join(this.gap === '' ? ',' : '\n');
+    }
+    return this.write(root, '');
+  }
+
+  /** Value of `holder[key]` after toJSON, the replacer and unwrapping. */
+  prepare(holder, key) {
+    let value = holder[key];
+    if ((value !== null && typeof value === 'object') || typeof value === 'bigint') {
+      const toJSON = value.toJSON;
+      if (typeof toJSON === 'function') value = toJSON.call(value, key);
+    }
+    if (this.replacer !== undefined) value = this.replacer.call(holder, key, value);
+    if (value !== null && typeof value === 'object') {
+      if (value instanceof Number) value = Number(value);
+      else if (value instanceof String) value = String(value);
+      else if (value instanceof Boolean || value instanceof BigInt) value = value.valueOf();
+    }
+    return value;
+  }
+
+  /**
+   * Text of a prepared value; `indent` is the indentation of the line on
+   * which it begins. Undefined for values that JSON omits.
+   */
+  write(value, indent) {
+    switch (typeof value) {
+      case 'string':
+        return this.string(value, indent);
+      case 'number':
+        if (!Number.isFinite(value)) return this.literal(null); // as JSON
+        return this.names.get(value) ?? formatNumber(value);
+      case 'boolean':
+        return this.literal(value);
+      case 'bigint':
+        throw new TypeError('XTJSON.stringify: a BigInt cannot be written; convert it with toJSON or a replacer');
+      case 'object':
+        if (value === null) return this.literal(null);
+        if (IS_RAW_JSON(value)) return value.rawJSON;
+        return Array.isArray(value) ? this.array(value, indent) : this.object(value, indent);
+      default:
+        return undefined; // undefined, functions and symbols
+    }
+  }
+
+  /** `true`, `false` or `null`, or a custom named value for it. */
+  literal(value) {
+    return this.names.get(value) ?? String(value);
+  }
+
+  string(value, indent) {
+    if (this.ijson) this.checkIJSON(value, 'a string');
+    const name = this.names.get(value);
+    if (name !== undefined) return name;
+    if (this.gap !== '' && value.includes('\n')) return multiLineString(value, indent + this.gap);
+    return quoteString(value);
+  }
+
+  /** A name (7.2): an identifier if possible, otherwise a string. */
+  name(key) {
+    if (this.ijson) this.checkIJSON(key, 'the name');
+    return IDENTIFIER.test(key) ? key : quoteString(key);
+  }
+
+  checkIJSON(value, what) {
+    const issue = ijsonStringIssue(value);
+    if (issue !== undefined) {
+      throw new TypeError(`XTJSON.stringify: ${what} ${quoteString(value)} contains ${issue}, which is not permitted in I-JSON mode`);
+    }
+  }
+
+  enter(value) {
+    if (this.stack.includes(value)) {
+      throw new TypeError('XTJSON.stringify: the value contains a circular reference');
+    }
+    this.stack.push(value);
+  }
+
+  leave() {
+    this.stack.pop();
+  }
+
+  /** Members of an object, each written as `name: value`. */
+  members(value, indent) {
+    const keys = this.propertyList ?? Object.keys(value);
+    const separator = this.gap === '' ? ':' : ': ';
+    const members = [];
+    for (const key of keys) {
+      const text = this.write(this.prepare(value, key), indent);
+      if (text !== undefined) members.push(this.name(key) + separator + text);
+    }
+    return members;
+  }
+
+  object(value, indent) {
+    this.enter(value);
+    const inner = indent + this.gap;
+    const members = this.members(value, inner);
+    this.leave();
+    return this.block('{', members, '}', indent, inner);
+  }
+
+  array(value, indent) {
+    this.enter(value);
+    const inner = indent + this.gap;
+    const items = [];
+    const length = value.length;
+    for (let i = 0; i < length; i++) {
+      items.push(this.write(this.prepare(value, String(i)), inner) ?? this.literal(null));
+    }
+    this.leave();
+    return this.block('[', items, ']', indent, inner);
+  }
+
+  /** Items in brackets: compact with commas, or one per line without (7.3). */
+  block(open, items, close, indent, inner) {
+    if (items.length === 0) return open + close;
+    if (this.gap === '') return open + items.join(',') + close;
+    return `${open}\n${inner}${items.join('\n' + inner)}\n${indent}${close}`;
+  }
+}
+
+/** Indentation from the `space` argument, as in JSON.stringify. */
+function indentation(space) {
+  if (space instanceof Number) space = Number(space);
+  else if (space instanceof String) space = String(space);
+  if (typeof space === 'number') {
+    const n = Math.min(MAX_GAP, Math.trunc(space) || 0);
+    return n >= 1 ? ' '.repeat(n) : '';
+  }
+  if (typeof space === 'string') {
+    const gap = space.slice(0, MAX_GAP);
+    if (!/^[ \t]*$/.test(gap)) {
+      throw new TypeError('XTJSON.stringify: "space" may only contain spaces and tabs; other characters would make the indentation invalid');
+    }
+    return gap;
+  }
+  return '';
+}
+
+/** Names from a replacer array, as in JSON.stringify. */
+function propertyList(replacer) {
+  const seen = new Set();
+  for (const item of replacer) {
+    if (typeof item === 'string') seen.add(item);
+    else if (typeof item === 'number' || item instanceof Number || item instanceof String) seen.add(String(item));
+  }
+  return [...seen];
+}
+
+// ---------------------------------------------------------------------------
+// Arguments
+
+const isFunction = (x) => typeof x === 'function';
+const isReplacer = (x) => typeof x === 'function' || Array.isArray(x);
+const isSpace = (x) => typeof x === 'number' || typeof x === 'string' || x instanceof Number || x instanceof String;
+const isOptions = (x) => typeof x === 'object' && !Array.isArray(x) && !(x instanceof Number) && !(x instanceof String);
+
+const PARSE_ARGUMENTS = [
+  { name: 'reviver', description: 'a reviver (a function)', test: isFunction },
+  { name: 'options', description: 'options (an object)', test: isOptions },
+];
+
+const STRINGIFY_ARGUMENTS = [
+  { name: 'replacer', description: 'a replacer (a function or an array)', test: isReplacer },
+  { name: 'space', description: 'space (a number or a string)', test: isSpace },
+  { name: 'options', description: 'options (an object)', test: isOptions },
+];
+
+/**
+ * Assigns the optional arguments by their type. Each kind may occur once,
+ * in the order of `kinds`; null and undefined are skipped.
+ */
+function readArguments(caller, args, kinds) {
+  const result = kinds.map(() => undefined);
+  const expected = kinds.map((kind) => kind.description).join(', ');
+  let next = 0;
+  for (const arg of args) {
+    if (arg === undefined || arg === null) continue;
+    const k = kinds.findIndex((kind) => kind.test(arg));
+    if (k < 0) {
+      throw new TypeError(`${caller}: unexpected argument of type ${typeof arg}; expected ${expected}, in this order`);
+    }
+    if (k < next) {
+      const problem = result[k] !== undefined ? 'given twice' : 'in the wrong position';
+      throw new TypeError(`${caller}: the ${kinds[k].name} is ${problem}; expected ${expected}, in this order`);
+    }
+    result[k] = arg;
+    next = k + 1;
+  }
+  return result;
+}
+
+// ---------------------------------------------------------------------------
 // Public API
 
 const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
@@ -1210,44 +1581,27 @@ const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[
 /**
  * Parses an XTJSON document and returns its value.
  *
- * Call forms, told apart by the type of the second argument:
+ * The optional arguments are told apart by their type:
  *
  *     parse(text)
- *     parse(text, reviver)               // a function
- *     parse(text, reviver, definitions)
- *     parse(text, null, definitions)
- *     parse(text, definitions)           // an object
+ *     parse(text, reviver)            // a function
+ *     parse(text, reviver, options)
+ *     parse(text, null, options)
+ *     parse(text, options)            // an object
  *
  * @param {string} text the document
- * @param {((this: any, key: string, value: any) => any) | XTJSONDefinitions | {values?: object, suffixes?: object} | null} [reviverOrDefinitions]
- *   a function transforms the result, as in `JSON.parse`; an object gives
- *   custom named values and number suffixes
- * @param {XTJSONDefinitions | {values?: object, suffixes?: object} | null} [definitions]
- *   custom named values and number suffixes, if the second argument is a
- *   reviver or null
+ * @param {Function | XTJSONOptions | object | null} [reviver]
+ *   a function transforms the result, as in `JSON.parse`; an object are the
+ *   options
+ * @param {XTJSONOptions | object | null} [options] custom named values,
+ *   number suffixes and the I-JSON mode
  * @returns {any}
  * @throws {XTJSONError} if the text is not a valid XTJSON document
- * @throws {TypeError} if the arguments or the definitions are invalid
+ * @throws {TypeError} if the arguments or the options are invalid
  */
-function parse(text, reviverOrDefinitions, definitions) {
-  let reviver;
-  switch (typeof reviverOrDefinitions) {
-    case 'function':
-      reviver = reviverOrDefinitions;
-      break;
-    case 'undefined':
-      break;
-    case 'object':
-      if (reviverOrDefinitions === null) break;
-      if (definitions !== undefined && definitions !== null) {
-        throw new TypeError('XTJSON.parse: definitions are given twice; pass them either as the second or as the third argument');
-      }
-      definitions = reviverOrDefinitions;
-      break;
-    default:
-      throw new TypeError(`XTJSON.parse: the second argument must be a reviver function, a definitions object, null or undefined, not ${typeof reviverOrDefinitions}`);
-  }
-  const resolved = resolveDefinitions(definitions);
+function parse(text, reviver, options) {
+  [reviver, options] = readArguments('XTJSON.parse', [reviver, options], PARSE_ARGUMENTS);
+  const resolved = resolveOptions(options);
   const source = String(text);
   if (typeof source.isWellFormed === 'function' ? !source.isWellFormed() : LONE_SURROGATE.test(source)) {
     const offset = source.search(LONE_SURROGATE);
@@ -1260,11 +1614,56 @@ function parse(text, reviverOrDefinitions, definitions) {
   return reviver === undefined ? value : internalize({ '': value }, '', reviver);
 }
 
+/**
+ * Writes a value as an XTJSON document.
+ *
+ * Works like `JSON.stringify`, with these differences in the output:
+ * an object at the top level is written without braces; names that are
+ * identifiers are written without quotation marks; with `space`, items are
+ * separated by line breaks instead of commas and strings that contain a
+ * line break are written as multi-line strings; numbers are grouped with
+ * `_` and multiples of 1048576, 1024 and 1000 get the suffix `mb`, `kb` or
+ * `k`; primitive values for which a named value is defined are written as
+ * that named value.
+ *
+ * The optional arguments are told apart by their type:
+ *
+ *     stringify(value)
+ *     stringify(value, replacer, space, options)   // replacer: function or array
+ *     stringify(value, null, space, options)
+ *     stringify(value, space, options)             // space: number or string
+ *     stringify(value, options)                    // options: object
+ *
+ * @param {any} value
+ * @param {Function | Array<string | number> | number | string | XTJSONOptions | object | null} [replacer]
+ * @param {number | string | XTJSONOptions | object | null} [space]
+ *   indentation: a number of spaces (at most 10) or a string of spaces and
+ *   tabs
+ * @param {XTJSONOptions | object | null} [options] named values and the
+ *   I-JSON mode; custom suffixes are not used for output
+ * @returns {string | undefined} undefined if the value cannot be written
+ *   (undefined, a function or a symbol), as in `JSON.stringify`
+ * @throws {TypeError} for circular references, BigInt values, invalid
+ *   arguments or options, and strings not permitted in I-JSON mode
+ */
+function stringify(value, replacer, space, options) {
+  [replacer, space, options] = readArguments('XTJSON.stringify', [replacer, space, options], STRINGIFY_ARGUMENTS);
+  const resolved = resolveOptions(options);
+  const generator = new Generator(
+    typeof replacer === 'function' ? replacer : undefined,
+    Array.isArray(replacer) ? propertyList(replacer) : undefined,
+    indentation(space),
+    resolved,
+  );
+  return generator.document(value);
+}
+
 /** The XTJSON object, modelled on the global `JSON` object. */
 const XTJSON = Object.freeze(Object.create(Object.prototype, {
   parse: { value: parse, enumerable: false },
+  stringify: { value: stringify, enumerable: false },
   [Symbol.toStringTag]: { value: 'XTJSON' },
 }));
 
-export { parse };
+export { parse, stringify };
 export default XTJSON;

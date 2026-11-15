@@ -1,7 +1,7 @@
 {
   "name": "@cwkr/xtjson",
   "version": "0.1.0",
-  "description": "XTJSON parser: a superset of JSON for files maintained by people, with an API like JSON",
+  "description": "XTJSON parser and generator: a superset of JSON for files maintained by people, with an API like JSON",
   "keywords": [
     "xtjson",
     "json",
@@ -35,6 +35,6 @@
     "node": ">=18"
   },
   "scripts": {
-    "test": "node --test test/corpus.test.js test/parse.test.js"
+    "test": "node --test test/corpus.test.js test/parse.test.js test/stringify.test.js"
   }
 }

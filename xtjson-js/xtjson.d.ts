@@ -1,9 +1,11 @@
 /**
- * XTJSON parser for JavaScript, modelled on the global `JSON` object.
+ * XTJSON parser and generator for JavaScript, modelled on the global `JSON`
+ * object.
  *
  * @example
  * import XTJSON from '@cwkr/xtjson';
  * const config = XTJSON.parse('name: "demo"\nport: 8080');
+ * const text = XTJSON.stringify(config, 2);
  */
 
 /** A JSON value: the data model of XTJSON. */
@@ -31,43 +33,46 @@ export type DefinitionEntries<T> =
   | ReadonlyMap<string, T>
   | Iterable<readonly [string, T]>;
 
-/** Custom definitions for named values (6.4) and number suffixes (9.5). */
-export interface XTJSONDefinitionsInit {
+/** Options for `parse` and `stringify`. */
+export interface XTJSONOptionsInit {
   /**
-   * Named values: identifier → JSON value, in a fixed order.
+   * Named values (6.4): identifier → JSON value, in a fixed order.
    * `true`, `false` and `null` are predefined and cannot be redefined.
+   * `stringify` writes a string, number, boolean or `null` as a named value
+   * if one has exactly this value; if several have it, the one defined last
+   * wins, and the predefined ones are used only if no custom one matches.
    */
   values?: DefinitionEntries<JSONValue>;
   /**
-   * Number suffixes: suffix → conversion function. The suffixes
+   * Number suffixes (9.5): suffix → conversion function. The suffixes
    * `k`, `K`, `kb`, `Kb`, `kB`, `KB`, `mb`, `Mb`, `mB`, `MB` are predefined
-   * and cannot be redefined.
+   * and cannot be redefined. Only `parse` uses custom suffixes.
    */
   suffixes?: DefinitionEntries<SuffixFunction>;
   /**
-   * I-JSON mode (section 12). If true, a document is an error if an object
-   * contains a name twice, or if a name or string value (also from a named
-   * value) contains an unpaired surrogate or a Unicode noncharacter.
+   * I-JSON mode (section 12). `parse` rejects a document in which an object
+   * contains a name twice, or in which a name or string value (also from a
+   * named value) contains an unpaired surrogate or a Unicode noncharacter.
+   * `stringify` throws a `TypeError` for such names and strings.
    * Default: false; then the member that comes last applies.
    */
   ijson?: boolean;
 }
 
 /**
- * A validated, immutable set of custom definitions. Create it once and pass
- * it to every call; plain `XTJSONDefinitionsInit` objects are validated
- * again on each call.
+ * Validated, immutable options. Create them once and pass them to every
+ * call; plain `XTJSONOptionsInit` objects are validated again on each call.
  */
-export class XTJSONDefinitions implements XTJSONDefinitionsInit {
+export class XTJSONOptions implements XTJSONOptionsInit {
   /** @throws {TypeError} if a definition violates section 6.4 or 9.5. */
-  constructor(init?: XTJSONDefinitionsInit | null);
+  constructor(init?: XTJSONOptionsInit | null);
   /** The named values in their defined order (a new Map; values are frozen). */
   get values(): Map<string, JSONValue>;
   /** The custom number suffixes (a new Map). */
   get suffixes(): Map<string, SuffixFunction>;
   /** True for the I-JSON mode. */
   get ijson(): boolean;
-  get [Symbol.toStringTag](): 'XTJSONDefinitions';
+  get [Symbol.toStringTag](): 'XTJSONOptions';
 }
 
 /** Error in an XTJSON document. */
@@ -86,36 +91,60 @@ export class XTJSONError extends SyntaxError {
 /** Reviver as in `JSON.parse`. */
 export type Reviver = (this: any, key: string, value: any) => any;
 
+/** Replacer function as in `JSON.stringify`. */
+export type Replacer = (this: any, key: string, value: any) => any;
+
+/** Options as an instance or as a plain object. */
+export type Options = XTJSONOptions | XTJSONOptionsInit;
+
 /**
  * Parses an XTJSON document and returns its value.
  *
  * @param text the document
  * @param reviver transforms the result, as in `JSON.parse`; `null` or
  *   `undefined` for none
- * @param definitions custom named values and number suffixes
+ * @param options named values, number suffixes and the I-JSON mode
  * @throws {XTJSONError} if the text is not a valid XTJSON document
- * @throws {TypeError} if the arguments or the definitions are invalid
+ * @throws {TypeError} if the arguments or the options are invalid
  */
-export function parse(
-  text: string,
-  reviver?: Reviver | null,
-  definitions?: XTJSONDefinitions | XTJSONDefinitionsInit | null,
-): any;
+export function parse(text: string, reviver?: Reviver | null, options?: Options | null): any;
+/** Parses an XTJSON document with options. */
+export function parse(text: string, options: Options): any;
+
 /**
- * Parses an XTJSON document with custom named values and number suffixes.
+ * Writes a value as an XTJSON document, like `JSON.stringify`.
  *
- * @param text the document
- * @param definitions custom named values and number suffixes
- * @throws {XTJSONError} if the text is not a valid XTJSON document
- * @throws {TypeError} if the definitions are invalid
+ * Output: an object at the top level without braces; names without
+ * quotation marks where possible; with `space`, one item per line without
+ * commas and strings with line breaks as multi-line strings; numbers grouped
+ * with `_` and with the suffix `mb`, `kb` or `k` where they are multiples;
+ * strings, numbers, booleans and `null` as named values where defined.
+ *
+ * @param value the value
+ * @param replacer a function or an array of names, as in `JSON.stringify`
+ * @param space indentation: a number of spaces (at most 10) or a string of
+ *   at most 10 spaces and tabs
+ * @param options named values and the I-JSON mode
+ * @returns the document, or `undefined` for `undefined`, functions and symbols
+ * @throws {TypeError} for circular references, BigInt values, invalid
+ *   arguments or options, and strings not permitted in I-JSON mode
  */
-export function parse(
-  text: string,
-  definitions: XTJSONDefinitions | XTJSONDefinitionsInit,
-): any;
+export function stringify(
+  value: any,
+  replacer?: Replacer | (string | number)[] | null,
+  space?: string | number | null,
+  options?: Options | null,
+): string;
+/** Writes a value with a replacer and options, without indentation. */
+export function stringify(value: any, replacer: Replacer | (string | number)[] | null, options: Options): string;
+/** Writes a value with indentation and optional options. */
+export function stringify(value: any, space: string | number, options?: Options | null): string;
+/** Writes a value with options, without indentation. */
+export function stringify(value: any, options: Options): string;
 
 export interface XTJSON {
   parse: typeof parse;
+  stringify: typeof stringify;
   readonly [Symbol.toStringTag]: 'XTJSON';
 }
 

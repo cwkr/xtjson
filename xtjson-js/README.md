@@ -1,13 +1,14 @@
 # @cwkr/xtjson
 
-XTJSON parser for JavaScript. XTJSON is a syntactic superset of JSON for files
-that are written and maintained by people, such as configuration files. See the
-specification in [`docs/xtjson-spec-en.md`](../docs/xtjson-spec-en.md)
-(draft 0.3).
+XTJSON parser and generator for JavaScript. XTJSON is a syntactic superset of
+JSON for files that are written and maintained by people, such as
+configuration files. See the specification in
+[`docs/xtjson-spec-en.md`](../docs/xtjson-spec-en.md) (draft 0.3).
 
 - A single ES module in plain JavaScript, with TypeScript declarations.
 - No dependencies. Runs in current browsers, Node.js (18 or later), Bun and Deno.
-- The API follows the global `JSON` object. So far only `parse` is implemented.
+- The API follows the global `JSON` object: `XTJSON.parse()` and
+  `XTJSON.stringify()`.
 
 ```js
 import XTJSON from '@cwkr/xtjson';
@@ -22,11 +23,19 @@ motd: """
   """
 `);
 // { name: 'demo-service', port: 8080, cache: 67108864, motd: 'Welcome.\n' }
+
+XTJSON.stringify(config, 2);
+// name: "demo-service"
+// port: 8_080
+// cache: 64mb
+// motd: """
+//   Welcome.
+//   """
 ```
 
 ## API
 
-### `XTJSON.parse(text, reviver?, definitions?)`<br>`XTJSON.parse(text, definitions)`
+### `XTJSON.parse(text, reviver?, options?)`
 
 Parses an XTJSON document and returns its value.
 
@@ -34,18 +43,13 @@ Parses an XTJSON document and returns its value.
   string. It must be decoded text; when reading bytes, decode them as UTF-8
   first (for example with `new TextDecoder('utf-8', { fatal: true })`).
 - `reviver`: optional, works exactly as in `JSON.parse`.
-- `definitions`: optional custom named values and number suffixes, see below.
-
-The type of the second argument decides what it is: a function is a reviver,
-an object (an `XTJSONDefinitions` instance or a plain `{ values, suffixes }`
-object) is the definitions, and `null` or `undefined` is neither. Any other
-type is a `TypeError`, as are definitions given both as the second and as the
-third argument.
+- `options`: optional named values, number suffixes and I-JSON mode, see
+  [Options](#options).
 
 ```js
-XTJSON.parse(text, definitions);              // definitions only
-XTJSON.parse(text, reviver, definitions);     // both
-XTJSON.parse(text, null, definitions);        // also definitions only
+XTJSON.parse(text, options);              // options only
+XTJSON.parse(text, reviver, options);     // both
+XTJSON.parse(text, null, options);        // also options only
 ```
 
 Every JSON text gives the same value as with `JSON.parse`, with two
@@ -55,25 +59,80 @@ exceeds the range of a JavaScript number (`1e400`) are an error instead of
 
 If a name occurs more than once in an object, the member that comes last in
 the document applies, as with `JSON.parse`. In I-JSON mode it is an error
-instead (see below).
+instead.
 
-### Definitions
+### `XTJSON.stringify(value, replacer?, space?, options?)`
 
-Without definitions, only the predefined named values `true`, `false`, `null`
+Writes a value as an XTJSON document. `value`, `replacer` (a function or an
+array of names) and `space` work as in `JSON.stringify`: `toJSON` methods are
+called, `undefined`, functions and symbols are left out of objects and become
+`null` in arrays, `NaN` and `Infinity` become `null`, and a value that cannot
+be written at all gives `undefined`. Circular references and BigInt values
+throw a `TypeError`.
+
+```js
+XTJSON.stringify(value, options);                    // options only
+XTJSON.stringify(value, 2, options);                 // space and options
+XTJSON.stringify(value, replacer, 2, options);       // all
+XTJSON.stringify(value, null, 2);                    // as with JSON.stringify
+```
+
+The output differs from `JSON.stringify` in these points:
+
+- **Top level.** An object at the top level is written without braces
+  (section 6.2). An empty object stays `{}`, because the implicit root object
+  needs at least one member.
+- **Names** that are identifiers (ASCII letters, digits, `_`, `$`, not
+  beginning with a digit) are written without quotation marks, all others in
+  `"`.
+- **Strings** are written in `"`. Besides the escapes of `JSON.stringify`,
+  U+2028 and U+2029 are escaped.
+- **With `space`**, every item is on its own line and the line break is the
+  separator: there are no commas at the ends of lines. Strings that contain a
+  line break (LF) are written as multi-line strings with `"""`, with the text
+  indented one level deeper than the line on which the string begins. White
+  space that the rules of section 8.3 would remove, a carriage return and
+  quotation marks that would end the string are escaped, so the string always
+  reads back unchanged. `space` may only contain spaces and tabs; other
+  characters would not be valid indentation, so they are a `TypeError`.
+- **Numbers** are written in decimal with `_` between groups of three digits
+  of the integer part (`1_234_567.25`). Integers that are a multiple of
+  1048576, 1024 or 1000 get the suffix `mb`, `kb` or `k`, in this order of
+  priority: `1000` is `1k`, `2048` is `2kb`, `5120000` is `5_000kb`,
+  `67108864` is `64mb`. A suffix is used only if the remaining factor is at
+  most 2⁵³ − 1, so that the text reads back as exactly the same number.
+  Custom suffixes are never used for output.
+- **Named values.** A string, number, `true`, `false` or `null` is written as
+  a named value if one has exactly this value. If several match, the one
+  defined last wins; the predefined `true`, `false` and `null` are used only
+  if no custom named value matches. With `values: { nil: null }`, `null` is
+  always written as `nil`. Named values whose value is an object or an array
+  are not used for output, and names are never replaced.
+
+A document that uses custom named values can only be read with the same
+options. The specification (section 11) recommends this only if the
+recipient is certain to use the same definitions.
+
+### Options
+
+Without options, only the predefined named values `true`, `false`, `null`
 and the predefined suffixes `k`, `K` (times 1000), `kb`, `Kb`, `kB`, `KB`
 (times 1024) and `mb`, `Mb`, `mB`, `MB` (times 1048576) are active. An
 application can define further ones:
 
 ```js
-import XTJSON, { XTJSONDefinitions } from '@cwkr/xtjson';
+import XTJSON, { XTJSONOptions } from '@cwkr/xtjson';
 
-const definitions = new XTJSONDefinitions({
+const options = new XTJSONOptions({
   values: { nil: null, unknown: 'not specified' },
   suffixes: { '%': (x) => x / 100 },
 });
 
-XTJSON.parse('ratio: 50%\nowner: unknown', definitions);
-// { ratio: 0.5, owner: 'not specified' }
+XTJSON.parse('ratio: 50%\nowner: unknown\nboss: nil', options);
+// { ratio: 0.5, owner: 'not specified', boss: null }
+
+XTJSON.stringify({ owner: 'not specified', boss: null }, options);
+// 'owner:unknown,boss:nil'
 ```
 
 - `values` maps identifiers to JSON values. The order of the named values is
@@ -83,39 +142,56 @@ XTJSON.parse('ratio: 50%\nowner: unknown', definitions);
   its sign and must return a finite number. An exception thrown by it is
   reported as an error of the document, with the original exception as
   `cause`.
-- Both can be given as a plain object, a `Map` or an iterable of
-  `[key, value]` pairs.
+- `ijson`: `true` for the I-JSON mode, see below. Default `false`.
+- `values` and `suffixes` can be given as a plain object, a `Map` or an
+  iterable of `[key, value]` pairs.
 
-`XTJSONDefinitions` validates the definitions once and makes a deeply frozen
-copy of the named values. Create it once and reuse it. A plain object
-`{ values, suffixes }` can be passed to `parse` as well, but it is validated
-again on every call. The same definitions object is meant to be passed to
-`XTJSON.stringify()` once that exists.
+`XTJSONOptions` validates the options once and makes a deeply frozen copy of
+the named values. Create it once and reuse it for `parse` and `stringify`.
+A plain object `{ values, suffixes, ijson }` can be passed as well, but it is
+validated again on every call.
 
-Every named value in a result is a fresh copy, so changing the result never
-changes the definitions.
+Every named value in a result of `parse` is a fresh copy, so changing the
+result never changes the options.
+
+### Telling the arguments apart
+
+The optional arguments after `text` or `value` are told apart by their type,
+and they must appear in the order of the signature; `null` and `undefined`
+are skipped.
+
+| Type | `parse` | `stringify` |
+|---|---|---|
+| function | reviver | replacer |
+| array | – | replacer |
+| number, string | – | space |
+| other object | options | options |
+
+Anything else, an argument given twice and arguments in the wrong order
+throw a `TypeError`.
 
 ### I-JSON mode
 
 ```js
 XTJSON.parse(text, { ijson: true });
-new XTJSONDefinitions({ values, suffixes, ijson: true });
+XTJSON.stringify(value, 2, { ijson: true });
 ```
 
 With `ijson: true` the parser rejects documents that violate one of the two
 prohibitions of section 12 (I-JSON, RFC 7493):
 
 - an object that contains a name more than once, independent of its notation
-  (`a`, `"a"` and `'a'` are the same name);
+  (`a`, `"a"` and `'\u0061'` are the same name);
 - a name or string value that contains an unpaired surrogate (for example
   `"\uDEAD"`) or a Unicode noncharacter (U+FDD0 to U+FDEF and every code point
   ending in FFFE or FFFF), written directly or as an escape sequence. This
   also applies to the values of named values that the document uses.
 
-The recommendations of section 12 (numbers within the range of IEEE 754
-binary64, an object or array as the root value) are not enforced. The mode is
-off by default, because without it every JSON text is accepted, including
-texts with duplicate names.
+`stringify` throws a `TypeError` for names and strings that contain such
+characters. The recommendations of section 12 (numbers within the range of
+IEEE 754 binary64, an object or array as the root value) are not enforced.
+The mode is off by default, because without it every JSON text is accepted,
+including texts with duplicate names.
 
 ### Errors
 
@@ -125,14 +201,15 @@ texts with duplicate names.
   The properties `reason`, `line`, `column` (both 1-based; columns count
   Unicode code points) and `offset` (0-based, in UTF-16 code units) give the
   details.
-- Invalid definitions are an error of the application and throw a
-  `TypeError`: for example an attempt to redefine `true` or `kb`, an invalid
-  identifier or suffix, or a named value that is not a JSON value.
+- Errors of the application throw a `TypeError`: invalid options (for
+  example an attempt to redefine `true` or `kb`, an invalid identifier or
+  suffix, a named value that is not a JSON value), invalid arguments, and
+  values that `stringify` cannot write.
 
 ### Named exports
 
-`parse`, `XTJSONDefinitions` and `XTJSONError` are also available as named
-exports.
+`parse`, `stringify`, `XTJSONOptions` and `XTJSONError` are also available as
+named exports.
 
 ## Numbers
 
@@ -144,7 +221,6 @@ exports.
 
 ## Not yet implemented
 
-- `XTJSON.stringify()`.
 - Warnings about duplicate names outside the I-JSON mode (section 7.2, a
   SHOULD).
 
@@ -171,5 +247,8 @@ dependencies to install. The tests also run with `bun test` and
   The conversion functions of the suffixes in `tests_definitionen.py` cannot
   be exported; they are written again in `corpus.test.js`, which checks that
   the suffix names match.
-- `test/parse.test.js` tests the API, the I-JSON mode, error messages and
-  positions, numbers and limits.
+- `test/parse.test.js` tests the API of `parse`, the I-JSON mode, error
+  messages and positions, numbers and limits.
+- `test/stringify.test.js` tests `stringify`: the call forms, the behaviour
+  of `JSON.stringify`, the output format, named values, multi-line strings,
+  and a round trip of random values through `stringify` and `parse`.

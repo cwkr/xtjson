@@ -3,7 +3,7 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import XTJSON, { parse, XTJSONDefinitions, XTJSONError } from '../xtjson.js';
+import XTJSON, { parse, XTJSONOptions, XTJSONError } from '../xtjson.js';
 
 /** Asserts an XTJSONError and returns it. */
 function error(text, defs) {
@@ -92,38 +92,39 @@ describe('reviver', () => {
 
 describe('call forms', () => {
   const init = { values: { nil: null }, suffixes: { '%': (x) => x / 100 } };
-  const defs = new XTJSONDefinitions(init);
+  const defs = new XTJSONOptions(init);
   const text = '[nil, 50%, 1]';
   const expected = [null, 0.5, 1];
   const double = (k, v) => (typeof v === 'number' ? v * 2 : v);
 
-  test('definitions as second argument: instance or plain object', () => {
+  test('options as second argument: instance or plain object', () => {
     assert.deepEqual(XTJSON.parse(text, defs), expected);
     assert.deepEqual(XTJSON.parse(text, init), expected);
     assert.deepEqual(XTJSON.parse('[1, 1k]', {}), [1, 1000]);
   });
 
-  test('definitions as third argument after a reviver or null', () => {
+  test('options as third argument after a reviver or null', () => {
     assert.deepEqual(XTJSON.parse(text, null, defs), expected);
     assert.deepEqual(XTJSON.parse(text, undefined, init), expected);
     assert.deepEqual(XTJSON.parse(text, double, defs), [null, 1, 2]);
   });
 
-  test('definitions given twice are a TypeError', () => {
+  test('options given twice are a TypeError', () => {
     assert.throws(() => XTJSON.parse(text, defs, defs), /given twice/);
     assert.throws(() => XTJSON.parse(text, init, {}), /given twice/);
     assert.deepEqual(XTJSON.parse(text, defs, null), expected);
     assert.deepEqual(XTJSON.parse(text, defs, undefined), expected);
   });
 
-  test('an invalid definitions object as second argument is a TypeError', () => {
+  test('invalid arguments are a TypeError', () => {
     assert.throws(() => XTJSON.parse(text, { values: { true: 1 } }), TypeError);
-    assert.throws(() => XTJSON.parse(text, []), /must be an object with the properties/);
-    assert.throws(() => XTJSON.parse(text, null, 'x'), /must be an object with the properties/);
+    assert.throws(() => XTJSON.parse(text, []), /unexpected argument of type object/);
+    assert.throws(() => XTJSON.parse(text, null, 'x'), /unexpected argument of type string/);
+    assert.throws(() => XTJSON.parse(text, defs, () => 1), /the reviver is in the wrong position/);
   });
 });
 
-describe('definitions', () => {
+describe('options: definitions', () => {
   const init = {
     values: { nil: null, zero: 0, list: [1, { a: 2 }] },
     suffixes: { '%': (x) => x / 100 },
@@ -143,16 +144,16 @@ describe('definitions', () => {
     }), expected);
   });
 
-  test('XTJSONDefinitions keeps the order of the named values', () => {
-    const defs = new XTJSONDefinitions({ values: [['zeta', 1], ['alpha', 2], ['mid', 3]] });
+  test('XTJSONOptions keeps the order of the named values', () => {
+    const defs = new XTJSONOptions({ values: [['zeta', 1], ['alpha', 2], ['mid', 3]] });
     assert.deepEqual([...defs.values.keys()], ['zeta', 'alpha', 'mid']);
-    const fromObject = new XTJSONDefinitions({ values: { zeta: 1, alpha: 2, $x: 3, _y: 4 } });
+    const fromObject = new XTJSONOptions({ values: { zeta: 1, alpha: 2, $x: 3, _y: 4 } });
     assert.deepEqual([...fromObject.values.keys()], ['zeta', 'alpha', '$x', '_y']);
   });
 
-  test('XTJSONDefinitions is immutable and independent of its input', () => {
+  test('XTJSONOptions is immutable and independent of its input', () => {
     const source = { list: [1, 2] };
-    const defs = new XTJSONDefinitions({ values: source });
+    const defs = new XTJSONOptions({ values: source });
     source.list.push(3);
     source.other = 1;
     assert.deepEqual(XTJSON.parse('list', null, defs), [1, 2]);
@@ -162,14 +163,14 @@ describe('definitions', () => {
     assert.throws(() => XTJSON.parse('other', null, defs), XTJSONError);
   });
 
-  test('an XTJSONDefinitions instance can be used as init', () => {
-    const defs = new XTJSONDefinitions(init);
-    const copy = new XTJSONDefinitions(defs);
+  test('an XTJSONOptions instance can be used as init', () => {
+    const defs = new XTJSONOptions(init);
+    const copy = new XTJSONOptions(defs);
     assert.deepEqual(XTJSON.parse('[list, 1%]', null, copy), [[1, { a: 2 }], 0.01]);
   });
 
   test('results are fresh copies', () => {
-    const defs = new XTJSONDefinitions(init);
+    const defs = new XTJSONOptions(init);
     const a = XTJSON.parse('[list, list]', null, defs);
     assert.notEqual(a[0], a[1]);
     a[0][1].a = 99;
@@ -182,7 +183,7 @@ describe('definitions', () => {
     assert.equal(XTJSON.parse('10k'), 10000);
   });
 
-  test('invalid definitions throw TypeError', () => {
+  test('invalid options throw TypeError', () => {
     const cases = [
       [{ values: [['a', 1], ['a', 2]] }, /defined more than once/],
       [{ values: { x: undefined } }, /undefined/],
@@ -200,7 +201,7 @@ describe('definitions', () => {
     cyclic.a.push(cyclic);
     cases.push([{ values: { c: cyclic } }, /circular/]);
     for (const [defs, pattern] of cases) {
-      assert.throws(() => new XTJSONDefinitions(defs), (e) => e instanceof TypeError && pattern.test(e.message));
+      assert.throws(() => new XTJSONOptions(defs), (e) => e instanceof TypeError && pattern.test(e.message));
       assert.throws(() => XTJSON.parse('1', null, defs), TypeError);
     }
   });
@@ -224,19 +225,19 @@ describe('definitions', () => {
 });
 
 describe('I-JSON mode', () => {
-  const ijson = new XTJSONDefinitions({ ijson: true });
+  const ijson = new XTJSONOptions({ ijson: true });
 
   test('is off by default and can be read back', () => {
-    assert.equal(new XTJSONDefinitions().ijson, false);
+    assert.equal(new XTJSONOptions().ijson, false);
     assert.equal(ijson.ijson, true);
-    assert.equal(new XTJSONDefinitions(ijson).ijson, true);
+    assert.equal(new XTJSONOptions(ijson).ijson, true);
     assert.deepEqual(XTJSON.parse('{"a": 1, "a": 2}'), { a: 2 });
   });
 
   test('"ijson" must be a boolean', () => {
     for (const value of [1, 'true', null, {}]) {
       if (value === null) continue; // null means "not given"
-      assert.throws(() => new XTJSONDefinitions({ ijson: value }), /"ijson" must be true or false/);
+      assert.throws(() => new XTJSONOptions({ ijson: value }), /"ijson" must be true or false/);
     }
   });
 
@@ -275,7 +276,7 @@ describe('I-JSON mode', () => {
   });
 
   test('values of named values count as well', () => {
-    const defs = new XTJSONDefinitions({
+    const defs = new XTJSONOptions({
       ijson: true,
       values: { bad: ['ok', { [String.fromCharCode(0xffff)]: 1 }], lone: '\uD800', good: { a: 'b' } },
     });
