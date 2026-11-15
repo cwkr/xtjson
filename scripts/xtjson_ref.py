@@ -1,0 +1,445 @@
+"""Referenz-Parser fuer XTJSON (Entwurf 0.3) + Pruefung der Beispiele der Spezifikation."""
+import copy
+import json
+import math
+import re
+import sys
+from decimal import Decimal, localcontext
+
+
+class XTJSONError(ValueError):
+    pass
+
+
+ID = re.compile(r'[A-Za-z_$][A-Za-z0-9_$]*')
+NUM = re.compile(
+    r'-?(?:0[xX][0-9A-Fa-f](?:_?[0-9A-Fa-f])*'
+    r'|0[oO][0-7](?:_?[0-7])*'
+    r'|0[bB][01](?:_?[01])*'
+    r'|(?:0|[1-9](?:_?[0-9])*)(?:\.[0-9](?:_?[0-9])*)?(?:[eE][+-]?[0-9](?:_?[0-9])*)?)'
+)
+WS = ' \t\v\f\xa0\u1680\u202f\u205f\u3000\u2028\u2029\ufeff' + ''.join(chr(c) for c in range(0x2000, 0x200B))
+CP = re.compile(r'\{0*([0-9A-Fa-f]{1,5}|10[0-9A-Fa-f]{4})\}')
+ESC = {'"': '"', "'": "'", '\\': '\\', '/': '/', 'b': '\b', 'f': '\f',
+       'n': '\n', 'r': '\r', 't': '\t', 'v': '\v'}
+
+SUF = re.compile(r'[g-np-wyzG-NP-WYZ%$][a-zA-Z%$]?')
+FIXED_VALUES = {'true': True, 'false': False, 'null': None}
+FIXED_SUFFIXES = {}
+for _names, _factor in (('k K', 1000), ('kb Kb kB KB', 1024), ('mb Mb mB MB', 1048576)):
+    for _n in _names.split():
+        FIXED_SUFFIXES[_n] = _factor
+
+
+def check_definitions(values, suffixes):
+    """Prueft eigene Definitionen (6.4, 9.5). Verstoesse sind Fehler der Anwendung (ValueError)."""
+    for name, val in values.items():
+        if not isinstance(name, str) or not ID.fullmatch(name):
+            raise ValueError('kein gueltiger Bezeichner: %r' % (name,))
+        if name in FIXED_VALUES:
+            raise ValueError('%r ist vordefiniert und nicht aenderbar' % name)
+        try:
+            json.dumps(val, allow_nan=False)          # muss ein JSON-Wert sein
+        except (TypeError, ValueError):
+            raise ValueError('%r ist kein JSON-Wert zugeordnet' % name) from None
+    for suf, fn in suffixes.items():
+        if not isinstance(suf, str) or not SUF.fullmatch(suf):
+            raise ValueError('kein gueltiges Suffix: %r' % (suf,))
+        if suf in FIXED_SUFFIXES:
+            raise ValueError('Suffix %r ist vordefiniert und nicht aenderbar' % suf)
+        if not callable(fn):
+            raise ValueError('Suffix %r braucht eine Umrechnungsfunktion' % suf)
+
+
+def apply_suffix(text, value, suf, suffixes):
+    """text: Zahl ohne '_' und ohne Suffix; value: ihr Wert (int oder float)."""
+    if suf in FIXED_SUFFIXES:
+        if isinstance(value, int):
+            return value * FIXED_SUFFIXES[suf]
+        with localcontext() as ctx:                   # exakte Dezimalrechnung
+            ctx.prec = 2000
+            r = Decimal(text) * FIXED_SUFFIXES[suf]
+            return int(r) if r == r.to_integral_value() else float(r)
+    if suf not in suffixes:
+        raise XTJSONError('Suffix %r ist nicht definiert' % suf)
+    try:
+        r = suffixes[suf](value)
+    except XTJSONError:
+        raise
+    except Exception as ex:                            # Fehler der Funktion = Fehler des Dokuments
+        raise XTJSONError('Umrechnung mit %r fehlgeschlagen: %s' % (suf, ex)) from None
+    if isinstance(r, bool) or not isinstance(r, (int, float)) or (isinstance(r, float) and not math.isfinite(r)):
+        raise XTJSONError('Umrechnungsfunktion fuer %r liefert keine endliche Zahl' % suf)
+    return r
+
+
+def ml_value(out, rawidx, nlidx):
+    """Wert eines mehrzeiligen Strings nach 8.3 (Schritte 1 bis 4)."""
+    lines = [[]]
+    for k, ch in enumerate(out):                       # 1. Zeilen bilden
+        if k in nlidx:
+            lines.append([])
+        else:
+            lines[-1].append((ch, k in rawidx))
+
+    def ws(t):
+        return t[1] and t[0] in ' \t'
+
+    for ln in lines[:-1]:                              # 2. Leerraum am Zeilenende
+        while ln and ws(ln[-1]):
+            ln.pop()
+    if len(lines) > 1 and not lines[0]:                # 3. Einrueckung
+        lines = lines[1:]
+
+        def indent(ln):
+            k = 0
+            while k < len(ln) and ws(ln[k]):
+                k += 1
+            return k
+
+        m = min(indent(ln) for i, ln in enumerate(lines) if ln or i == len(lines) - 1)
+        used = [ln for i, ln in enumerate(lines) if ln or i == len(lines) - 1]
+        if len({tuple(ln[:m]) for ln in used}) > 1:
+            raise XTJSONError('Einrueckung nicht in allen Zeilen gleich')
+        lines = [ln[m:] for ln in lines]
+    return '\n'.join(''.join(ch for ch, _ in ln) for ln in lines)   # 4. Zusammensetzen
+
+
+def tokenize(s, suffixes=None):
+    toks, i, n, nl = [], 0, len(s), False
+    while i < n:
+        c = s[i]
+        if c in WS:
+            i += 1
+        elif c in '\n\r':
+            nl = True
+            i += 1
+        elif c == '#' or s.startswith('//', i):
+            while i < n and s[i] not in '\n\r':
+                i += 1
+        elif s.startswith('/*', i):
+            j = s.find('*/', i + 2)
+            if j < 0:
+                raise XTJSONError('Blockkommentar nicht abgeschlossen')
+            i = j + 2
+        elif c in '{}[]:,':
+            toks.append((c, c, nl))
+            nl = False
+            i += 1
+        elif c in '"\'':
+            ml = s.startswith(c * 3, i)
+            q = c * 3 if ml else c
+            j, out = i + len(q), []
+            rawidx, nlidx = set(), set()
+            while True:
+                if j >= n:
+                    raise XTJSONError('String nicht abgeschlossen')
+                d = s[j]
+                if s.startswith(q, j):
+                    break
+                if ml and d in '\n\r':
+                    nlidx.add(len(out))
+                    out.append('\n')
+                    j += 2 if s.startswith('\r\n', j) else 1
+                    continue
+                if ml and d == '\t':
+                    rawidx.add(len(out))
+                    out.append(d)
+                    j += 1
+                    continue
+                if ord(d) < 0x20:
+                    raise XTJSONError('Steuerzeichen im String')
+                if d == '\\':
+                    e = s[j + 1] if j + 1 < n else ''
+                    if e in ESC:
+                        out.append(ESC[e])
+                        j += 2
+                    elif e == 'u' and s[j + 2:j + 3] == '{':
+                        m = CP.match(s, j + 2)
+                        if not m:
+                            raise XTJSONError('ungueltige Escape-Sequenz \\u{...}')
+                        if 0xD800 <= int(m.group(1), 16) <= 0xDFFF:
+                            raise XTJSONError('Surrogat in \\u{...}')
+                        out.append(chr(int(m.group(1), 16)))
+                        j = m.end()
+                    elif e == 'u' and re.fullmatch(r'[0-9A-Fa-f]{4}', s[j + 2:j + 6]):
+                        out.append(chr(int(s[j + 2:j + 6], 16)))
+                        j += 6
+                    elif e == 'x' and re.fullmatch(r'[0-9A-Fa-f]{2}', s[j + 2:j + 4]):
+                        out.append(chr(int(s[j + 2:j + 4], 16)))
+                        j += 4
+                    elif e == '0' and not re.match(r'[0-9]', s[j + 2:j + 3]):
+                        out.append('\0')
+                        j += 2
+                    else:
+                        raise XTJSONError('ungueltige Escape-Sequenz')
+                else:
+                    rawidx.add(len(out))
+                    out.append(d)
+                    j += 1
+            # Surrogatpaare zusammenfuehren
+            val = (ml_value(out, rawidx, nlidx) if ml else ''.join(out)).encode('utf-16', 'surrogatepass').decode('utf-16', 'surrogatepass')
+            toks.append(('mstr' if ml else 'str', val, nl))
+            nl = False
+            i = j + len(q)
+        elif c == '-' or c.isdigit() and c.isascii():
+            m = NUM.match(s, i)
+            if not m:
+                raise XTJSONError('ungueltige Zahl bei %d' % i)
+            t = m.group().replace('_', '')
+            neg = t.startswith('-')
+            body = t[1:] if neg else t
+            if body[:2].lower() in ('0x', '0o', '0b'):
+                v = int(body[2:], {'x': 16, 'o': 8, 'b': 2}[body[1].lower()])
+                v = -v if neg else v
+            elif re.fullmatch(r'-?\d+', t):
+                v = int(t)
+            else:
+                v = float(t)
+            i = m.end()
+            ms = SUF.match(s, i)
+            if ms:
+                v = apply_suffix(t, v, ms.group(), suffixes or {})
+                i = ms.end()
+            toks.append(('num', v, nl))
+            nl = False
+        else:
+            m = ID.match(s, i)
+            if not m:
+                raise XTJSONError('unerwartetes Zeichen %r bei %d' % (c, i))
+            toks.append(('id', m.group(), nl))
+            nl = False
+            i = m.end()
+            continue
+        # Tokens muessen aneinandergrenzende Tokens nicht pruefen: der Parser
+        # verlangt zwischen Elementen Komma oder Zeilenumbruch.
+    toks.append(('eof', None, nl))
+    return toks
+
+
+class Parser:
+    def __init__(self, text, ijson=False, values=None, suffixes=None):
+        self.values = dict(values or {})
+        suffixes = dict(suffixes or {})
+        check_definitions(self.values, suffixes)
+        self.t = tokenize(text, suffixes)
+        self.p = 0
+        self.ijson = ijson
+
+    def peek(self):
+        return self.t[self.p]
+
+    def next(self):
+        tok = self.t[self.p]
+        self.p += 1
+        return tok
+
+    def document(self):
+        k0 = self.t[0][0]
+        if k0 in ('str', 'id') and len(self.t) > 1 and self.t[1][0] == ':':
+            v = self.members('eof')
+        else:
+            v = self.value()
+        if self.peek()[0] != 'eof':
+            raise XTJSONError('Text nach dem Wurzelwert')
+        return v
+
+    def value(self):
+        k, v, _ = self.next()
+        if k == '{':
+            if self.peek()[0] == '}':
+                self.next()
+                return {}
+            obj = self.members('}')
+            self.next()
+            return obj
+        if k == '[':
+            return self.items()
+        if k in ('str', 'mstr', 'num'):
+            return v
+        if k == 'id':
+            if v in FIXED_VALUES:
+                return FIXED_VALUES[v]
+            if v in self.values:
+                return copy.deepcopy(self.values[v])
+            raise XTJSONError('benannter Wert %r ist nicht definiert' % (v,))
+        raise XTJSONError('Wert erwartet, gefunden %r' % (v,))
+
+    def separator(self, closer):
+        """True, wenn ein weiteres Element folgt."""
+        k, _, nl = self.peek()
+        if k == ',':
+            self.next()
+            return self.peek()[0] != closer
+        if k == closer:
+            return False
+        if nl:
+            return True
+        raise XTJSONError('Komma oder Zeilenumbruch erwartet')
+
+    def members(self, closer):
+        obj = {}
+        while True:
+            k, name, _ = self.next()
+            if k not in ('str', 'id'):
+                raise XTJSONError('Name erwartet')
+            if self.next()[0] != ':':
+                raise XTJSONError("':' erwartet")
+            if self.ijson and name in obj:
+                raise XTJSONError('doppelter Name %r' % name)
+            obj[name] = self.value()
+            if not self.separator(closer):
+                return obj
+
+    def items(self):
+        arr = []
+        if self.peek()[0] == ']':
+            self.next()
+            return arr
+        while True:
+            arr.append(self.value())
+            if not self.separator(']'):
+                self.next()
+                return arr
+
+
+def parse(text, ijson=False, values=None, suffixes=None):
+    """Liest ein XTJSON-Dokument.
+
+    values:   eigene benannte Werte, {Bezeichner: JSON-Wert}
+    suffixes: eigene Zahlen-Suffixe, {Suffix: Umrechnungsfunktion}
+    """
+    return Parser(text, ijson, values, suffixes).document()
+
+
+# Definitionen, die die Beispiele der Spezifikation voraussetzen (6.4, 9.5)
+EXAMPLE_DEFS = dict(
+    values={'nil': None, 'zero': 0, 'unbekannt': 'keine Angaben', 'unknown': 'not specified'},
+    suffixes={'%': lambda x: x / 100},
+)
+
+
+# ----------------------------------------------------------------------------
+def main(spec_path):
+    md = open(spec_path, encoding='utf-8').read()
+    blocks = re.findall(r'```(\w+)\n(.*?)```', md, re.S)
+    fails = 0
+
+    # 1) alle xtjson-Bloecke muessen parsen; folgt direkt ein json-Block, muss er gleich sein
+    n_l = n_pair = 0
+    for idx, (lang, body) in enumerate(blocks):
+        if lang != 'xtjson':
+            continue
+        n_l += 1
+        try:
+            v = parse(body, **EXAMPLE_DEFS)
+        except XTJSONError as ex:
+            fails += 1
+            print('FEHLER xtjson-Block %d: %s\n%s' % (n_l, ex, body))
+            continue
+        if idx + 1 < len(blocks) and blocks[idx + 1][0] == 'json':
+            n_pair += 1
+            if v != json.loads(blocks[idx + 1][1]):
+                fails += 1
+                print('FEHLER: JSON-Aequivalent weicht ab (Block %d)' % n_l)
+    print('xtjson-Bloecke: %d, davon mit JSON-Vergleich: %d' % (n_l, n_pair))
+
+    # 2) ungueltige Beispiele (Anhang B.3 + Text)
+    invalid = [
+        '', '  \n# nur Kommentar\n', '[1 2]', 'a: 1 b: 2', '[1,,2]', '[,]', '{,}', '[,1]',
+        '{a: 1} b: 2', 'a: 1 }', '[abc]', '{2fa: true}', '{größe: 1}', '{a.b: 1}',
+        "'It's'", '/* offen', '0755', '0x', '0x_FF',
+        '1__000', '1_', '1_.5', '0b102', '0o78', '0x1.8', '+1', '.5', '5.', 'NaN',
+        'Infinity', '"a\nb"', "'a\nb'", '{a: 1,, b: 2}', 'a: 1,,', '[1, 2', '{a: 1',
+        '[1_]', '{max-age: 1}', '"\\1"', '"\\01"', '"\\x4"', '"\\xZZ"', '"\\u12"',
+        '"\\\t"', '"a\x0bb"', '[1\x0b2]', '[1\x0c2]', '"a\\', '0XG', '0B2', '0O8',
+        '"\\9"', 'a: 1\x0bb: 2', '[1\u20282]', '[1\u20292]', '[1\xa02]', '{a: 1 /* x\n */ b: 2}', '[1 /* \n */ 2]',
+        '[1 // /* \n */ 2]', 'a: 1 /*\n*/ b: 2', '[1, // /* \n */ 2]', "[1,\u200b2]", "[1,\u00852]", "[1,\u180e2]", "[1\u30002]", "[1\ufeff2]", "a: 1\u2003b: 2",
+        '"\\u{110000}"', '"\\u{}"', '"\\u{1_F600}"', '"\\u{ 41 }"', '"\\U{41}"', '"\\u{41"', '"\\u{G}"', '"\\u{0000110000}"', '[_1]', '-', '--1', '0x1E+3', '[0xg]', '{a 1}', '{"a" "b"}',
+        '{a: 1 /* x */ b: 2}', 'a:', ': 1', '1: 2', '[1] [2]', '1 2', '{} {}',
+        '"a\\\nb"', '"a\\\r\nb"', '"a\\\rb"', "'a\\\n  b'", '"\\ x"', '"\\a"', '"\\N"', '"\\-"',
+        '"\\X41"', '"\\ "', 'a: "x\\\ny"\nb: 2', '"\\e"', '"\\U0041"', "'\\.'",
+    ]
+    for t in invalid:
+        try:
+            v = parse(t)
+        except XTJSONError:
+            continue
+        fails += 1
+        print('FEHLER: sollte ungueltig sein: %r -> %r' % (t, v))
+    print('ungueltige Beispiele geprueft: %d' % len(invalid))
+
+    # 3) gueltige Einzelfaelle mit erwartetem Wert
+    valid = [
+        ('0xFF', 255), ('0o755', 493), ('0b1010', 10), ('0x1e3', 483), ('-0x10', -16),
+        ('0x00FF', 255), ('0o377', 255), ('0b1111_1111', 255), ('1_000_000', 1000000),
+        ('1e1_0', 1e10), ('6.022_140_76e23', 6.02214076e23), ('0xDEAD_BEEF', 3735928559),
+        ('0o644', 420), ('0b1010_0101', 165), ('10_485_760', 10 * 1024 * 1024),
+        ('[1\n-2]', [1, -2]), ('[1\n,2]', [1, 2]), ('[1,\n2,\n]', [1, 2]),
+        ('a: 1', {'a': 1}), ('a: 1,', {'a': 1}), ('"a": 1\n\'b\': 2', {'a': 1, 'b': 2}),
+        ('true: false\nnull: null', {'true': False, 'null': None}),
+        ('true', True), ('"x"', 'x'), ("'x'", 'x'), ('{}', {}), ('[]', []),
+        ('a\n:\n1\nb: 2', {'a': 1, 'b': 2}),
+        ('{a: 1 /* x\n */\n b: 2}', {'a': 1, 'b': 2}), ('\u00a0[1]\u2028', [1]),
+        ('[1,\u2028\xa0\u20292]', [1, 2]), ('a: 1 // k\u2028b: 2', {'a': 1}), ('[1, /* \n */ 2]', [1, 2]),
+        ('[1 /* x */\n2]', [1, 2]), ('1 // k', 1), ('[1\ufeff]', [1]), ('[1,\u20032]', [1, 2]),
+        ('\ufeff\u3000{a\u1680:\u202f1\u205f}\u200a\u2000', {'a': 1}), ('"\\u{1F600}"', '\U0001F600'),
+        ('"\\u{e4}\\u{000041}\\u{0}"', '\xe4A\0'), ('"\\u{10FFFF}"', '\U0010FFFF'), ('"\\u{0010ffff}"', '\U0010FFFF'),
+        ('"\\uD83D\\uDE00"', '\U0001F600'), ("'\\u{41}'", 'A'),
+        ('"\\u{1f600}" // k\u3000\u2028 immer noch Kommentar', '\U0001F600'), ('"\u3000\ufeff"', '\u3000\ufeff'), ('1 # k', 1), ('"\xa0\u2028"', '\xa0\u2028'),
+        ('a: 1 /* x */ // y\n/* z\n */ b: 2', {'a': 1, 'b': 2}),
+        ('a: 1 // k\nb: 2 # k\n', {'a': 1, 'b': 2}),
+        ("'It\\'s'", "It's"), ('"It\\\'s"', "It's"), ('\'sagt "hi"\'', 'sagt "hi"'),
+        ('{a: 1, "a": 2}', {'a': 2}), ('{"max-age": 1, $s: 2, _x9: 3}', {'max-age': 1, '$s': 2, '_x9': 3}),
+        ('0X1F', 31), ('0B11', 3), ('0O17', 15), ('-0XfF_ff', -65535), ('0xff', 255), ('0XFF', 255),
+        ('"\\x41"', 'A'), ('"\\0"', '\0'), ('"\\0a"', '\0a'), ('"\\v\\f"', '\v\f'),
+        ('"\\xe4\\xE4"', '\xe4\xe4'), ('"\u2028"', '\u2028'), ("'\\\"'", '"'),
+        ('[1,\x0b\x0c2]', [1, 2]), ('\x0c{a\x0b:\x0c1}\x0b', {'a': 1}), ('[1 //k\x0b\x0c\n2]', [1, 2]),
+        ('/**/1', 1), ('/***/1', 1), ('/* * / */1', 1), ('#!shebang\n[1]', [1]),
+        ('"\\ud83d\\ude00"', '\U0001F600'), ('\ufeff{"a":1}', {'a': 1}),
+        ('[[1,2\n3],{a:[{}]}]', [[1, 2, 3], {'a': [{}]}]),
+    ]
+    for t, exp in valid:
+        try:
+            v = parse(t)
+        except XTJSONError as ex:
+            fails += 1
+            print('FEHLER: sollte gueltig sein: %r (%s)' % (t, ex))
+            continue
+        if v != exp or type(v) is not type(exp):
+            fails += 1
+            print('FEHLER: %r -> %r, erwartet %r' % (t, v, exp))
+    print('gueltige Einzelfaelle geprueft: %d' % len(valid))
+
+    # 4) Superset-Eigenschaft: JSON-Texte ergeben denselben Wert wie json.loads
+    samples = [
+        '{"a":[1,2.5e-3,true,null],"b":{"c":"d\\u00e9"}}', '  [ ]  ', '"s"', '-0', '1E5',
+        '{"a"\n:\n1\n,\n"b":[\n1\n,\n2\n]}', '{"a":1,"a":2}', '"\\"\\\\\\/\\b\\f\\n\\r\\t"',
+        '"#kein // kommentar /* */"', '{"true":1,"0x10":2}', '[0,0.0,-1e-2,123456789]',
+        json.dumps({'x': [1, {'y': 'z\n\u20ac'}], 'k': None}, indent=2),
+        json.dumps([[], {}, '', 0, [[[1]]]]),
+    ]
+    for t in samples:
+        try:
+            if parse(t) != json.loads(t):
+                raise XTJSONError('Wert weicht ab')
+        except XTJSONError as ex:
+            fails += 1
+            print('FEHLER Superset: %r (%s)' % (t, ex))
+    print('JSON-Texte geprueft: %d' % len(samples))
+
+    # 5) I-JSON-Modus: doppelte Namen unabhaengig von der Schreibweise
+    for t in ['{a: 1, "a": 2}', "a: 1\n'\\u0061': 2"]:
+        try:
+            parse(t, ijson=True)
+            fails += 1
+            print('FEHLER: I-JSON-Modus akzeptiert Duplikat: %r' % t)
+        except XTJSONError:
+            pass
+
+    print('ERGEBNIS: %s' % ('OK' if not fails else '%d Fehler' % fails))
+    return 1 if fails else 0
+
+
+if __name__ == '__main__':
+    sys.exit(main(sys.argv[1]))
