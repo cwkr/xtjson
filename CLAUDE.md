@@ -28,6 +28,8 @@ scripts/
   tests_definitionen.py           tests: named values and number suffixes
   build_index.py                  generates docs/index.html
   index_template.html             template for docs/index.html
+  export_corpus.py                exports the test cases as JSON for implementations
+xtjson-js/                        JavaScript implementation (npm package @cwkr/xtjson)
 ```
 
 `docs/` also contains the overview page for GitHub Pages: `index.html` (generated, do not edit by hand) and `style.css` (written by hand).
@@ -147,7 +149,7 @@ An implementation in this repository is a conforming XTJSON parser, generator or
   - Suffixes: the characters of an identifier, any length, longest match, no white space before them; the first character excludes `_` and, in either case, `a`–`f`, `o` and `x`. A `_` after a digit is digit grouping or an error (`1_0` is 10, `10_k` is an error). Case is significant (`L` exists, `l` does not), and a suffix that is not in the table in 9.5 is an error. Results are exact (`0.1kb` is `102.4`, `100ms` is `0.1`).
 - **Limits are allowed, silent truncation is not.** An implementation may limit document size, nesting depth, number range and string length (section 11), but it must report an error when a limit is hit.
 - **Never evaluate a document as code**, and never let a document supply definitions (section 13).
-- **Test against the shared cases.** The cases in `scripts/tests_*.py` and the built-in lists in `scripts/xtjson_ref.py` are the conformance corpus. Every implementation must accept the valid texts with the expected values and reject the invalid ones. When an implementation bug is found, first add a case to the shared tests and confirm the reference parser handles it as the specification says, then fix the implementation.
+- **Test against the shared cases.** The cases in `scripts/tests_*.py` and the built-in lists in `scripts/xtjson_ref.py` are the conformance corpus. `scripts/export_corpus.py` exports them as JSON (default `xtjson-js/test/corpus.json`); run it after changing those cases, `--check` fails if the export is out of date. Every implementation must accept the valid texts with the expected values and reject the invalid ones. When an implementation bug is found, first add a case to the shared tests and confirm the reference parser handles it as the specification says, then fix the implementation.
 - **Use the reference parser as the oracle**, not as a template. It is written for clarity, has known gaps (see below) and is not meant to be ported line by line. Where an implementation and the reference parser disagree, check the specification text before changing either.
 - **Follow each implementation's own conventions** for style, tooling, dependencies and tests, as documented in its directory. Do not introduce new dependencies or reformat existing code without need.
 - **Error reporting.** Errors should name the position in the document (line and column) and the violated rule in plain English, using the terminology above.
