@@ -14,19 +14,34 @@ import XTJSON, { XTJSONError } from '../xtjson.js';
 const corpus = JSON.parse(readFileSync(new URL('./corpus.json', import.meta.url), 'utf8'));
 
 /** Definitions of scripts/tests_definitionen.py (`D`). */
-const D = { values: corpus.c_values };
+const D = { namedValues: corpus.c_values };
 
 /** Definitions that the examples in the specification assume (EXAMPLE_DEFS). */
 const EXAMPLE_DEFS = {
-  values: { nil: null, zero: 0, unbekannt: 'keine Angaben', unknown: 'not specified' },
+  namedValues: { nil: null, zero: 0, unbekannt: 'keine Angaben', unknown: 'not specified' },
 };
 
 function defsFor(label) {
-  return label === 'D' ? D : label;
+  if (label === 'D') return D;
+  return label === null ? null : { namedValues: label.values };
 }
 
 function show(text) {
   return JSON.stringify(text);
+}
+
+/**
+ * The value with every BigInt converted to a number. This implementation
+ * returns integers with the suffix n as BigInt; the corpus gives their
+ * value as a number.
+ */
+function asNumbers(value) {
+  if (typeof value === 'bigint') return Number(value);
+  if (Array.isArray(value)) return value.map(asNumbers);
+  if (value !== null && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, asNumbers(v)]));
+  }
+  return value;
 }
 
 function assertValid(text, expected, defs) {
@@ -36,7 +51,7 @@ function assertValid(text, expected, defs) {
   } catch (error) {
     assert.fail(`should be valid: ${show(text)} (${error.message})`);
   }
-  assert.deepEqual(actual, expected, `value of ${show(text)}`);
+  assert.deepEqual(asNumbers(actual), expected, `value of ${show(text)}`);
 }
 
 function assertInvalid(text, defs) {
@@ -83,7 +98,7 @@ test('I-JSON mode: valid texts give the same value or an I-JSON error', () => {
       rejected++;
       continue;
     }
-    assert.deepEqual(actual, expected, show(text));
+    assert.deepEqual(asNumbers(actual), expected, show(text));
   }
   assert.ok(rejected > 0 && rejected < 10, `rejected ${rejected}`);
 });
@@ -98,15 +113,15 @@ test('tests_definitionen.py: invalid texts', () => {
 
 test('tests_definitionen.py: invalid definitions are a TypeError, not an XTJSONError', () => {
   const bad = [
-    ...corpus.c_bad_values.map((values) => ({ values })),
+    ...corpus.c_bad_values.map((values) => ({ namedValues: values })),
     // BAD_DEFS that cannot be exported as JSON
-    { values: { x: NaN } }, { values: { x: new (class X {})() } }, { values: { x: new Set([1, 2]) } },
+    { namedValues: { x: NaN } }, { namedValues: { x: new (class X {})() } }, { namedValues: { x: new Set([1, 2]) } },
   ];
   assert.ok(bad.length > 10);
   for (const defs of bad) {
     assert.throws(() => XTJSON.parse('1', null, defs), (error) => {
       return error instanceof TypeError && !(error instanceof XTJSONError);
-    }, JSON.stringify(defs.values));
+    }, JSON.stringify(defs.namedValues));
   }
 });
 

@@ -39,10 +39,10 @@ export interface XTJSONOptionsInit {
    * value; if several have it, the one defined last wins, and the predefined
    * ones are used only if no custom one matches.
    *
-   * There is no option for number suffixes: they are fixed by section 9.5,
-   * and an object with a `suffixes` property is rejected with a `TypeError`.
+   * There is no option for number suffixes: they are fixed by section 9.5.
+   * Unknown properties, such as `suffixes` or `values`, are a `TypeError`.
    */
-  values?: DefinitionEntries<NamedValue>;
+  namedValues?: DefinitionEntries<NamedValue>;
   /**
    * I-JSON mode (section 12). `parse` rejects a document in which an object
    * contains a name twice, or in which a name or string value (also from a
@@ -51,6 +51,27 @@ export interface XTJSONOptionsInit {
    * Default: false; then the member that comes last applies.
    */
   ijson?: boolean;
+  /**
+   * Maximum nesting depth of objects and arrays, a positive integer; an
+   * implicit root object counts as a level. `parse` reports a deeper
+   * document as an `XTJSONError`, `stringify` a deeper value as a
+   * `TypeError`. Default: 1000. A very large value can exceed the call
+   * stack of the engine; `parse` then also throws an `XTJSONError`.
+   */
+  maxDepth?: number;
+  /**
+   * `stringify` writes number suffixes: integers that are a multiple of the
+   * factor with `mb`, `kb`, `k`, `h` or `min`, fractions between -1 and 1
+   * that are whole hundredths or thousandths with `pct` or `ms`, the first
+   * in this order that applies. Default: false. BigInt values always get
+   * the suffix `n`.
+   */
+  writeNumberSuffixes?: boolean;
+  /**
+   * `stringify` writes strings and quoted names in `'` and multi-line
+   * strings in `'''` instead of `"` and `"""`. Default: false.
+   */
+  writeSingleQuotes?: boolean;
 }
 
 /**
@@ -58,12 +79,18 @@ export interface XTJSONOptionsInit {
  * call; plain `XTJSONOptionsInit` objects are validated again on each call.
  */
 export class XTJSONOptions implements XTJSONOptionsInit {
-  /** @throws {TypeError} if a definition violates section 6.4. */
+  /** @throws {TypeError} if an option is unknown or invalid, or a definition violates section 6.4. */
   constructor(init?: XTJSONOptionsInit | null);
   /** The named values in their defined order (a new Map). */
-  get values(): Map<string, NamedValue>;
+  get namedValues(): Map<string, NamedValue>;
+  /** The maximum nesting depth of objects and arrays. */
+  get maxDepth(): number;
   /** True for the I-JSON mode. */
   get ijson(): boolean;
+  /** True if `stringify` writes number suffixes. */
+  get writeNumberSuffixes(): boolean;
+  /** True if `stringify` writes strings in `'` and `'''`. */
+  get writeSingleQuotes(): boolean;
   get [Symbol.toStringTag](): 'XTJSONOptions';
 }
 
@@ -90,12 +117,14 @@ export type Replacer = (this: any, key: string, value: any) => any;
 export type Options = XTJSONOptions | XTJSONOptionsInit;
 
 /**
- * Parses an XTJSON document and returns its value.
+ * Parses an XTJSON document and returns its value. Numbers become `number`;
+ * a number with the suffix `n` and without a fraction part becomes a
+ * `bigint` if its value is an integer (`10n`, `0xFFn`, `1e3n`).
  *
  * @param text the document
  * @param reviver transforms the result, as in `JSON.parse`; `null` or
  *   `undefined` for none
- * @param options named values and the I-JSON mode
+ * @param options named values, the I-JSON mode and the maximum nesting depth
  * @throws {XTJSONError} if the text is not a valid XTJSON document
  * @throws {TypeError} if the arguments or the options are invalid
  */
@@ -108,18 +137,22 @@ export function parse(text: string, options: Options): any;
  *
  * Output: an object at the top level without braces; names without
  * quotation marks where possible; with `space`, one item per line without
- * commas and strings with line breaks as multi-line strings; numbers grouped
- * with `_` and with the suffix `mb`, `kb` or `k` where they are multiples;
- * strings, numbers, booleans and `null` as named values where defined.
+ * commas and strings with line breaks as multi-line strings; numbers of
+ * 10000 or more grouped with `_`; number suffixes only with
+ * `writeNumberSuffixes`; `bigint` values with the suffix `n`; strings in `"`, or in `'` with
+ * `writeSingleQuotes`; strings, numbers, booleans and `null` as named values
+ * where defined.
  *
  * @param value the value
  * @param replacer a function or an array of names, as in `JSON.stringify`
  * @param space indentation: a number of spaces (at most 10) or a string of
  *   at most 10 spaces and tabs
- * @param options named values and the I-JSON mode
+ * @param options named values, the I-JSON mode, the maximum nesting depth,
+ *   number suffixes and quotation marks
  * @returns the document, or `undefined` for `undefined`, functions and symbols
- * @throws {TypeError} for circular references, BigInt values, invalid
- *   arguments or options, and strings not permitted in I-JSON mode
+ * @throws {TypeError} for circular references, nesting deeper than
+ *   `maxDepth`, invalid arguments or options, and strings not permitted in
+ *   I-JSON mode
  */
 export function stringify(
   value: any,

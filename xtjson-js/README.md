@@ -26,7 +26,7 @@ motd: """
 
 XTJSON.stringify(config, 2);
 // name: "demo-service"
-// port: 8_080
+// port: 8080
 // cache: 64mb
 // motd: """
 //   Welcome.
@@ -43,7 +43,7 @@ Parses an XTJSON document and returns its value.
   string. It must be decoded text; when reading bytes, decode them as UTF-8
   first (for example with `new TextDecoder('utf-8', { fatal: true })`).
 - `reviver`: optional, works exactly as in `JSON.parse`.
-- `options`: optional named values and I-JSON mode, see
+- `options`: optional named values, I-JSON mode and nesting limit, see
   [Options](#options).
 
 ```js
@@ -55,7 +55,8 @@ XTJSON.parse(text, null, options);        // also options only
 Every JSON text gives the same value as with `JSON.parse`, with two
 exceptions allowed by the specification (section 11): numbers whose magnitude
 exceeds the range of a JavaScript number (`1e400`) are an error instead of
-`Infinity`, and objects and arrays may be nested at most 1000 levels deep.
+`Infinity`, and objects and arrays may be nested at most 1000 levels deep
+(see `maxDepth`).
 
 If a name occurs more than once in an object, the member that comes last in
 the document applies, as with `JSON.parse`. In I-JSON mode it is an error
@@ -67,8 +68,9 @@ Writes a value as an XTJSON document. `value`, `replacer` (a function or an
 array of names) and `space` work as in `JSON.stringify`: `toJSON` methods are
 called, `undefined`, functions and symbols are left out of objects and become
 `null` in arrays, `NaN` and `Infinity` become `null`, and a value that cannot
-be written at all gives `undefined`. Circular references and BigInt values
-throw a `TypeError`.
+be written at all gives `undefined`. Circular references and nesting deeper
+than `maxDepth` throw a `TypeError`. Unlike `JSON.stringify`, BigInt values
+can be written: they get the suffix `n` and read back as BigInt.
 
 ```js
 XTJSON.stringify(value, options);                    // options only
@@ -84,9 +86,11 @@ The output differs from `JSON.stringify` in these points:
   needs at least one member.
 - **Names** that are identifiers (ASCII letters, digits, `_`, `$`, not
   beginning with a digit) are written without quotation marks, all others in
-  `"`.
+  `"` (or `'`, see `writeSingleQuotes`).
 - **Strings** are written in `"`. Besides the escapes of `JSON.stringify`,
-  U+2028 and U+2029 are escaped.
+  U+2028 and U+2029 are escaped. With the option `writeSingleQuotes` they are
+  written in `'` and multi-line strings in `'''`; then `'` is escaped and
+  `"` is not.
 - **With `space`**, every item is on its own line and the line break is the
   separator: there are no commas at the ends of lines. Strings that contain a
   line break (LF) are written as multi-line strings with `"""`, with the text
@@ -95,18 +99,30 @@ The output differs from `JSON.stringify` in these points:
   quotation marks that would end the string are escaped, so the string always
   reads back unchanged. `space` may only contain spaces and tabs; other
   characters would not be valid indentation, so they are a `TypeError`.
-- **Numbers** are written in decimal with `_` between groups of three digits
-  of the integer part (`1_234_567.25`). Integers that are a multiple of
-  1048576, 1024 or 1000 get the suffix `mb`, `kb` or `k`, in this order of
-  priority: `1000` is `1k`, `2048` is `2kb`, `5120000` is `5_000kb`,
-  `67108864` is `64mb`. A suffix is used only if the remaining factor is at
-  most 2⁵³ − 1, so that the text reads back as exactly the same number.
-  The other suffixes of section 9.5 (`ms`, `min`, `pct`, …) are never used
-  for output.
+- **Numbers** are written in decimal. An integer part of 10000 or more gets
+  `_` between groups of three digits (`12_345`, `1_234_567.25`); smaller
+  numbers are written without it (`8080`). Every number reads back as
+  exactly the same number. A BigInt is written as an integer with the suffix
+  `n` (`12_345n`). With the option `writeNumberSuffixes` (off by default), the
+  suffixes of section 9.5 that change the value are used where they fit, the
+  first one in this order:
+
+  | Numbers | Suffixes, in order | Examples |
+  |---|---|---|
+  | integers that are a multiple of the factor | `mb`, `kb`, `k`, `h`, `min` | `67108864` is `64mb`, `2048` is `2kb`, `5120000` is `5000kb`, `1000` is `1k`, `7200` is `2h`, `300` is `5min` |
+  | fractions between -1 and 1 that are whole hundredths or thousandths | `pct`, `ms` | `0.5` is `50pct`, `0.07` is `7pct`, `0.125` is `125ms` |
+
+  The binary sizes come first because they are the most specific factors,
+  then `k`, and the time units last. A multiplying suffix is used only if the
+  remaining factor is at most 2⁵³ − 1. The suffixes are chosen from the value
+  alone, without knowing what it means: `1920` is written as `32min` and
+  `0.25` as `25pct`; enable the option only where that fits the data. `s`,
+  `px` and `L` do not change the value and are never written; `n` only for
+  BigInt values.
 - **Named values.** A string, number, `true`, `false` or `null` is written as
   a named value if one has exactly this value. If several match, the one
   defined last wins; the predefined `true`, `false` and `null` are used only
-  if no custom named value matches. With `values: { nil: null }`, `null` is
+  if no custom named value matches. With `namedValues: { nil: null }`, `null` is
   always written as `nil`. Names are never replaced.
 
 A document that uses custom named values can only be read with the same
@@ -122,7 +138,7 @@ are active. An application can define further named values:
 import XTJSON, { XTJSONOptions } from '@cwkr/xtjson';
 
 const options = new XTJSONOptions({
-  values: { nil: null, unknown: 'not specified' },
+  namedValues: { nil: null, unknown: 'not specified' },
 });
 
 XTJSON.parse('ratio: 50pct\nowner: unknown\nboss: nil', options);
@@ -132,23 +148,36 @@ XTJSON.stringify({ owner: 'not specified', boss: null }, options);
 // 'owner:unknown,boss:nil'
 ```
 
-- `values` maps identifiers to a string, a number, `true`, `false` or
+- `namedValues` maps identifiers to a string, a number, `true`, `false` or
   `null` (section 6.4); objects and arrays are not permitted. The order of
   the named values is fixed: it is the order in which they are given. They
   can be given as a plain object, a `Map` or an iterable of `[key, value]`
   pairs.
 - `ijson`: `true` for the I-JSON mode, see below. Default `false`.
+- `maxDepth`: the maximum nesting depth of objects and arrays, a positive
+  integer. Default `1000`. An implicit root object counts as a level, so
+  `a: [1]` has depth 2. `parse` reports a deeper document as an
+  `XTJSONError`, `stringify` a deeper value as a `TypeError`. A very large
+  limit can exceed the call stack of the JavaScript engine (with Node.js at
+  a depth of a few thousand); `parse` then reports an `XTJSONError` too.
+- `writeNumberSuffixes`: `true` lets `stringify` write number suffixes, see
+  above. Default `false`. `parse` ignores it.
+- `writeSingleQuotes`: `true` lets `stringify` write strings and quoted names in
+  `'` and multi-line strings in `'''`. Default `false`. `parse` ignores it.
 
-There is no option for number suffixes. The suffixes are fixed by section
-9.5 and always active: `k`, `K` (times 1000), `kb`, `Kb`, `kB`, `KB` (times
-1024), `mb`, `Mb`, `mB`, `MB` (times 1048576), `ms` (divided by 1000), `s`,
-`min` (times 60), `h` (times 3600), `pct` (divided by 100), `px`, `L` and
-`n`. `s`, `px`, `L` and `n` leave the value unchanged. Options with a
-`suffixes` property are a `TypeError`.
+Other properties are a `TypeError`, so that a misspelt option is not
+silently ignored.
+
+The application cannot define number suffixes. The suffixes are fixed by
+section 9.5 and always active when parsing: `k`, `K` (times 1000), `kb`,
+`Kb`, `kB`, `KB` (times 1024), `mb`, `Mb`, `mB`, `MB` (times 1048576), `ms`
+(divided by 1000), `s`, `min` (times 60), `h` (times 3600), `pct` (divided
+by 100), `px`, `L` and `n`. `s`, `px`, `L` and `n` leave the value
+unchanged; `n` in addition yields a BigInt, see [Numbers](#numbers).
 
 `XTJSONOptions` validates the options once. Create it once and reuse it for
-`parse` and `stringify`. A plain object `{ values, ijson }` can be passed as
-well, but it is validated again on every call.
+`parse` and `stringify`. A plain object with the same properties can be
+passed as well, but it is validated again on every call.
 
 ### Telling the arguments apart
 
@@ -217,6 +246,13 @@ named exports.
   `102.4`, `100ms` is `0.1`, `12.5pct` is `0.125`. A suffix that is not in
   the table of section 9.5 is an error; suffixes are case-sensitive (`10MS`
   and `10l` are errors).
+- A number with the suffix `n` and without a fraction part becomes a BigInt
+  if its value is an integer: `10n`, `0xFFn`, `9007199254740993n` and `1e3n`
+  (`1000n`) are exact at any size. `1.5n`, `1.0n` and `12e-1n` stay
+  numbers, as the specification gives the suffix `n` no effect on the value.
+  The exponent of such a number may be at most 10000, so that a short text
+  cannot demand a huge BigInt. A reviver receives the BigInt; note that
+  `JSON.stringify` cannot write it, `XTJSON.stringify` can.
 
 ## Not yet implemented
 

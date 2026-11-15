@@ -91,7 +91,7 @@ describe('reviver', () => {
 });
 
 describe('call forms', () => {
-  const init = { values: { nil: null } };
+  const init = { namedValues: { nil: null } };
   const defs = new XTJSONOptions(init);
   const text = '[nil, 50pct, 1]';
   const expected = [null, 0.5, 1];
@@ -117,7 +117,7 @@ describe('call forms', () => {
   });
 
   test('invalid arguments are a TypeError', () => {
-    assert.throws(() => XTJSON.parse(text, { values: { true: 1 } }), TypeError);
+    assert.throws(() => XTJSON.parse(text, { namedValues: { true: 1 } }), TypeError);
     assert.throws(() => XTJSON.parse(text, []), /unexpected argument of type object/);
     assert.throws(() => XTJSON.parse(text, null, 'x'), /unexpected argument of type string/);
     assert.throws(() => XTJSON.parse(text, defs, () => 1), /the reviver is in the wrong position/);
@@ -125,31 +125,31 @@ describe('call forms', () => {
 });
 
 describe('options: named values', () => {
-  const init = { values: { nil: null, zero: 0, yes: true, name: 'demo', half: 0.5 } };
+  const init = { namedValues: { nil: null, zero: 0, yes: true, name: 'demo', half: 0.5 } };
 
   test('accepts a plain object, a Map or an iterable of pairs', () => {
     const text = '[nil, zero, yes, name, half, 50pct]';
     const expected = [null, 0, true, 'demo', 0.5, 0.5];
     assert.deepEqual(XTJSON.parse(text, null, init), expected);
-    assert.deepEqual(XTJSON.parse(text, null, { values: new Map(Object.entries(init.values)) }), expected);
-    assert.deepEqual(XTJSON.parse(text, null, { values: Object.entries(init.values) }), expected);
+    assert.deepEqual(XTJSON.parse(text, null, { namedValues: new Map(Object.entries(init.namedValues)) }), expected);
+    assert.deepEqual(XTJSON.parse(text, null, { namedValues: Object.entries(init.namedValues) }), expected);
   });
 
   test('XTJSONOptions keeps the order of the named values', () => {
-    const defs = new XTJSONOptions({ values: [['zeta', 1], ['alpha', 2], ['mid', 3]] });
-    assert.deepEqual([...defs.values.keys()], ['zeta', 'alpha', 'mid']);
-    const fromObject = new XTJSONOptions({ values: { zeta: 1, alpha: 2, $x: 3, _y: 4 } });
-    assert.deepEqual([...fromObject.values.keys()], ['zeta', 'alpha', '$x', '_y']);
+    const defs = new XTJSONOptions({ namedValues: [['zeta', 1], ['alpha', 2], ['mid', 3]] });
+    assert.deepEqual([...defs.namedValues.keys()], ['zeta', 'alpha', 'mid']);
+    const fromObject = new XTJSONOptions({ namedValues: { zeta: 1, alpha: 2, $x: 3, _y: 4 } });
+    assert.deepEqual([...fromObject.namedValues.keys()], ['zeta', 'alpha', '$x', '_y']);
   });
 
   test('XTJSONOptions is immutable and independent of its input', () => {
     const source = { a: 1 };
-    const defs = new XTJSONOptions({ values: source });
+    const defs = new XTJSONOptions({ namedValues: source });
     source.a = 2;
     source.other = 1;
     assert.equal(XTJSON.parse('a', null, defs), 1);
     assert.ok(Object.isFrozen(defs));
-    defs.values.set('other', 1); // a copy; does not change defs
+    defs.namedValues.set('other', 1); // a copy; does not change defs
     assert.throws(() => XTJSON.parse('other', null, defs), XTJSONError);
   });
 
@@ -166,9 +166,17 @@ describe('options: named values', () => {
 
   test('objects and arrays are not permitted as named values (6.4)', () => {
     for (const value of [[], {}, [1, 2], { a: 1 }, [[]], new Date(), new Map()]) {
-      assert.throws(() => new XTJSONOptions({ values: { x: value } }),
+      assert.throws(() => new XTJSONOptions({ namedValues: { x: value } }),
         (e) => e instanceof TypeError && /the named value 'x' is an? (array|object); a named value must be a string, a number, true, false or null/.test(e.message));
     }
+  });
+
+  test('unknown options are a TypeError', () => {
+    assert.throws(() => new XTJSONOptions({ values: { nil: null } }),
+      /Unknown XTJSON option "values"; named values are given as "namedValues"/);
+    assert.throws(() => XTJSON.parse('1', { ijosn: true }),
+      /Unknown XTJSON option "ijosn"\. The options are "namedValues", "ijson", "maxDepth", "writeNumberSuffixes" and "writeSingleQuotes"/);
+    assert.deepEqual(XTJSON.parse('1', { namedValues: undefined, ijson: undefined, maxDepth: undefined }), 1);
   });
 
   test('custom number suffixes are not supported (9.5)', () => {
@@ -181,14 +189,14 @@ describe('options: named values', () => {
 
   test('invalid options throw TypeError', () => {
     const cases = [
-      [{ values: [['a', 1], ['a', 2]] }, /defined more than once/],
-      [{ values: { x: undefined } }, /undefined/],
-      [{ values: { x: () => 1 } }, /function/],
-      [{ values: { x: 1n } }, /bigint/],
-      [{ values: { x: Infinity } }, /not a JSON number/],
-      [{ values: { x: NaN } }, /not a JSON number/],
-      [{ values: 'abc' }, /must be an object/],
-      [{ values: [1, 2] }, /pairs/],
+      [{ namedValues: [['a', 1], ['a', 2]] }, /defined more than once/],
+      [{ namedValues: { x: undefined } }, /undefined/],
+      [{ namedValues: { x: () => 1 } }, /function/],
+      [{ namedValues: { x: 1n } }, /bigint/],
+      [{ namedValues: { x: Infinity } }, /not a JSON number/],
+      [{ namedValues: { x: NaN } }, /not a JSON number/],
+      [{ namedValues: 'abc' }, /must be an object/],
+      [{ namedValues: [1, 2] }, /pairs/],
       ['abc', /must be an object/],
     ];
     for (const [defs, pattern] of cases) {
@@ -252,7 +260,7 @@ describe('I-JSON mode', () => {
   test('values of named values count as well', () => {
     const defs = new XTJSONOptions({
       ijson: true,
-      values: { bad: 'ok' + String.fromCharCode(0xffff), lone: '\uD800', good: 'b' },
+      namedValues: { bad: 'ok' + String.fromCharCode(0xffff), lone: '\uD800', good: 'b' },
     });
     assert.deepEqual(XTJSON.parse('[good]', defs), ['b']);
     const e = error('x: 1\ny: [good, bad]', defs);
@@ -260,7 +268,7 @@ describe('I-JSON mode', () => {
     assert.deepEqual([e.line, e.column], [2, 11]);
     assert.match(error('lone', defs).message, /unpaired surrogate U\+D800/);
     // outside the I-JSON mode the same definitions are fine
-    assert.equal(XTJSON.parse('lone', { values: { lone: '\uD800' } }), '\uD800');
+    assert.equal(XTJSON.parse('lone', { namedValues: { lone: '\uD800' } }), '\uD800');
   });
 
   test('large numbers are not rejected (only a SHOULD in section 12)', () => {
@@ -322,11 +330,38 @@ describe('numbers', () => {
     const table = {
       k: 2000, K: 2000, kb: 2048, Kb: 2048, kB: 2048, KB: 2048,
       mb: 2097152, Mb: 2097152, mB: 2097152, MB: 2097152,
-      ms: 0.002, s: 2, min: 120, h: 7200, pct: 0.02, px: 2, L: 2, n: 2,
+      ms: 0.002, s: 2, min: 120, h: 7200, pct: 0.02, px: 2, L: 2, n: 2n,
     };
     for (const [suffix, expected] of Object.entries(table)) {
       assert.equal(XTJSON.parse('2' + suffix), expected, suffix);
     }
+  });
+
+  test('integers with the suffix n become a BigInt', () => {
+    const cases = [
+      ['10n', 10n], ['-3n', -3n], ['0n', 0n], ['-0n', 0n], ['1_000n', 1000n],
+      ['9007199254740993n', 9007199254740993n], ['0xFFn', 255n], ['-0xFFn', -255n], ['0o17n', 15n],
+      ['0b101n', 5n], ['0x1_0000_0000_0000_0001n', 18446744073709551617n],
+      ['1e3n', 1000n], ['120e-1n', 12n], ['0e-5n', 0n], ['1e30n', 10n ** 30n],
+    ];
+    for (const [text, expected] of cases) assert.equal(XTJSON.parse(text), expected, text);
+    assert.deepEqual(XTJSON.parse('a: 1n, b: [2n, 3]'), { a: 1n, b: [2n, 3] });
+    // the reviver receives the BigInt
+    assert.equal(XTJSON.parse('[5n]', (k, v) => (typeof v === 'bigint' ? Number(v) * 2 : v))[0], 10);
+  });
+
+  test('numbers with a fraction part or a non-integer value stay numbers with the suffix n', () => {
+    for (const [text, expected] of [['1.5n', 1.5], ['1.0n', 1], ['12e-1n', 1.2], ['1e-3n', 0.001], ['1.5L', 1.5], ['100L', 100]]) {
+      const value = XTJSON.parse(text);
+      assert.equal(typeof value, 'number', text);
+      assert.equal(value, expected, text);
+    }
+  });
+
+  test('the exponent of a BigInt is limited', () => {
+    assert.equal(String(XTJSON.parse('1e10000n')).length, 10001);
+    assert.match(error('a: 1e10001n').message, /exponent of a BigInt number \(suffix n\) exceeds the limit of 10000 \(line 1, column 4\)/);
+    assert.equal(XTJSON.parse('0e99999n'), 0n);
   });
 
   test('predefined factors give the exact product (9.5)', () => {
@@ -373,6 +408,40 @@ describe('limits', () => {
     const e = error('['.repeat(1001) + ']'.repeat(1001));
     assert.match(e.message, /Nesting depth exceeds the limit of 1000/);
     assert.match(error('a: ' + '{a: '.repeat(1001)).message, /Nesting depth/);
+  });
+
+  test('the implicit root object is a level as well', () => {
+    const nested = (n) => '['.repeat(n) + ']'.repeat(n);
+    assert.deepEqual(XTJSON.parse('a: ' + nested(999)).a.length, 1);
+    const e = error('a: ' + nested(1000));
+    assert.match(e.message, /Nesting depth exceeds the limit of 1000 \(option maxDepth\)/);
+    assert.deepEqual([e.line, e.column], [1, 1003]);
+  });
+
+  test('maxDepth changes the limit', () => {
+    const nested = (n) => '['.repeat(n) + ']'.repeat(n);
+    assert.equal(XTJSON.parse(nested(2), { maxDepth: 2 }).length, 1);
+    assert.match(error(nested(3), { maxDepth: 2 }).message, /limit of 2 \(option maxDepth\)/);
+    assert.equal(XTJSON.parse('1', { maxDepth: 1 }), 1);
+    assert.deepEqual(XTJSON.parse('a: 1', { maxDepth: 1 }), { a: 1 });
+    assert.match(error('a: []', { maxDepth: 1 }).message, /limit of 1/);
+    assert.equal(XTJSON.parse(nested(1500), { maxDepth: 2000 }).length, 1);
+    assert.equal(new XTJSONOptions().maxDepth, 1000);
+    assert.equal(new XTJSONOptions({ maxDepth: 5 }).maxDepth, 5);
+    assert.equal(new XTJSONOptions(new XTJSONOptions({ maxDepth: 5 })).maxDepth, 5);
+  });
+
+  test('maxDepth must be a positive integer', () => {
+    for (const maxDepth of [0, -1, 1.5, Infinity, NaN, '10', 2 ** 53, true]) {
+      assert.throws(() => new XTJSONOptions({ maxDepth }), /"maxDepth" must be a positive integer/, String(maxDepth));
+    }
+  });
+
+  test('a maxDepth beyond the call stack is reported as an error of the document', () => {
+    const n = 200000;
+    const e = error('a: ' + '['.repeat(n) + ']'.repeat(n), { maxDepth: n + 1 });
+    assert.match(e.message, /exceeds the call stack of the JavaScript engine; use a smaller maxDepth/);
+    assert.ok(e.cause !== undefined);
   });
 });
 

@@ -25,8 +25,14 @@
 // ---------------------------------------------------------------------------
 // Limits (section 11). Hitting a limit is reported as an error.
 
-/** Maximum nesting depth of objects and arrays. */
-const MAX_DEPTH = 1000;
+/** Default for the option `maxDepth`: maximum nesting depth of objects and arrays. */
+const DEFAULT_MAX_DEPTH = 1000;
+
+/**
+ * Largest exponent of a number that becomes a BigInt (suffix n); limits the
+ * size of the BigInt that a short text such as `1e999999999n` could demand.
+ */
+const MAX_BIGINT_EXPONENT = 10000;
 
 // ---------------------------------------------------------------------------
 // Character codes
@@ -218,29 +224,35 @@ const OPTIONS = new WeakMap();
  */
 export class XTJSONOptions {
   /**
-   * @param {{values?: object, ijson?: boolean}} [init]
-   *   `values`: identifier -> string, number, boolean or null, as a plain
-   *   object, a `Map` or an iterable of `[key, value]` pairs.
+   * @param {{namedValues?: object, ijson?: boolean, maxDepth?: number,
+   *   writeNumberSuffixes?: boolean, writeSingleQuotes?: boolean}} [init]
+   *   `namedValues`: identifier -> string, number, boolean or null, as a
+   *   plain object, a `Map` or an iterable of `[key, value]` pairs.
    *   `ijson`: true for the I-JSON mode.
-   * @throws {TypeError} if a definition violates 6.4
+   *   `maxDepth`: maximum nesting depth of objects and arrays (default 1000).
+   *   `writeNumberSuffixes`: `stringify` writes number suffixes (default false).
+   *   `writeSingleQuotes`: `stringify` writes strings in `'` and `'''` (default false).
+   * @throws {TypeError} if an option is unknown or invalid, or a definition
+   *   violates 6.4
    */
   constructor(init) {
     if (init !== undefined && init !== null && (typeof init !== 'object' || Array.isArray(init))) {
-      throw new TypeError('XTJSON options must be an object with the properties "values" and "ijson"');
+      throw new TypeError(`XTJSON options must be an object with the properties ${OPTION_LIST}`);
     }
-    if (init?.suffixes !== undefined) {
-      throw new TypeError('Invalid XTJSON option: custom number suffixes are not supported; the suffixes are fixed by section 9.5 of the specification');
-    }
-    const ijson = init?.ijson ?? false;
-    if (typeof ijson !== 'boolean') {
-      throw new TypeError(`Invalid XTJSON option: "ijson" must be true or false, not ${quote(ijson)}`);
+    if (init !== undefined && init !== null && !OPTIONS.has(init)) checkOptionNames(init);
+    const ijson = booleanOption(init, 'ijson');
+    const writeNumberSuffixes = booleanOption(init, 'writeNumberSuffixes');
+    const writeSingleQuotes = booleanOption(init, 'writeSingleQuotes');
+    const maxDepth = init?.maxDepth ?? DEFAULT_MAX_DEPTH;
+    if (!Number.isSafeInteger(maxDepth) || maxDepth < 1) {
+      throw new TypeError(`Invalid XTJSON option: "maxDepth" must be a positive integer, not ${quote(maxDepth)}`);
     }
     const values = new Map();
     // Named values whose value is not I-JSON conforming, with the reason.
     const ijsonIssues = new Map();
     // For stringify: value -> identifier; the last definition wins.
     const names = new Map();
-    for (const [id, value] of entries(init?.values, 'values')) {
+    for (const [id, value] of entries(init?.namedValues, 'namedValues')) {
       if (typeof id !== 'string' || !IDENTIFIER.test(id)) {
         throw new TypeError(`Invalid XTJSON definition: ${quote(id)} is not an identifier (ASCII letters, digits, "_" and "$", not beginning with a digit)`);
       }
@@ -258,7 +270,7 @@ export class XTJSONOptions {
       }
       names.set(value, id);
     }
-    OPTIONS.set(this, { values, ijson, ijsonIssues, names });
+    OPTIONS.set(this, { values, ijson, maxDepth, writeNumberSuffixes, writeSingleQuotes, ijsonIssues, names });
     Object.freeze(this);
   }
 
@@ -275,8 +287,35 @@ export class XTJSONOptions {
    * The custom named values in their defined order. Returns a new `Map`.
    * @returns {Map<string, string | number | boolean | null>}
    */
-  get values() {
+  get namedValues() {
     return new Map(OPTIONS.get(this).values);
+  }
+
+  /**
+   * Maximum nesting depth of objects and arrays, for `parse` and
+   * `stringify`. An implicit root object counts as a level.
+   * @returns {number}
+   */
+  get maxDepth() {
+    return OPTIONS.get(this).maxDepth;
+  }
+
+  /**
+   * True if `stringify` writes number suffixes (`64mb`, `2h`, `50pct`).
+   * BigInt values always get the suffix `n`.
+   * @returns {boolean}
+   */
+  get writeNumberSuffixes() {
+    return OPTIONS.get(this).writeNumberSuffixes;
+  }
+
+  /**
+   * True if `stringify` writes strings and quoted names in `'` and
+   * multi-line strings in `'''` instead of `"` and `"""`.
+   * @returns {boolean}
+   */
+  get writeSingleQuotes() {
+    return OPTIONS.get(this).writeSingleQuotes;
   }
 
   get [Symbol.toStringTag]() {
@@ -285,8 +324,38 @@ export class XTJSONOptions {
 }
 
 const DEFAULT_OPTIONS = {
-  values: new Map(), ijson: false, ijsonIssues: new Map(), names: new Map(),
+  values: new Map(),
+  ijson: false,
+  maxDepth: DEFAULT_MAX_DEPTH,
+  writeNumberSuffixes: false,
+  writeSingleQuotes: false,
+  ijsonIssues: new Map(),
+  names: new Map(),
 };
+
+const OPTION_NAMES = new Set(['namedValues', 'ijson', 'maxDepth', 'writeNumberSuffixes', 'writeSingleQuotes']);
+const OPTION_LIST = '"namedValues", "ijson", "maxDepth", "writeNumberSuffixes" and "writeSingleQuotes"';
+
+/** A boolean option; false if not given. */
+function booleanOption(init, name) {
+  const value = init?.[name] ?? false;
+  if (typeof value !== 'boolean') {
+    throw new TypeError(`Invalid XTJSON option: "${name}" must be true or false, not ${quote(value)}`);
+  }
+  return value;
+}
+
+/** Rejects unknown properties of a plain options object. */
+function checkOptionNames(init) {
+  for (const key of Object.keys(init)) {
+    if (OPTION_NAMES.has(key)) continue;
+    if (key === 'suffixes') {
+      throw new TypeError('Invalid XTJSON option: custom number suffixes are not supported; the suffixes are fixed by section 9.5 of the specification');
+    }
+    const hint = key === 'values' ? '; named values are given as "namedValues"' : '';
+    throw new TypeError(`Unknown XTJSON option ${quote(key)}${hint}. The options are ${OPTION_LIST}`);
+  }
+}
 
 // ---------------------------------------------------------------------------
 // I-JSON (12)
@@ -386,6 +455,7 @@ class Parser {
     this.len = text.length;
     this.pos = 0;
     this.depth = 0;
+    this.maxDepth = options.maxDepth;
     this.values = options.values;
     this.ijson = options.ijson;
     this.ijsonIssues = options.ijsonIssues;
@@ -479,7 +549,9 @@ class Parser {
       this.skipSpace();
       if (this.peek() === COLON) {
         value = {};
+        this.enter(start); // the implicit root object is a level as well
         this.parseMembers(value, EOF, start, token);
+        this.depth--;
       } else {
         value = isIdentifier ? this.resolveNamedValue(token, start) : token;
       }
@@ -567,8 +639,8 @@ class Parser {
   // ----- Objects and arrays (7) -------------------------------------------
 
   enter(start) {
-    if (++this.depth > MAX_DEPTH) {
-      this.fail(`Nesting depth exceeds the limit of ${MAX_DEPTH}`, start);
+    if (++this.depth > this.maxDepth) {
+      this.fail(`Nesting depth exceeds the limit of ${this.maxDepth} (option maxDepth)`, start);
     }
   }
 
@@ -962,7 +1034,14 @@ class Parser {
       // 9.2: hexadecimal, octal, binary
       const digitsStart = pos + 2;
       pos = this.scanDigits(digitsStart, radix, `after '${text.slice(pos, pos + 2)}'`);
-      value = this.radixValue(text.slice(digitsStart, pos), radix, start);
+      const digits = text.slice(digitsStart, pos);
+      if (this.atSuffixN(pos)) {
+        // With the suffix n the integer becomes a BigInt, so it is exact at
+        // any size.
+        value = BigInt(RADIX_PREFIX[radix] + digits.replaceAll('_', ''));
+      } else {
+        value = this.radixValue(digits, radix, start);
+      }
       if (text.charCodeAt(start) === MINUS) value = -value;
     } else {
       // 9.1: decimal
@@ -976,20 +1055,27 @@ class Parser {
       } else {
         pos = this.scanDigits(pos, 10, '');
       }
+      let hasFraction = false;
       if (text.charCodeAt(pos) === DOT) {
         isInteger = false;
+        hasFraction = true;
         pos = this.scanDigits(pos + 1, 10, "after '.'");
       }
+      let exponentStart = -1;
       if ((text.charCodeAt(pos) | 0x20) === 0x65) { // e E
         isInteger = false;
+        exponentStart = pos;
         pos++;
         const c = text.charCodeAt(pos);
         if (c === PLUS || c === MINUS) pos++;
         pos = this.scanDigits(pos, 10, 'in the exponent');
       }
+      // With the suffix n a number without a fraction part becomes a BigInt
+      // if its value is an integer.
+      if (!hasFraction && this.atSuffixN(pos)) value = this.bigIntValue(start, exponentStart, pos);
       // May be Infinity; the range is checked below, after the suffix
       // (9.4: `4.4e308pct` is 4.4e306).
-      value = Number(this.withoutUnderscores(start, pos));
+      value ??= Number(this.withoutUnderscores(start, pos));
     }
 
     // 9.5: suffix
@@ -1004,10 +1090,12 @@ class Parser {
       if (c === DOT || c === PERCENT) {
         this.fail(`Unexpected '${String.fromCharCode(c)}' after the number suffix '${suffix}'`, pos);
       }
-      // `value` is exact for non-decimal numbers (checked in radixValue) and
-      // for decimal integers within the safe range; otherwise it may be rounded.
-      const exact = radix !== 10 || (isInteger && Math.abs(value) <= Number.MAX_SAFE_INTEGER);
-      value = this.applySuffix(suffix, value, exact, start, suffixStart);
+      if (typeof value !== 'bigint') {
+        // `value` is exact for non-decimal numbers (checked in radixValue) and
+        // for decimal integers within the safe range; otherwise it may be rounded.
+        const exact = radix !== 10 || (isInteger && Math.abs(value) <= Number.MAX_SAFE_INTEGER);
+        value = this.applySuffix(suffix, value, exact, start, suffixStart);
+      }
     } else if (c === PERCENT) {
       this.fail("'%' is not permitted after a number; for a percentage use the suffix 'pct' (50pct is 0.5)", pos);
     } else if (c === DOT) {
@@ -1021,10 +1109,40 @@ class Parser {
       if (c === UNDERSCORE) this.fail("'_' is only permitted between two digits", pos);
       this.fail(`Unexpected '${String.fromCharCode(c)}' after a number; a number suffix cannot begin with a to f, o or x`, pos);
     }
-    if (!Number.isFinite(value)) this.fail('The number is out of range', start);
+    if (typeof value === 'number' && !Number.isFinite(value)) this.fail('The number is out of range', start);
 
     this.pos = pos;
     return value;
+  }
+
+  /** True if the suffix `n` (and nothing longer) begins at `pos`. */
+  atSuffixN(pos) {
+    return this.text.charCodeAt(pos) === 0x6e && !hasFlag(this.text.charCodeAt(pos + 1), ID_PART);
+  }
+
+  /**
+   * Value of a decimal number without a fraction part as a BigInt, or
+   * undefined if it is not an integer (`12e-1`). `exponentStart` is the
+   * offset of the `e`, or -1.
+   */
+  bigIntValue(start, exponentStart, end) {
+    let digits = this.withoutUnderscores(start, exponentStart < 0 ? end : exponentStart);
+    const negative = digits.charCodeAt(0) === MINUS;
+    if (negative) digits = digits.slice(1);
+    let exponent = exponentStart < 0 ? 0 : Number(this.withoutUnderscores(exponentStart + 1, end));
+    const significant = digits.replace(/0+$/, '');
+    if (significant === '') return 0n;
+    if (exponent < 0) {
+      if (digits.length - significant.length < -exponent) return undefined;
+      digits = digits.slice(0, digits.length + exponent);
+      exponent = 0;
+    }
+    if (exponent > MAX_BIGINT_EXPONENT) {
+      this.fail(`The exponent of a BigInt number (suffix n) exceeds the limit of ${MAX_BIGINT_EXPONENT}`, start);
+    }
+    let value = BigInt(digits);
+    if (exponent > 0) value *= 10n ** BigInt(exponent);
+    return negative ? -value : value;
   }
 
   /**
@@ -1157,8 +1275,20 @@ function reviveMember(obj, key, reviver) {
 // ---------------------------------------------------------------------------
 // Generator
 
-/** Suffixes that stringify writes, in the order of priority (9.5). */
-const OUTPUT_SUFFIXES = [['mb', 1048576], ['kb', 1024], ['k', 1000]];
+/**
+ * Suffixes that stringify writes for integers, in the order of priority
+ * (9.5): the binary sizes first, then thousands, then hours and minutes.
+ */
+const MULTIPLYING_SUFFIXES = [['mb', 1048576], ['kb', 1024], ['k', 1000], ['h', 3600], ['min', 60]];
+
+/**
+ * Suffixes that stringify writes for fractions between -1 and 1, in the
+ * order of priority, with the power of ten they divide by (9.5).
+ */
+const DIVIDING_SUFFIXES = [['pct', 2], ['ms', 3]];
+
+/** Integers with at least this magnitude get `_` between groups of digits. */
+const GROUPING_THRESHOLD = 10000;
 
 /** Maximum length of the indentation, as in JSON.stringify. */
 const MAX_GAP = 10;
@@ -1180,26 +1310,64 @@ function quoteString(s) {
 }
 
 /**
- * A number as a decimal with `_` between groups of three digits of the
- * integer part (9.3). Integers that are multiples of 1048576, 1024 or 1000
- * get the suffix `mb`, `kb` or `k` (in this order of priority), as long as
- * the remaining factor is a safe integer so that the text reads back as
- * exactly the same number.
+ * A string in single quotation marks (8.1): the escapes of `quoteString`,
+ * but `"` unescaped and `'` escaped.
  */
-function formatNumber(n) {
-  if (n !== 0 && Number.isInteger(n)) {
-    for (const [suffix, factor] of OUTPUT_SUFFIXES) {
+function singleQuoteString(s) {
+  const body = quoteString(s).slice(1, -1).replace(/\\.|'/g, (m) => {
+    if (m === "'") return "\\'";
+    return m === '\\"' ? '"' : m;
+  });
+  return "'" + body + "'";
+}
+
+/** A BigInt as an integer with the suffix `n` (9.5). */
+function formatBigInt(n) {
+  return groupDigits(String(n)) + 'n';
+}
+
+/**
+ * A number in decimal notation. With `writeNumberSuffixes`, a suffix where one
+ * applies (9.5):
+ *
+ * - An integer that is a multiple of 1048576, 1024, 1000, 3600 or 60 gets
+ *   the suffix `mb`, `kb`, `k`, `h` or `min`, the first that applies, as
+ *   long as the remaining factor is a safe integer.
+ * - A fraction between -1 and 1 that is a whole number of hundredths or
+ *   thousandths gets the suffix `pct` or `ms`, the first that applies.
+ *
+ * Every text reads back as exactly the same number. An integer part of
+ * 10000 or more gets `_` between groups of three digits (9.3).
+ */
+function formatNumber(n, writeNumberSuffixes) {
+  if (n === 0) return '0'; // also for -0, as in JSON.stringify
+  if (!writeNumberSuffixes) return groupDigits(String(n));
+  if (Number.isInteger(n)) {
+    for (const [suffix, factor] of MULTIPLYING_SUFFIXES) {
       if (n % factor === 0 && Math.abs(n / factor) <= Number.MAX_SAFE_INTEGER) {
         return groupDigits(String(n / factor)) + suffix;
       }
     }
+  } else if (Math.abs(n) < 1) {
+    // |n| = digits × 10^exponent, from the shortest decimal that reads back
+    // as n; shifting the decimal point keeps the value exact.
+    const m = /^(\d+)(?:\.(\d+))?(?:e([+-]\d+))?$/.exec(String(Math.abs(n)));
+    const fraction = m[2] ?? '';
+    const digits = (m[1] + fraction).replace(/^0+/, '');
+    const exponent = Number(m[3] ?? 0) - fraction.length;
+    for (const [suffix, shift] of DIVIDING_SUFFIXES) {
+      if (exponent + shift >= 0) {
+        return (n < 0 ? '-' : '') + groupDigits(digits + '0'.repeat(exponent + shift)) + suffix;
+      }
+    }
   }
-  return groupDigits(String(n)); // String(-0) is "0", as in JSON.stringify
+  return groupDigits(String(n));
 }
 
+/** Inserts `_` into an integer part of 10000 or more (9.3). */
 function groupDigits(text) {
   const m = /^(-?)(\d+)(.*)$/.exec(text);
-  if (m[2].length <= 3) return text;
+  if (m[2].length < String(GROUPING_THRESHOLD).length) return text;
   return m[1] + m[2].replace(/\B(?=(\d{3})+$)/g, '_') + m[3];
 }
 
@@ -1217,6 +1385,7 @@ function escapeCode(c) {
     case CR: return '\\r';
     case BACKSLASH: return '\\\\';
     case DQUOTE: return '\\"';
+    case SQUOTE: return "\\'";
     default: return '\\u' + c.toString(16).toUpperCase().padStart(4, '0');
   }
 }
@@ -1227,20 +1396,21 @@ function escapeCode(c) {
  * unpaired surrogates, U+2028 and U+2029, the third of three quotation
  * marks in a row, a quotation mark directly before the closing delimiter
  * (`beforeDelimiter`) and a space or tab at the end of a line that step 2
- * would remove (`trailingBlank`).
+ * would remove (`trailingBlank`). `quote` is the code of the quotation mark
+ * of the delimiter.
  */
-function escapeMultiLineText(text, trailingBlank, beforeDelimiter) {
+function escapeMultiLineText(text, trailingBlank, beforeDelimiter, quote) {
   const n = text.length;
   let out = '';
   let quotes = 0; // unescaped quotation marks in a row
   for (let i = 0; i < n; i++) {
     const c = text.charCodeAt(i);
-    if (c === DQUOTE) {
+    if (c === quote) {
       if (quotes === 2 || (beforeDelimiter && i === n - 1)) {
-        out += '\\"';
+        out += escapeCode(quote);
         quotes = 0;
       } else {
-        out += '"';
+        out += text[i];
         quotes++;
       }
       continue;
@@ -1266,22 +1436,23 @@ function escapeMultiLineText(text, trailingBlank, beforeDelimiter) {
 }
 
 /**
- * A multi-line string (8.3) whose lines are indented with `indent`. The
- * text begins with an empty line, so that exactly `indent` is removed again
- * when it is read.
+ * A multi-line string (8.3) whose lines are indented with `indent`, with
+ * the delimiter `"""` or `'''` (`quote`). The text begins with an empty
+ * line, so that exactly `indent` is removed again when it is read.
  */
-function multiLineString(value, indent) {
+function multiLineString(value, indent, quote) {
+  const delimiter = String.fromCharCode(quote).repeat(3);
   const parts = value.split('\n');
   const last = parts.length - 1;
   const lines = [];
   for (let i = 0; i < last; i++) {
-    lines.push(parts[i] === '' ? '' : indent + escapeMultiLineText(parts[i], true, false));
+    lines.push(parts[i] === '' ? '' : indent + escapeMultiLineText(parts[i], true, false, quote));
   }
   if (parts[last] === '') {
     // The value ends with a line break: the closing delimiter gets its own line.
-    lines.push(indent + '"""');
+    lines.push(indent + delimiter);
   } else {
-    let text = escapeMultiLineText(parts[last], false, true);
+    let text = escapeMultiLineText(parts[last], false, true, quote);
     // The last line counts towards the smallest indentation. If it and all
     // other lines begin with white space, more than `indent` would be
     // removed; escaping its first character prevents that.
@@ -1289,9 +1460,9 @@ function multiLineString(value, indent) {
         lines.every((line) => line === '' || isBlankCode(line.charCodeAt(indent.length)))) {
       text = escapeCode(text.charCodeAt(0)) + text.slice(1);
     }
-    lines.push(indent + text + '"""');
+    lines.push(indent + text + delimiter);
   }
-  return '"""\n' + lines.join('\n');
+  return delimiter + '\n' + lines.join('\n');
 }
 
 /** Serialization as in JSON.stringify (ECMA-262 SerializeJSONProperty). */
@@ -1308,6 +1479,9 @@ class Generator {
     this.gap = gap;
     this.names = options.names;
     this.ijson = options.ijson;
+    this.maxDepth = options.maxDepth;
+    this.writeNumberSuffixes = options.writeNumberSuffixes;
+    this.quote = options.writeSingleQuotes ? SQUOTE : DQUOTE;
     this.stack = [];
   }
 
@@ -1352,11 +1526,11 @@ class Generator {
         return this.string(value, indent);
       case 'number':
         if (!Number.isFinite(value)) return this.literal(null); // as JSON
-        return this.names.get(value) ?? formatNumber(value);
+        return this.names.get(value) ?? formatNumber(value, this.writeNumberSuffixes);
       case 'boolean':
         return this.literal(value);
       case 'bigint':
-        throw new TypeError('XTJSON.stringify: a BigInt cannot be written; convert it with toJSON or a replacer');
+        return formatBigInt(value); // always with the suffix n, so it reads back as a BigInt
       case 'object':
         if (value === null) return this.literal(null);
         if (IS_RAW_JSON(value)) return value.rawJSON;
@@ -1375,14 +1549,19 @@ class Generator {
     if (this.ijson) this.checkIJSON(value, 'a string');
     const name = this.names.get(value);
     if (name !== undefined) return name;
-    if (this.gap !== '' && value.includes('\n')) return multiLineString(value, indent + this.gap);
-    return quoteString(value);
+    if (this.gap !== '' && value.includes('\n')) return multiLineString(value, indent + this.gap, this.quote);
+    return this.quoted(value);
   }
 
   /** A name (7.2): an identifier if possible, otherwise a string. */
   name(key) {
     if (this.ijson) this.checkIJSON(key, 'the name');
-    return IDENTIFIER.test(key) ? key : quoteString(key);
+    return IDENTIFIER.test(key) ? key : this.quoted(key);
+  }
+
+  /** A single-line string in the configured quotation marks. */
+  quoted(value) {
+    return this.quote === SQUOTE ? singleQuoteString(value) : quoteString(value);
   }
 
   checkIJSON(value, what) {
@@ -1395,6 +1574,9 @@ class Generator {
   enter(value) {
     if (this.stack.includes(value)) {
       throw new TypeError('XTJSON.stringify: the value contains a circular reference');
+    }
+    if (this.stack.length >= this.maxDepth) {
+      throw new TypeError(`XTJSON.stringify: objects and arrays are nested deeper than the limit of ${this.maxDepth} (option maxDepth)`);
     }
     this.stack.push(value);
   }
@@ -1535,8 +1717,9 @@ const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[
  *   a function transforms the result, as in `JSON.parse`; an object are the
  *   options
  * @param {XTJSONOptions | object | null} [options] custom named values,
- *   and the I-JSON mode
- * @returns {any}
+ *   the I-JSON mode and the maximum nesting depth
+ * @returns {any} the value; a number with the suffix `n` and without a
+ *   fraction part becomes a BigInt if its value is an integer
  * @throws {XTJSONError} if the text is not a valid XTJSON document
  * @throws {TypeError} if the arguments or the options are invalid
  */
@@ -1551,7 +1734,19 @@ function parse(text, reviver, options) {
       `Unpaired surrogate ${hex4(source.charCodeAt(offset))}; the text is not valid Unicode and cannot be encoded as UTF-8`,
       line, column, offset);
   }
-  const value = new Parser(source, resolved).parseDocument();
+  const parser = new Parser(source, resolved);
+  let value;
+  try {
+    value = parser.parseDocument();
+  } catch (error) {
+    // A large maxDepth can exceed the call stack of the engine (RangeError
+    // in V8 and JavaScriptCore, InternalError in SpiderMonkey).
+    if (!(error instanceof XTJSONError) && parser.depth > 0 &&
+        (error instanceof RangeError || error?.name === 'InternalError')) {
+      parser.fail(`Nesting depth ${parser.depth} exceeds the call stack of the JavaScript engine; use a smaller maxDepth`, parser.pos, error);
+    }
+    throw error;
+  }
   return reviver === undefined ? value : internalize({ '': value }, '', reviver);
 }
 
@@ -1562,10 +1757,14 @@ function parse(text, reviver, options) {
  * an object at the top level is written without braces; names that are
  * identifiers are written without quotation marks; with `space`, items are
  * separated by line breaks instead of commas and strings that contain a
- * line break are written as multi-line strings; numbers are grouped with
- * `_` and multiples of 1048576, 1024 and 1000 get the suffix `mb`, `kb` or
- * `k`; primitive values for which a named value is defined are written as
- * that named value.
+ * line break are written as multi-line strings; numbers of 10000 or more
+ * are grouped with `_`; with the option `writeNumberSuffixes`, integers that are
+ * multiples of 1048576, 1024, 1000, 3600 or 60 get the suffix `mb`, `kb`,
+ * `k`, `h` or `min`, and fractions between -1 and 1 the suffix `pct` or `ms`
+ * where they fit; BigInt values are written with the suffix `n`; with the
+ * option `writeSingleQuotes`, strings are written in `'` and `'''`; primitive
+ * values for which a named value is defined are written as that named
+ * value.
  *
  * The optional arguments are told apart by their type:
  *
@@ -1580,12 +1779,14 @@ function parse(text, reviver, options) {
  * @param {number | string | XTJSONOptions | object | null} [space]
  *   indentation: a number of spaces (at most 10) or a string of spaces and
  *   tabs
- * @param {XTJSONOptions | object | null} [options] named values and the
- *   I-JSON mode
+ * @param {XTJSONOptions | object | null} [options] named values, the
+ *   I-JSON mode, the maximum nesting depth, number suffixes and quotation
+ *   marks
  * @returns {string | undefined} undefined if the value cannot be written
  *   (undefined, a function or a symbol), as in `JSON.stringify`
- * @throws {TypeError} for circular references, BigInt values, invalid
- *   arguments or options, and strings not permitted in I-JSON mode
+ * @throws {TypeError} for circular references, nesting deeper than
+ *   maxDepth, invalid arguments or options, and strings not permitted in
+ *   I-JSON mode
  */
 function stringify(value, replacer, space, options) {
   [replacer, space, options] = readArguments('XTJSON.stringify', [replacer, space, options], STRINGIFY_ARGUMENTS);
