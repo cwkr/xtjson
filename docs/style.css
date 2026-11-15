@@ -1,0 +1,383 @@
+/* Stylesheet for the XTJSON overview page (index.html). */
+
+:root {
+  color-scheme: light dark;
+  --bg: #fbfaf7;
+  --surface: #ffffff;
+  --text: #1f2328;
+  --muted: #5c6470;
+  --border: #dcd9d1;
+  --accent: #0b6e69;
+  --accent-soft: #e2f1ef;
+  --code-bg: #f1efe9;
+  --rr-line: #3a4048;
+  --rr-literal: #e2f1ef;
+  --rr-rule: #fff4d6;
+  --rr-class: #ffffff;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #15181c;
+    --surface: #1c2025;
+    --text: #e4e6e9;
+    --muted: #9aa3ae;
+    --border: #343a42;
+    --accent: #5fcfc6;
+    --accent-soft: #17383a;
+    --code-bg: #23282e;
+    --rr-line: #b6bdc6;
+    --rr-literal: #17383a;
+    --rr-rule: #3d3414;
+    --rr-class: #1c2025;
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 1rem;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 1rem;
+  line-height: 1.6;
+}
+
+.wrap {
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: 0 1rem;
+}
+
+a {
+  color: var(--accent);
+  text-underline-offset: 0.15em;
+}
+
+a:hover {
+  text-decoration-thickness: 2px;
+}
+
+code,
+pre {
+  font-family: var(--mono);
+  font-size: 0.875em;
+}
+
+:not(pre) > code {
+  padding: 0.1em 0.3em;
+  border-radius: 3px;
+  background: var(--code-bg);
+  white-space: nowrap;
+}
+
+pre {
+  margin: 0;
+  padding: 0.9rem 1rem;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  line-height: 1.45;
+  tab-size: 4;
+}
+
+dfn {
+  font-style: normal;
+  font-weight: 600;
+}
+
+/* ---------- Masthead ---------- */
+
+.masthead {
+  padding: 2.5rem 0 2rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.logo {
+  margin: 0 0 0.75rem;
+  font-family: var(--mono);
+  font-size: 2.25rem;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.04em;
+}
+
+.logo span {
+  color: var(--accent);
+}
+
+h1 {
+  margin: 0;
+  font-size: 2.1rem;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+
+.tagline {
+  margin: 0.5rem 0 0;
+  font-size: 1.15rem;
+  color: var(--muted);
+}
+
+.meta {
+  margin: 1rem 0 0;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+/* ---------- Layout ---------- */
+
+.layout {
+  padding-top: 1.5rem;
+  padding-bottom: 3rem;
+}
+
+main > section {
+  margin-bottom: 2.5rem;
+}
+
+h2 {
+  margin: 0 0 0.75rem;
+  padding-top: 0.5rem;
+  font-size: 1.45rem;
+  line-height: 1.25;
+}
+
+h3 {
+  margin: 0 0 0.4rem;
+  font-family: var(--mono);
+  font-size: 1.1rem;
+  color: var(--accent);
+}
+
+p,
+ul,
+ol {
+  margin: 0 0 1rem;
+}
+
+li {
+  margin-bottom: 0.3rem;
+}
+
+.features {
+  padding-left: 1.2rem;
+}
+
+/* ---------- Example ---------- */
+
+.compare {
+  display: grid;
+  gap: 1rem;
+}
+
+.compare figure {
+  min-width: 0;
+  margin: 0;
+}
+
+.compare figcaption {
+  margin-bottom: 0.3rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.compare pre {
+  font-size: 0.8rem;
+}
+
+/* ---------- Forms and railroad diagrams ---------- */
+
+.form {
+  margin-top: 2rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--border);
+}
+
+.diagram {
+  margin: 0 0 1rem;
+  padding: 0.5rem;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+svg.rr {
+  display: block;
+  max-width: none;
+}
+
+.rr path {
+  fill: none;
+  stroke: var(--rr-line);
+  stroke-width: 1.5;
+}
+
+.rr path.cap {
+  stroke-width: 2;
+}
+
+.rr rect {
+  stroke: var(--rr-line);
+  stroke-width: 1.5;
+}
+
+.rr rect.t {
+  fill: var(--rr-literal);
+}
+
+.rr rect.n {
+  fill: var(--rr-rule);
+}
+
+.rr rect.c {
+  fill: var(--rr-class);
+  stroke-dasharray: 4 3;
+}
+
+.rr text {
+  fill: var(--text);
+  font-size: 13px;
+  text-anchor: middle;
+  dominant-baseline: central;
+}
+
+.rr text.t {
+  font-family: var(--mono);
+  font-weight: 600;
+}
+
+.rr text.n {
+  font-family: var(--sans);
+}
+
+.rr text.c {
+  font-family: var(--sans);
+  font-style: italic;
+}
+
+.rr text.l {
+  fill: var(--muted);
+  font-family: var(--sans);
+  font-size: 12.5px;
+  text-anchor: start;
+}
+
+.rr a {
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.rr a:hover rect,
+.rr a:focus rect {
+  stroke: var(--accent);
+  stroke-width: 2.5;
+}
+
+/* ---------- Grammar ---------- */
+
+#grammar {
+  margin-top: 1rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border);
+}
+
+#grammar pre {
+  font-size: 0.75rem;
+}
+
+/* ---------- Footer ---------- */
+
+footer {
+  padding: 1.25rem 0;
+  border-top: 1px solid var(--border);
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+footer p {
+  margin: 0;
+}
+
+/* ---------- Wide screens: example side by side ---------- */
+
+@media (min-width: 60rem) {
+  .wrap {
+    max-width: 62rem;
+    padding: 0 1.5rem;
+  }
+
+  main > section > p,
+  main > section > ul,
+  main > section > ol,
+  .form > p,
+  .form > ol {
+    max-width: 46rem;
+  }
+
+  .compare {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* ---------- Very wide screens: grammar beside the text, as on json.org ---------- */
+
+@media (min-width: 100rem) {
+  .wrap {
+    max-width: 98rem;
+  }
+
+  .layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 36rem;
+    gap: 2.5rem;
+    align-items: start;
+  }
+
+  #grammar {
+    position: sticky;
+    top: 1rem;
+    margin-top: 0;
+    padding-top: 0;
+    border-top: 0;
+  }
+
+  #grammar pre {
+    max-height: calc(100vh - 9rem);
+    overflow: auto;
+    font-size: 0.72rem;
+  }
+}
+
+@media print {
+  .masthead,
+  body {
+    background: #fff;
+  }
+
+  .diagram,
+  pre {
+    overflow: visible;
+    break-inside: avoid;
+  }
+}

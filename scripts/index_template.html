@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>XTJSON – JSON for files maintained by people</title>
+<meta name="description" content="XTJSON is a syntactic superset of JSON for files that are written and maintained by people: comments, names without quotation marks, line breaks as separators, multi-line strings and more, with the unchanged JSON data model.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="masthead">
+  <div class="wrap">
+    <p class="logo" aria-hidden="true"><span>{</span>xt<span>}</span></p>
+    <h1>Introducing XTJSON</h1>
+    <p class="tagline">A syntactic superset of JSON for files that are written and maintained by people.</p>
+    <p class="meta">
+      Specification draft {{DRAFT}} · {{DATE}} ·
+      <a href="https://github.com/cwkr/xtjson/blob/main/docs/xtjson-spec-en.md">Specification (English)</a> ·
+      <a href="https://github.com/cwkr/xtjson/blob/main/docs/xtjson-spec-de.md">Spezifikation (Deutsch)</a> ·
+      <a href="https://github.com/cwkr/xtjson">GitHub</a>
+    </p>
+  </div>
+</header>
+
+<div class="wrap layout">
+<main>
+
+<section id="introduction">
+  <p><strong>XTJSON</strong> is a notation for JSON data that is comfortable to write by hand. It is meant for files that people edit, such as configuration files. It extends only the <em>notation</em> of JSON. The data model stays exactly that of JSON: object, array, string, number, <code>true</code>, <code>false</code> and <code>null</code>.</p>
+  <p>Every UTF-8 encoded JSON text is a valid XTJSON document with the same meaning, and every XTJSON document has a <a href="#json-equivalent">JSON equivalent</a> that determines its value. XTJSON has no new data types, no expressions and no references. It is not an interchange format between machines; for that purpose JSON remains the format of choice.</p>
+  <p>XTJSON documents are encoded in UTF-8. The recommended file extensions are <code>.xtjson</code> and <code>.xtj</code>.</p>
+</section>
+
+<section id="extensions">
+  <h2>What XTJSON adds to JSON</h2>
+  <ul class="features">
+    <li><strong>Comments:</strong> <code>// …</code>, <code># …</code> and <code>/* … */</code>.</li>
+    <li><strong>Names without quotation marks:</strong> <code>port: 8080</code>.</li>
+    <li><strong>Line breaks as separators:</strong> a line break can take the place of a comma.</li>
+    <li><strong>Trailing commas</strong> in objects and arrays.</li>
+    <li><strong>Optional braces</strong> around the object at the top level.</li>
+    <li><strong>Strings in single quotation marks:</strong> <code>'…'</code>.</li>
+    <li><strong>Multi-line strings</strong> with <code>"""</code> or <code>'''</code>, with the indentation removed.</li>
+    <li><strong>More escape sequences:</strong> <code>\'</code>, <code>\v</code>, <code>\0</code>, <code>\xHH</code> and <code>\u{…}</code>.</li>
+    <li><strong>Hexadecimal, octal and binary integers:</strong> <code>0xFF</code>, <code>0o755</code>, <code>0b1010</code>.</li>
+    <li><strong>Digit grouping</strong> with <code>_</code>: <code>1_000_000</code>.</li>
+    <li><strong>Number suffixes:</strong> <code>10k</code>, <code>64mb</code>.</li>
+    <li><strong>Named values:</strong> identifiers that the application defines as aliases for JSON values, such as <code>nil</code>.</li>
+    <li><strong>More white space characters:</strong> all white space characters of ECMAScript.</li>
+  </ul>
+</section>
+
+<section id="example">
+  <h2>Example</h2>
+  <p>An XTJSON document and its JSON equivalent:</p>
+  <div class="compare">
+    <figure>
+      <figcaption>XTJSON</figcaption>
+      <pre><code>{{EXAMPLE_XTJSON}}</code></pre>
+    </figure>
+    <figure>
+      <figcaption>JSON equivalent</figcaption>
+      <pre><code>{{EXAMPLE_JSON}}</code></pre>
+    </figure>
+  </div>
+</section>
+
+<section id="forms">
+  <h2>The forms of XTJSON</h2>
+  <p>The diagrams below show the notation. Boxes with round ends are characters to be written literally, rectangular boxes refer to another diagram, and boxes with a dashed border describe a set of characters. <a href="#white-space">White space</a> and comments may appear between any two tokens; the diagrams leave them out, except in the <a href="#separator">separator</a>, where a line break matters.</p>
+
+  <section class="form" id="document">
+    <h3>document</h3>
+    <p>A <dfn>document</dfn> is either a single <a href="#value">value</a>, as in JSON, or a sequence of <a href="#members">members</a> without enclosing braces. The second form denotes the object that contains exactly these members and needs at least one member. It exists only at the top level; an empty object is written as <code>{}</code>.</p>
+    <div class="diagram">{{rr:document}}</div>
+  </section>
+
+  <section class="form" id="object">
+    <h3>object</h3>
+    <p>An <dfn>object</dfn> is an unordered set of name/value pairs. It begins with <code>{</code> and ends with <code>}</code>. If a name occurs more than once, the member that comes last in the document applies.</p>
+    <div class="diagram">{{rr:object}}</div>
+  </section>
+
+  <section class="form" id="members">
+    <h3>members</h3>
+    <p>Each member is a <a href="#name">name</a> followed by <code>:</code> and a <a href="#value">value</a>. Members are separated by a <a href="#separator">separator</a>. After the last member there may be exactly one trailing comma, which has no meaning.</p>
+    <div class="diagram">{{rr:members}}</div>
+  </section>
+
+  <section class="form" id="array">
+    <h3>array</h3>
+    <p>An <dfn>array</dfn> is an ordered collection of <a href="#value">values</a>. It begins with <code>[</code> and ends with <code>]</code>. Values are separated by a <a href="#separator">separator</a>; a single trailing comma is allowed.</p>
+    <div class="diagram">{{rr:array}}</div>
+  </section>
+
+  <section class="form" id="separator">
+    <h3>separator</h3>
+    <p>Two consecutive items are separated by exactly one comma, or by white space that contains at least one <a href="#line-break">line break</a> outside block comments. A comma together with line breaks is fine. Two items on the same line without a comma are an error, and so are two commas in a row.</p>
+    <div class="diagram">{{rr:separator}}</div>
+  </section>
+
+  <section class="form" id="value">
+    <h3>value</h3>
+    <p>A <dfn>value</dfn> can be an <a href="#object">object</a>, an <a href="#array">array</a>, a <a href="#string">string</a>, a <a href="#number">number</a> or a <a href="#named-value">named value</a>. These structures can be nested.</p>
+    <div class="diagram">{{rr:value}}</div>
+  </section>
+
+  <section class="form" id="named-value">
+    <h3>named value</h3>
+    <p>A <dfn>named value</dfn> is an <a href="#identifier">identifier</a> at a value position. It is another notation for the JSON value that a definition assigns to it. <code>true</code>, <code>false</code> and <code>null</code> are predefined and cannot be changed. The application can pass further definitions to the parser, for example <code>nil</code> for <code>null</code>. A document cannot define named values itself, case is significant, and an identifier without a definition is an error; it is never read as a string.</p>
+    <div class="diagram">{{rr:named value}}</div>
+  </section>
+
+  <section class="form" id="name">
+    <h3>name</h3>
+    <p>A <dfn>name</dfn> is a single-line <a href="#string">string</a> or an <a href="#identifier">identifier</a>. A multi-line string is not permitted as a name. The notation does not matter for the identity of a name: <code>a</code>, <code>"a"</code> and <code>'a'</code> denote the same name. At a name position an identifier is always a name, so <code>{null: null}</code> has the name <code>"null"</code>.</p>
+    <div class="diagram">{{rr:name}}</div>
+  </section>
+
+  <section class="form" id="identifier">
+    <h3>identifier</h3>
+    <p>An <dfn>identifier</dfn> begins with an ASCII letter, <code>_</code> or <code>$</code>, followed by any number of ASCII letters, ASCII digits, <code>_</code> or <code>$</code>. Every other name must be written in quotation marks, for example names with spaces, hyphens, dots or non-ASCII characters.</p>
+    <div class="diagram">{{rr:identifier}}</div>
+  </section>
+
+  <section class="form" id="string">
+    <h3>string</h3>
+    <p>A <dfn>string</dfn> is a sequence of zero or more Unicode characters. A single-line string is enclosed in double or in single quotation marks; both forms are equivalent. The delimiter, the backslash and the control characters U+0000 to U+001F must be written as an <a href="#escape">escape</a>, so a single-line string cannot extend across a line break.</p>
+    <div class="diagram">{{rr:string}}</div>
+  </section>
+
+  <section class="form" id="multi-line-string">
+    <h3>multi-line string</h3>
+    <p>A <dfn>multi-line string</dfn> begins and ends with three double or three single quotation marks. Line breaks and tabs may appear in it unescaped. One or two delimiter characters in a row may also appear unescaped, but not immediately before the closing delimiter.</p>
+    <div class="diagram">{{rr:multi-line string}}</div>
+    <p>The value is obtained in four steps:</p>
+    <ol>
+      <li>The text is split into lines at every unescaped line break.</li>
+      <li>Unescaped spaces and tabs at the end of every line except the last are removed.</li>
+      <li>If the string begins with an empty line, that line is dropped and the smallest indentation of all non-empty lines is removed from every line. The last line always counts, so the position of the closing delimiter helps determine how much is removed. The removed characters must be the same in all lines; mixing tabs and spaces there is an error.</li>
+      <li>The lines are joined with a line feed (U+000A), then the escape sequences are resolved.</li>
+    </ol>
+  </section>
+
+  <section class="form" id="escape">
+    <h3>escape</h3>
+    <p>XTJSON has all escape sequences of JSON and five more from ECMAScript: <code>\'</code>, <code>\v</code>, <code>\0</code>, <code>\xHH</code> and <code>\u{…}</code>. They apply in all string forms. <code>\u{…}</code> stands for a code point up to 10FFFF outside the surrogate range. Every other sequence that begins with a backslash is an error, including a backslash before a line break.</p>
+    <div class="diagram">{{rr:escape}}</div>
+  </section>
+
+  <section class="form" id="number">
+    <h3>number</h3>
+    <p>A <dfn>number</dfn> is a <a href="#decimal">decimal</a> number as in JSON or an <a href="#integer">integer</a> in hexadecimal, octal or binary notation, optionally with a minus sign in front and a <a href="#suffix">suffix</a> directly behind. White space inside a number is an error.</p>
+    <div class="diagram">{{rr:number}}</div>
+  </section>
+
+  <section class="form" id="decimal">
+    <h3>decimal</h3>
+    <p>Without <code>_</code> this is exactly the number grammar of JSON: an integer part, an optional fraction part and an optional exponent. Leading zeros such as <code>0755</code>, a leading <code>+</code> and a missing integer or fraction part (<code>.5</code>, <code>5.</code>) remain errors.</p>
+    <div class="diagram">{{rr:decimal}}</div>
+  </section>
+
+  <section class="form" id="digits">
+    <h3>digits</h3>
+    <p>Between two digits there may be exactly one <code>_</code>. It has no meaning and is discarded when reading. This holds for every digit sequence, including the digits of hexadecimal, octal and binary integers.</p>
+    <div class="diagram">{{rr:digits}}</div>
+  </section>
+
+  <section class="form" id="integer">
+    <h3>integer</h3>
+    <p>Integers can be written in hexadecimal (<code>0x</code>), octal (<code>0o</code>) or binary (<code>0b</code>) notation. Case does not matter in the prefix or in the hexadecimal digits. These forms have no fraction part and no exponent. Their value is exact: an implementation that cannot represent it reports an error and never rounds.</p>
+    <div class="diagram">{{rr:integer}}</div>
+  </section>
+
+  <section class="form" id="suffix">
+    <h3>suffix</h3>
+    <p>A <dfn>suffix</dfn> of one or two characters directly after the last digit stands for a conversion function that turns the number into another number. Predefined and not changeable are <code>k</code> and <code>K</code> (times 1000), <code>kb</code>, <code>Kb</code>, <code>kB</code> and <code>KB</code> (times 1024), and <code>mb</code>, <code>Mb</code>, <code>mB</code> and <code>MB</code> (times 1048576). The application can pass further suffixes to the parser, for example <code>%</code> for "divided by 100". Case is significant, the longest match applies, and an undefined suffix is an error.</p>
+    <div class="diagram">{{rr:suffix}}</div>
+    <p>The first character cannot be <code>a</code> to <code>f</code>, <code>o</code> or <code>x</code> in either case, so a suffix is never confused with a hexadecimal digit, an exponent or a number prefix.</p>
+  </section>
+
+  <section class="form" id="white-space">
+    <h3>white space</h3>
+    <p><dfn>White space</dfn> can be inserted between any pair of tokens. The white space characters are the four of JSON (space, tab, line feed, carriage return) and all further white space characters of ECMAScript, among them the no-break space and the byte order mark. A <a href="#comment">comment</a> counts as white space.</p>
+    <div class="diagram">{{rr:white space}}</div>
+  </section>
+
+  <section class="form" id="comment">
+    <h3>comment</h3>
+    <p>A line comment begins with <code>//</code> or <code>#</code> and extends up to the next <a href="#line-break">line break</a> or to the end of the document. A block comment begins with <code>/*</code> and ends at the first <code>*/</code> that follows; block comments cannot be nested. A line break inside a block comment is not a separator.</p>
+    <div class="diagram">{{rr:comment}}</div>
+  </section>
+
+  <section class="form" id="line-break">
+    <h3>line break</h3>
+    <p>A <dfn>line break</dfn> is a line feed, a carriage return, or the sequence of both, which counts as a single line break. All other white space characters, including U+2028 and U+2029, are not line breaks: they neither separate items nor end a line comment.</p>
+    <div class="diagram">{{rr:line break}}</div>
+  </section>
+</section>
+
+<section id="json-equivalent">
+  <h2>From XTJSON to JSON</h2>
+  <p>The meaning of a document is defined by its <dfn>JSON equivalent</dfn>, which is obtained as follows:</p>
+  <ol>
+    <li>Comments are removed, and white space characters that JSON does not have become spaces.</li>
+    <li>The members of an implicit root object are enclosed in <code>{</code> and <code>}</code>.</li>
+    <li>Exactly one comma is put between two consecutive items; trailing commas are dropped.</li>
+    <li>An identifier at a name position becomes the JSON string with the same characters.</li>
+    <li>Strings become JSON strings in double quotation marks with the same value.</li>
+    <li>Numbers are written as JSON numbers: without <code>_</code>, in decimal notation, and with the suffix replaced by the result of its conversion.</li>
+    <li>Named values other than <code>true</code>, <code>false</code> and <code>null</code> are replaced by the JSON value assigned to them.</li>
+  </ol>
+  <p>A document that uses at least one of the extensions is not a JSON text. It must not be labelled with the media type <code>application/json</code> or sent to recipients that expect JSON.</p>
+</section>
+
+<section id="principles">
+  <h2>Principles</h2>
+  <ul>
+    <li><strong>Definitions belong to the parser, not to the document.</strong> A document can define neither named values nor suffixes. A document that uses only the predefined ones is portable: every conforming parser can read it.</li>
+    <li><strong>Errors instead of guessing.</strong> Unknown escape sequences, undefined identifiers, undefined suffixes and mixed indentation are errors and are not silently interpreted.</li>
+    <li><strong>Never code.</strong> XTJSON is not a subset of a programming language and is never read by evaluating it as program code.</li>
+  </ul>
+</section>
+
+<section id="implementations">
+  <h2>Specification and implementations</h2>
+  <p>The specification is the source of truth. It is available in <a href="https://github.com/cwkr/xtjson/blob/main/docs/xtjson-spec-en.md">English</a> and <a href="https://github.com/cwkr/xtjson/blob/main/docs/xtjson-spec-de.md">German</a>; both versions are equal in rank. This page is an informal overview. Where it differs from the specification, the specification applies.</p>
+  <p>The <a href="https://github.com/cwkr/xtjson/tree/main/scripts">reference parser</a> in the repository is written in Python. It makes the specification testable and comes with the test cases that serve as the conformance corpus for implementations.</p>
+</section>
+
+</main>
+
+<aside id="grammar" aria-labelledby="grammar-title">
+  <h2 id="grammar-title">Grammar</h2>
+  <p>The complete grammar in <a href="https://www.rfc-editor.org/rfc/rfc5234">ABNF</a>, taken from Appendix A of the specification.</p>
+  <pre><code>{{ABNF}}</code></pre>
+</aside>
+
+</div>
+
+<footer>
+  <div class="wrap">
+    <p>XTJSON specification draft {{DRAFT}} · <a href="https://github.com/cwkr/xtjson">github.com/cwkr/xtjson</a></p>
+  </div>
+</footer>
+
+</body>
+</html>

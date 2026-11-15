@@ -1,0 +1,1228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>XTJSON – JSON for files maintained by people</title>
+<meta name="description" content="XTJSON is a syntactic superset of JSON for files that are written and maintained by people: comments, names without quotation marks, line breaks as separators, multi-line strings and more, with the unchanged JSON data model.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="masthead">
+  <div class="wrap">
+    <p class="logo" aria-hidden="true"><span>{</span>xt<span>}</span></p>
+    <h1>Introducing XTJSON</h1>
+    <p class="tagline">A syntactic superset of JSON for files that are written and maintained by people.</p>
+    <p class="meta">
+      Specification draft 0.3 · 15 November 2026 ·
+      <a href="https://github.com/cwkr/xtjson/blob/main/docs/xtjson-spec-en.md">Specification (English)</a> ·
+      <a href="https://github.com/cwkr/xtjson/blob/main/docs/xtjson-spec-de.md">Spezifikation (Deutsch)</a> ·
+      <a href="https://github.com/cwkr/xtjson">GitHub</a>
+    </p>
+  </div>
+</header>
+
+<div class="wrap layout">
+<main>
+
+<section id="introduction">
+  <p><strong>XTJSON</strong> is a notation for JSON data that is comfortable to write by hand. It is meant for files that people edit, such as configuration files. It extends only the <em>notation</em> of JSON. The data model stays exactly that of JSON: object, array, string, number, <code>true</code>, <code>false</code> and <code>null</code>.</p>
+  <p>Every UTF-8 encoded JSON text is a valid XTJSON document with the same meaning, and every XTJSON document has a <a href="#json-equivalent">JSON equivalent</a> that determines its value. XTJSON has no new data types, no expressions and no references. It is not an interchange format between machines; for that purpose JSON remains the format of choice.</p>
+  <p>XTJSON documents are encoded in UTF-8. The recommended file extensions are <code>.xtjson</code> and <code>.xtj</code>.</p>
+</section>
+
+<section id="extensions">
+  <h2>What XTJSON adds to JSON</h2>
+  <ul class="features">
+    <li><strong>Comments:</strong> <code>// …</code>, <code># …</code> and <code>/* … */</code>.</li>
+    <li><strong>Names without quotation marks:</strong> <code>port: 8080</code>.</li>
+    <li><strong>Line breaks as separators:</strong> a line break can take the place of a comma.</li>
+    <li><strong>Trailing commas</strong> in objects and arrays.</li>
+    <li><strong>Optional braces</strong> around the object at the top level.</li>
+    <li><strong>Strings in single quotation marks:</strong> <code>'…'</code>.</li>
+    <li><strong>Multi-line strings</strong> with <code>"""</code> or <code>'''</code>, with the indentation removed.</li>
+    <li><strong>More escape sequences:</strong> <code>\'</code>, <code>\v</code>, <code>\0</code>, <code>\xHH</code> and <code>\u{…}</code>.</li>
+    <li><strong>Hexadecimal, octal and binary integers:</strong> <code>0xFF</code>, <code>0o755</code>, <code>0b1010</code>.</li>
+    <li><strong>Digit grouping</strong> with <code>_</code>: <code>1_000_000</code>.</li>
+    <li><strong>Number suffixes:</strong> <code>10k</code>, <code>64mb</code>.</li>
+    <li><strong>Named values:</strong> identifiers that the application defines as aliases for JSON values, such as <code>nil</code>.</li>
+    <li><strong>More white space characters:</strong> all white space characters of ECMAScript.</li>
+  </ul>
+</section>
+
+<section id="example">
+  <h2>Example</h2>
+  <p>An XTJSON document and its JSON equivalent:</p>
+  <div class="compare">
+    <figure>
+      <figcaption>XTJSON</figcaption>
+      <pre><code># Service configuration – the root braces are omitted
+name: &#x27;demo-service&#x27;
+version: &quot;1.4.0&quot;
+$schema: &quot;https://example.org/schema/service.json&quot;
+
+listen: {
+  host: &quot;0.0.0.0&quot;
+  port: 8080            // the line break replaces the comma
+  tls: false,           // commas remain permitted
+}
+
+/* Numbers in other bases
+   and with digit grouping */
+limits: {
+  max_body_bytes: 10_485_760
+  file_mode: 0o644
+  feature_mask: 0b1010_0101
+  magic: 0xDEAD_BEEF
+  cache_bytes: 64mb     // predefined suffix: times 1048576
+  rate_limit: 5k        // predefined suffix: times 1000
+  &quot;retry-after&quot;: 30     // a name with a hyphen needs quotation marks
+  banner: &#x27;Welcome to demo-service\x21&#x27;
+}
+
+// multi-line string: the common indentation is not part of the value
+motd: &quot;&quot;&quot;
+  Welcome.
+  Maintenance: Sundays 02:00.
+  &quot;&quot;&quot;
+
+tags: [
+  &#x27;internal&#x27;
+  &quot;says \&quot;hello\&quot;&quot;
+  &#x27;says &quot;hello&quot;&#x27;,
+]</code></pre>
+    </figure>
+    <figure>
+      <figcaption>JSON equivalent</figcaption>
+      <pre><code>{
+  &quot;name&quot;: &quot;demo-service&quot;,
+  &quot;version&quot;: &quot;1.4.0&quot;,
+  &quot;$schema&quot;: &quot;https://example.org/schema/service.json&quot;,
+  &quot;listen&quot;: { &quot;host&quot;: &quot;0.0.0.0&quot;, &quot;port&quot;: 8080, &quot;tls&quot;: false },
+  &quot;limits&quot;: {
+    &quot;max_body_bytes&quot;: 10485760,
+    &quot;file_mode&quot;: 420,
+    &quot;feature_mask&quot;: 165,
+    &quot;magic&quot;: 3735928559,
+    &quot;cache_bytes&quot;: 67108864,
+    &quot;rate_limit&quot;: 5000,
+    &quot;retry-after&quot;: 30,
+    &quot;banner&quot;: &quot;Welcome to demo-service!&quot;
+  },
+  &quot;motd&quot;: &quot;Welcome.\nMaintenance: Sundays 02:00.\n&quot;,
+  &quot;tags&quot;: [&quot;internal&quot;, &quot;says \&quot;hello\&quot;&quot;, &quot;says \&quot;hello\&quot;&quot;]
+}</code></pre>
+    </figure>
+  </div>
+</section>
+
+<section id="forms">
+  <h2>The forms of XTJSON</h2>
+  <p>The diagrams below show the notation. Boxes with round ends are characters to be written literally, rectangular boxes refer to another diagram, and boxes with a dashed border describe a set of characters. <a href="#white-space">White space</a> and comments may appear between any two tokens; the diagrams leave them out, except in the <a href="#separator">separator</a>, where a line break matters.</p>
+
+  <section class="form" id="document">
+    <h3>document</h3>
+    <p>A <dfn>document</dfn> is either a single <a href="#value">value</a>, as in JSON, or a sequence of <a href="#members">members</a> without enclosing braces. The second form denotes the object that contains exactly these members and needs at least one member. It exists only at the top level; an empty object is written as <code>{}</code>.</p>
+    <div class="diagram"><svg class="rr" viewBox="0 0 170 72" width="170" height="72" role="img" aria-label="Railroad diagram: document">
+<path class="cap" d="M8 12v16m4 -16v16"/>
+<path d="M12 20H30"/>
+<path d="M30 20H50"/>
+<path d="M120 20H140"/>
+<a href="#value">
+<rect class="n" x="50" y="8" width="56" height="24" rx="0"/>
+<text class="n" x="78" y="20">value</text>
+</a>
+<path d="M106 20H120"/>
+<path d="M30 20a10 10 0 0 1 10 10v12a10 10 0 0 0 10 10"/>
+<path d="M120 52a10 10 0 0 0 10 -10v-12a10 10 0 0 1 10 -10"/>
+<a href="#members">
+<rect class="n" x="50" y="40" width="70" height="24" rx="0"/>
+<text class="n" x="85" y="52">members</text>
+</a>
+<path d="M140 20H158"/>
+<path class="cap" d="M158 12v16m4 -16v16"/>
+</svg></div>
+  </section>
+
+  <section class="form" id="object">
+    <h3>object</h3>
+    <p>An <dfn>object</dfn> is an unordered set of name/value pairs. It begins with <code>{</code> and ends with <code>}</code>. If a name occurs more than once, the member that comes last in the document applies.</p>
+    <div class="diagram"><svg class="rr" viewBox="0 0 246 60" width="246" height="60" role="img" aria-label="Railroad diagram: object">
+<path class="cap" d="M8 12v16m4 -16v16"/>
+<path d="M12 20H30"/>
+<rect class="t" x="30" y="8" width="28" height="24" rx="12"/>
+<text class="t" x="44" y="20">{</text>
+<path d="M58 20H68"/>
+<path d="M68 20H88"/>
+<path d="M158 20H178"/>
+<path d="M88 20H158"/>
+<path d="M68 20a10 10 0 0 1 10 10v0a10 10 0 0 0 10 10"/>
+<path d="M158 40a10 10 0 0 0 10 -10v0a10 10 0 0 1 10 -10"/>
+<a href="#members">
+<rect class="n" x="88" y="28" width="70" height="24" rx="0"/>
+<text class="n" x="123" y="40">members</text>
+</a>
+<path d="M178 20H188"/>
+<rect class="t" x="188" y="8" width="28" height="24" rx="12"/>
+<text class="t" x="202" y="20">}</text>
+<path d="M216 20H234"/>
+<path class="cap" d="M234 12v16m4 -16v16"/>
+</svg></div>
+  </section>
+
+  <section class="form" id="members">
+    <h3>members</h3>
+    <p>Each member is a <a href="#name">name</a> followed by <code>:</code> and a <a href="#value">value</a>. Members are separated by a <a href="#separator">separator</a>. After the last member there may be exactly one trailing comma, which has no meaning.</p>
+    <div class="diagram"><svg class="rr" viewBox="0 0 311 72" width="311" height="72" role="img" aria-label="Railroad diagram: members">
+<path class="cap" d="M8 12v16m4 -16v16"/>
+<path d="M12 20H30"/>
+<path d="M30 20H40"/>
+<a href="#name">
+<rect class="n" x="40" y="8" width="49" height="24" rx="0"/>
+<text class="n" x="64.5" y="20">name</text>
+</a>
+<path d="M89 20H99"/>
+<rect class="t" x="99" y="8" width="28" height="24" rx="12"/>
+<text class="t" x="113" y="20">:</text>
+<path d="M127 20H137"/>
+<a href="#value">
+<rect class="n" x="137" y="8" width="56" height="24" rx="0"/>
+<text class="n" x="165" y="20">value</text>
+</a>
+<path d="M193 20H203"/>
+<path d="M193 20a10 10 0 0 1 10 10v12a10 10 0 0 1 -10 10"/>
+<path d="M40 52a10 10 0 0 1 -10 -10v-12a10 10 0 0 1 10 -10"/>
+<path d="M40 52H74"/>
+<a href="#separator">
+<rect class="n" x="74" y="40" width="85" height="24" rx="0"/>
+<text class="n" x="116.5" y="52">separator</text>
+</a>
+<path d="M159 52H193"/>
+<path d="M203 20H213"/>
+<path d="M213 20H233"/>
+<path d="M261 20H281"/>
+<path d="M233 20H261"/>
+<path d="M213 20a10 10 0 0 1 10 10v0a10 10 0 0 0 10 10"/>
+<path d="M261 40a10 10 0 0 0 10 -10v0a10 10 0 0 1 10 -10"/>
+<rect class="t" x="233" y="28" width="28" height="24" rx="12"/>
+<text class="t" x="247" y="40">,</text>
+<path d="M281 20H299"/>
+<path class="cap" d="M299 12v16m4 -16v16"/>
+</svg></div>
+  </section>
+
+  <section class="form" id="array">
+    <h3>array</h3>
+    <p>An <dfn>array</dfn> is an ordered collection of <a href="#value">values</a>. It begins with <code>[</code> and ends with <code>]</code>. Values are separated by a <a href="#separator">separator</a>; a single trailing comma is allowed.</p>
+    <div class="diagram"><svg class="rr" viewBox="0 0 359 92" width="359" height="92" role="img" aria-label="Railroad diagram: array">
+<path class="cap" d="M8 12v16m4 -16v16"/>
+<path d="M12 20H30"/>
+<rect class="t" x="30" y="8" width="28" height="24" rx="12"/>
+<text class="t" x="44" y="20">[</text>
+<path d="M58 20H68"/>
+<path d="M68 20H88"/>
+<path d="M271 20H291"/>
+<path d="M88 20H271"/>
+<path d="M68 20a10 10 0 0 1 10 10v0a10 10 0 0 0 10 10"/>
+<path d="M271 40a10 10 0 0 0 10 -10v0a10 10 0 0 1 10 -10"/>
+<path d="M88 40H98"/>
+<a href="#value">
+<rect class="n" x="98" y="28" width="56" height="24" rx="0"/>
+<text class="n" x="126" y="40">value</text>
+</a>
+<path d="M154 40H193"/>
+<path d="M183 40a10 10 0 0 1 10 10v12a10 10 0 0 1 -10 10"/>
+<path d="M98 72a10 10 0 0 1 -10 -10v-12a10 10 0 0 1 10 -10"/>
+<a href="#separator">
+<rect class="n" x="98" y="60" width="85" height="24" rx="0"/>
+<text class="n" x="140.5" y="72">separator</text>
+</a>
+<path d="M193 40H203"/>
+<path d="M203 40H223"/>
+<path d="M251 40H271"/>
+<path d="M223 40H251"/>
+<path d="M203 40a10 10 0 0 1 10 10v0a10 10 0 0 0 10 10"/>
+<path d="M251 60a10 10 0 0 0 10 -10v0a10 10 0 0 1 10 -10"/>
+<rect class="t" x="223" y="48" width="28" height="24" rx="12"/>
+<text class="t" x="237" y="60">,</text>
+<path d="M291 20H301"/>
+<rect class="t" x="301" y="8" width="28" height="24" rx="12"/>
+<text class="t" x="315" y="20">]</text>
+<path d="M329 20H347"/>
+<path class="cap" d="M347 12v16m4 -16v16"/>
+</svg></div>
+  </section>
+
+  <section class="form" id="separator">
+    <h3>separator</h3>
+    <p>Two consecutive items are separated by exactly one comma, or by white space that contains at least one <a href="#line-break">line break</a> outside block comments. A comma together with line breaks is fine. Two items on the same line without a comma are an error, and so are two commas in a row.</p>
+    <div class="diagram"><svg class="rr" viewBox="0 0 372 72" width="372" height="72" role="img" aria-label="Railroad diagram: separator">
+<path class="cap" d="M8 12v16m4 -16v16"/>
+<path d="M12 20H30"/>
+<path d="M30 20H50"/>
+<path d="M322 20H342"/>
+<rect class="t" x="50" y="8" width="28" height="24" rx="12"/>
+<text class="t" x="64" y="20">,</text>
+<path d="M78 20H322"/>
+<path d="M30 20a10 10 0 0 1 10 10v12a10 10 0 0 0 10 10"/>
+<path d="M322 52a10 10 0 0 0 10 -10v-12a10 10 0 0 1 10 -10"/>
+<rect class="c" x="50" y="40" width="272" height="24" rx="4"/>
+<text class="c" x="186" y="52">white space containing a line break</text>
+<path d="M342 20H360"/>
+<path class="cap" d="M360 12v16m4 -16v16"/>
+</svg></div>
+  </section>
+
+  <section class="form" id="value">
+    <h3>value</h3>
+    <p>A <dfn>value</dfn> can be an <a href="#object">object</a>, an <a href="#array">array</a>, a <a href="#string">string</a>, a <a href="#number">number</a> or a <a href="#named-value">named value</a>. These structures can be nested.</p>
+    <div class="diagram"><svg class="rr" viewBox="0 0 199 168" width="199" height="168" role="img" aria-label="Railroad diagram: value">
+<path class="cap" d="M8 12v16m4 -16v16"/>
+<path d="M12 20H30"/>
+<path d="M30 20H50"/>
+<path d="M149 20H169"/>
+<a href="#object">
+<rect class="n" x="50" y="8" width="63" height="24" rx="0"/>
+<text class="n" x="81.5" y="20">object</text>
+</a>
+<path d="M113 20H149"/>
+<path d="M30 20a10 10 0 0 1 10 10v12a10 10 0 0 0 10 10"/>
+<path d="M149 52a10 10 0 0 0 10 -10v-12a10 10 0 0 1 10 -10"/>
+<a href="#array">
+<rect class="n" x="50" y="40" width="56" height="24" rx="0"/>
+<text class="n" x="78" y="52">array</text>
+</a>
+<path d="M106 52H149"/>
+<path d="M30 20a10 10 0 0 1 10 10v44a10 10 0 0 0 10 10"/>
+<path d="M149 84a10 10 0 0 0 10 -10v-44a10 10 0 0 1 10 -10"/>
+<a href="#string">
+<rect class="n" x="50" y="72" width="63" height="24" rx="0"/>
+<text class="n" x="81.5" y="84">string</text>
+</a>
+<path d="M113 84H149"/>
+<path d="M30 20a10 10 0 0 1 10 10v76a10 10 0 0 0 10 10"/>
+<path d="M149 116a10 10 0 0 0 10 -10v-76a10 10 0 0 1 10 -10"/>
+<a href="#number">
+<rect class="n" x="50" y="104" width="63" height="24" rx="0"/>
+<text class="n" x="81.5" y="116">number</text>
+</a>
+<path d="M113 116H149"/>
+<path d="M30 20a10 10 0 0 1 10 10v108a10 10 0 0 0 10 10"/>
+<path d="M149 148a10 10 0 0 0 10 -10v-108a10 10 0 0 1 10 -10"/>
+<a href="#named-value">
+<rect class="n" x="50" y="136" width="99" height="24" rx="0"/>
+<text class="n" x="99.5" y="148">named value</text>
+</a>
+<path d="M169 20H187"/>
+<path class="cap" d="M187 12v16m4 -16v16"/>
+</svg></div>
+  </section>
+
+  <section class="form" id="named-value">
+    <h3>named value</h3>
+    <p>A <dfn>named value</dfn> is an <a href="#identifier">identifier</a> at a value position. It is another notation for the JSON value that a definition assigns to it. <code>true</code>, <code>false</code> and <code>null</code> are predefined and cannot be changed. The application can pass further definitions to the parser, for example <code>nil</code> for <code>null</code>. A document cannot define named values itself, case is significant, and an identifier without a definition is an error; it is never read as a string.</p>
+    <div class="diagram"><svg class="rr" viewBox="0 0 380 136" width="380" height="136" role="img" aria-label="Railroad diagram: named value">
+<path class="cap" d="M8 12v16m4 -16v16"/>
+<path d="M12 20H30"/>
+<path d="M30 20H50"/>
+<path d="M330 20H350"/>
+<rect class="t" x="50" y="8" width="52" height="24" rx="12"/>
+<text class="t" x="76" y="20">true</text>
+<path d="M102 20H330"/>
+<path d="M30 20a10 10 0 0 1 10 10v12a10 10 0 0 0 10 10"/>
+<path d="M330 52a10 10 0 0 0 10 -10v-12a10 10 0 0 1 10 -10"/>
+<rect class="t" x="50" y="40" width="60" height="24" rx="12"/>
+<text class="t" x="80" y="52">false</text>
+<path d="M110 52H330"/>
+<path d="M30 20a10 10 0 0 1 10 10v44a10 10 0 0 0 10 10"/>
+<path d="M330 84a10 10 0 0 0 10 -10v-44a10 10 0 0 1 10 -10"/>
+<rect class="t" x="50" y="72" width="52" height="24" rx="12"/>
+<text class="t" x="76" y="84">null</text>
+<path d="M102 84H330"/>
+<path d="M30 20a10 10 0 0 1 10 10v76a10 10 0 0 0 10 10"/>
+<path d="M330 116a10 10 0 0 0 10 -10v-76a10 10 0 0 1 10 -10"/>
+<a href="#identifier">
+<rect class="n" x="50" y="104" width="92" height="24" rx="0"/>
+<text class="n" x="96" y="116">identifier</text>
+</a>
+<text class="l" x="156" y="116">defined by the application</text>
+<path d="M350 20H368"/>
+<path class="cap" d="M368 12v16m4 -16v16"/>
+</svg></div>
+  </section>
+
+  <section class="form" id="name">
+    <h3>name</h3>
+    <p>A <dfn>name</dfn> is a single-line <a href="#string">string</a> or an <a href="#identifier">identifier</a>. A multi-line string is not permitted as a name. The notation does not matter for the identity of a name: <code>a</code>, <code>"a"</code> and <code>'a'</code> denote the same name. At a name position an identifier is always a name, so <code>{null: null}</code> has the name <code>"null"</code>.</p>
+    <div class="diagram"><svg class="rr" viewBox="0 0 250 72" width="250" height="72" role="img" aria-label="Railroad diagram: name">
+<path class="cap" d="M8 12v16m4 -16v16"/>
+<path d="M12 20H30"/>
+<path d="M30 20H50"/>
+<path d="M200 20H220"/>
+<a href="#string">
+<rect class="n" x="50" y="8" width="150" height="24" rx="0"/>
+<text class="n" x="125" y="20">single-line string</text>
+</a>
+<path d="M30 20a10 10 0 0 1 10 10v12a10 10 0 0 0 10 10"/>
+<path d="M200 52a10 10 0 0 0 10 -10v-12a10 10 0 0 1 10 -10"/>
+<a href="#identifier">
+<rect class="n" x="50" y="40" width="92" height="24" rx="0"/>
+<text class="n" x="96" y="52">identifier</text>
+</a>
+<path d="M142 52H200"/>
+<path d="M220 20H238"/>
+<path class="cap" d="M238 12v16m4 -16v16"/>
+</svg></div>
+  </section>
+
+  <section class="form" id="identifier">
+    <h3>identifier</h3>
+    <p>An <dfn>identifier</dfn> begins with an ASCII letter, <code>_</code> or <code>$</code>, followed by any number of ASCII letters, ASCII digits, <code>_</code> or <code>$</code>. Every other name must be written in quotation marks, for example names with spaces, hyphens, dots or non-ASCII characters.</p>
+    <div class="diagram"><svg class="rr" viewBox="0 0 350 164" width="350" height="164" role="img" aria-label="Railroad diagram: identifier">
+<path class="cap" d="M8 12v16m4 -16v16"/>
+<path d="M12 20H30"/>
+<path d="M30 20H50"/>
+<path d="M120 20H140"/>
+<rect class="c" x="50" y="8" width="70" height="24" rx="4"/>
+<text class="c" x="85" y="20">a–z A–Z</text>
+<path d="M30 20a10 10 0 0 1 10 10v12a10 10 0 0 0 10 10"/>
+<path d="M120 52a10 10 0 0 0 10 -10v-12a10 10 0 0 1 10 -10"/>
+<rect class="t" x="50" y="40" width="28" height="24" rx="12"/>
+<text class="t" x="64" y="52">_</text>
+<path d="M78 52H120"/>
+<path d="M30 20a10 10 0 0 1 10 10v44a10 10 0 0 0 10 10"/>
+<path d="M120 84a10 10 0 0 0 10 -10v-44a10 10 0 0 1 10 -10"/>
+<rect class="t" x="50" y="72" width="28" height="24" rx="12"/>
+<text class="t" x="64" y="84">$</text>
+<path d="M78 84H120"/>
+<path d="M140 20H150"/>
+<path d="M150 20H170"/>
+<path d="M300 20H320"/>
+<path d="M170 20H300"/>
+<path d="M150 20a10 10 0 0 1 10 10v0a10 10 0 0 0 10 10"/>
+<path d="M300 40a10 10 0 0 0 10 -10v0a10 10 0 0 1 10 -10"/>
+<path d="M170 40H180"/>
+<path d="M180 40H200"/>
+<path d="M270 40H290"/>
+<rect class="c" x="200" y="28" width="70" height="24" rx="4"/>
+<text class="c" x="235" y="40">a–z A–Z</text>
+<path d="M180 40a10 10 0 0 1 10 10v12a10 10 0 0 0 10 10"/>
+<path d="M270 72a10 10 0 0 0 10 -10v-12a10 10 0 0 1 10 -10"/>
+<rect class="c" x="200" y="60" width="42" height="24" rx="4"/>
+<text class="c" x="221" y="72">0–9</text>
+<path d="M242 72H270"/>
+<path d="M180 40a10 10 0 0 1 10 10v44a10 10 0 0 0 10 10"/>
+<path d="M270 104a10 10 0 0 0 10 -10v-44a10 10 0 0 1 10 -10"/>
+<rect class="t" x="200" y="92" width="28" height="24" rx="12"/>
+<text class="t" x="214" y="104">_</text>
+<path d="M228 104H270"/>
+<path d="M180 40a10 10 0 0 1 10 10v76a10 10 0 0 0 10 10"/>
+<path d="M270 136a10 10 0 0 0 10 -10v-76a10 10 0 0 1 10 -10"/>
+<rect class="t" x="200" y="124" width="28" height="24" rx="12"/>
+<text class="t" x="214" y="136">$</text>
+<path d="M228 136H270"/>
+<path d="M290 40H300"/>
+<path d="M290 40a10 10 0 0 1 10 10v96a10 10 0 0 1 -10 10"/>
+<path d="M180 156a10 10 0 0 1 -10 -10v-96a10 10 0 0 1 10 -10"/>
+<path d="M180 156H235"/>
+<path d="M235 156H290"/>
+<path d="M320 20H338"/>
+<path class="cap" d="M338 12v16m4 -16v16"/>
+</svg></div>
+  </section>
+
+  <section class="form" id="string">
+    <h3>string</h3>
+    <p>A <dfn>string</dfn> is a sequence of zero or more Unicode characters. A single-line string is enclosed in double or in single quotation marks; both forms are equivalent. The delimiter, the backslash and the control characters U+0000 to U+001F must be written as an <a href="#escape">escape</a>, so a single-line string cannot extend across a line break.</p>
+    <div class="diagram"><svg class="rr" viewBox="0 0 634 224" width="634" height="224" role="img" aria-label="Railroad diagram: string">
+<path class="cap" d="M8 12v16m4 -16v16"/>
+<path d="M12 20H30"/>
+<path d="M30 20H50"/>
+<path d="M584 20H604"/>
+<rect class="t" x="50" y="8" width="28" height="24" rx="12"/>
+<text class="t" x="64" y="20">&quot;</text>
+<path d="M78 20H88"/>
+<path d="M88 20H108"/>
+<path d="M526 20H546"/>
+<path d="M108 20H526"/>
+<path d="M88 20a10 10 0 0 1 10 10v0a10 10 0 0 0 10 10"/>
+<path d="M526 40a10 10 0 0 0 10 -10v0a10 10 0 0 1 10 -10"/>
+<path d="M108 40H118"/>
+<path d="M118 40H138"/>
+<path d="M496 40H516"/>
+<rect class="c" x="138" y="28" width="358" height="24" rx="4"/>
+<text class="c" x="317" y="40">any character except &quot; \ and control characters</text>
+<path d="M118 40a10 10 0 0 1 10 10v12a10 10 0 0 0 10 10"/>
+<path d="M496 72a10 10 0 0 0 10 -10v-12a10 10 0 0 1 10 -10"/>
+<a href="#escape">
+<rect class="n" x="138" y="60" width="63" height="24" rx="0"/>
+<text class="n" x="169.5" y="72">escape</text>
+</a>
+<path d="M201 72H496"/>
+<path d="M516 40H526"/>
+<path d="M516 40a10 10 0 0 1 10 10v32a10 10 0 0 1 -10 10"/>
+<path d="M118 92a10 10 0 0 1 -10 -10v-32a10 10 0 0 1 10 -10"/>
+<path d="M118 92H317"/>
+<path d="M317 92H516"/>
+<path d="M546 20H556"/>
+<rect class="t" x="556" y="8" width="28" height="24" rx="12"/>
+<text class="t" x="570" y="20">&quot;</text>
+<path d="M30 20a10 10 0 0 1 10 10v72a10 10 0 0 0 10 10"/>
+<path d="M584 112a10 10 0 0 0 10 -10v-72a10 10 0 0 1 10 -10"/>
+<rect class="t" x="50" y="100" width="28" height="24" rx="12"/>
+<text class="t" x="64" y="112">&#x27;</text>
+<path d="M78 112H88"/>
+<path d="M88 112H108"/>
+<path d="M526 112H546"/>
+<path d="M108 112H526"/>
+<path d="M88 112a10 10 0 0 1 10 10v0a10 10 0 0 0 10 10"/>
+<path d="M526 132a10 10 0 0 0 10 -10v0a10 10 0 0 1 10 -10"/>
+<path d="M108 132H118"/>
+<path d="M118 132H138"/>
+<path d="M496 132H516"/>
+<rect class="c" x="138" y="120" width="358" height="24" rx="4"/>
+<text class="c" x="317" y="132">any character except &#x27; \ and control characters</text>
+<path d="M118 132a10 10 0 0 1 10 10v12a10 10 0 0 0 10 10"/>
+<path d="M496 164a10 10 0 0 0 10 -10v-12a10 10 0 0 1 10 -10"/>
+<a href="#escape">
+<rect class="n" x="138" y="152" width="63" height="24" rx="0"/>
+<text class="n" x="169.5" y="164">escape</text>
+</a>
+<path d="M201 164H496"/>
+<path d="M516 132H526"/>
+<path d="M516 132a10 10 0 0 1 10 10v32a10 10 0 0 1 -10 10"/>
+<path d="M118 184a10 10 0 0 1 -10 -10v-32a10 10 0 0 1 10 -10"/>
+<path d="M118 184H317"/>
+<path d="M317 184H516"/>
+<path d="M546 112H556"/>
+<rect class="t" x="556" y="100" width="28" height="24" rx="12"/>
+<text class="t" x="570" y="112">&#x27;</text>
+<path d="M30 20a10 10 0 0 1 10 10v164a10 10 0 0 0 10 10"/>
+<path d="M584 204a10 10 0 0 0 10 -10v-164a10 10 0 0 1 10 -10"/>
+<a href="#multi-line-string">
+<rect class="n" x="50" y="192" width="142" height="24" rx="0"/>
+<text class="n" x="121" y="204">multi-line string</text>
+</a>
+<path d="M192 204H584"/>
+<path d="M604 20H622"/>
+<path class="cap" d="M622 12v16m4 -16v16"/>
+</svg></div>
+  </section>
+
+  <section class="form" id="multi-line-string">
+    <h3>multi-line string</h3>
+    <p>A <dfn>multi-line string</dfn> begins and ends with three double or three single quotation marks. Line breaks and tabs may appear in it unescaped. One or two delimiter characters in a row may also appear unescaped, but not immediately before the closing delimiter.</p>
+    <div class="diagram"><svg class="rr" viewBox="0 0 652 320" width="652" height="320" role="img" aria-label="Railroad diagram: multi-line string">
+<path class="cap" d="M8 12v16m4 -16v16"/>
+<path d="M12 20H30"/>
+<path d="M30 20H50"/>
+<path d="M602 20H622"/>
+<rect class="t" x="50" y="8" width="44" height="24" rx="12"/>
+<text class="t" x="72" y="20">&quot;&quot;&quot;</text>
+<path d="M94 20H104"/>
+<path d="M104 20H124"/>
+<path d="M528 20H548"/>
+<path d="M124 20H528"/>
+<path d="M104 20a10 10 0 0 1 10 10v0a10 10 0 0 0 10 10"/>
+<path d="M528 40a10 10 0 0 0 10 -10v0a10 10 0 0 1 10 -10"/>
+<path d="M124 40H134"/>
+<path d="M134 40H154"/>
+<path d="M498 40H518"/>
+<rect class="c" x="154" y="28" width="344" height="24" rx="4"/>
+<text class="c" x="326" y="40">any character except \ and control characters</text>
+<path d="M134 40a10 10 0 0 1 10 10v12a10 10 0 0 0 10 10"/>
+<path d="M498 72a10 10 0 0 0 10 -10v-12a10 10 0 0 1 10 -10"/>
+<a href="#line-break">
+<rect class="n" x="154" y="60" width="92" height="24" rx="0"/>
+<text class="n" x="200" y="72">line break</text>
+</a>
+<path d="M246 72H498"/>
+<path d="M134 40a10 10 0 0 1 10 10v44a10 10 0 0 0 10 10"/>
+<path d="M498 104a10 10 0 0 0 10 -10v-44a10 10 0 0 1 10 -10"/>
+<rect class="c" x="154" y="92" width="42" height="24" rx="4"/>
+<text class="c" x="175" y="104">tab</text>
+<path d="M196 104H498"/>
+<path d="M134 40a10 10 0 0 1 10 10v76a10 10 0 0 0 10 10"/>
+<path d="M498 136a10 10 0 0 0 10 -10v-76a10 10 0 0 1 10 -10"/>
+<a href="#escape">
+<rect class="n" x="154" y="124" width="63" height="24" rx="0"/>
+<text class="n" x="185.5" y="136">escape</text>
+</a>
+<path d="M217 136H498"/>
+<path d="M518 40H528"/>
+<path d="M518 40a10 10 0 0 1 10 10v96a10 10 0 0 1 -10 10"/>
+<path d="M134 156a10 10 0 0 1 -10 -10v-96a10 10 0 0 1 10 -10"/>
+<path d="M134 156H326"/>
+<path d="M326 156H518"/>
+<path d="M548 20H558"/>
+<rect class="t" x="558" y="8" width="44" height="24" rx="12"/>
+<text class="t" x="580" y="20">&quot;&quot;&quot;</text>
+<path d="M30 20a10 10 0 0 1 10 10v136a10 10 0 0 0 10 10"/>
+<path d="M602 176a10 10 0 0 0 10 -10v-136a10 10 0 0 1 10 -10"/>
+<rect class="t" x="50" y="164" width="44" height="24" rx="12"/>
+<text class="t" x="72" y="176">&#x27;&#x27;&#x27;</text>
+<path d="M94 176H104"/>
+<path d="M104 176H124"/>
+<path d="M528 176H548"/>
+<path d="M124 176H528"/>
+<path d="M104 176a10 10 0 0 1 10 10v0a10 10 0 0 0 10 10"/>
+<path d="M528 196a10 10 0 0 0 10 -10v0a10 10 0 0 1 10 -10"/>
+<path d="M124 196H134"/>
+<path d="M134 196H154"/>
+<path d="M498 196H518"/>
+<rect class="c" x="154" y="184" width="344" height="24" rx="4"/>
+<text class="c" x="326" y="196">any character except \ and control characters</text>
+<path d="M134 196a10 10 0 0 1 10 10v12a10 10 0 0 0 10 10"/>
+<path d="M498 228a10 10 0 0 0 10 -10v-12a10 10 0 0 1 10 -10"/>
+<a href="#line-break">
+<rect class="n" x="154" y="216" width="92" height="24" rx="0"/>
+<text class="n" x="200" y="228">line break</text>
+</a>
+<path d="M246 228H498"/>
+<path d="M134 196a10 10 0 0 1 10 10v44a10 10 0 0 0 10 10"/>
+<path d="M498 260a10 10 0 0 0 10 -10v-44a10 10 0 0 1 10 -10"/>
+<rect class="c" x="154" y="248" width="42" height="24" rx="4"/>
+<text class="c" x="175" y="260">tab</text>
+<path d="M196 260H498"/>
+<path d="M134 196a10 10 0 0 1 10 10v76a10 10 0 0 0 10 10"/>
+<path d="M498 292a10 10 0 0 0 10 -10v-76a10 10 0 0 1 10 -10"/>
+<a href="#escape">
+<rect class="n" x="154" y="280" width="63" height="24" rx="0"/>
+<text class="n" x="185.5" y="292">escape</text>
+</a>
+<path d="M217 292H498"/>
+<path d="M518 196H528"/>
+<path d="M518 196a10 10 0 0 1 10 10v96a10 10 0 0 1 -10 10"/>
+<path d="M134 312a10 10 0 0 1 -10 -10v-96a10 10 0 0 1 10 -10"/>
+<path d="M134 312H326"/>
+<path d="M326 312H518"/>
+<path d="M548 176H558"/>
+<rect class="t" x="558" y="164" width="44" height="24" rx="12"/>
+<text class="t" x="580" y="176">&#x27;&#x27;&#x27;</text>
+<path d="M622 20H640"/>
+<path class="cap" d="M640 12v16m4 -16v16"/>
+</svg></div>
+    <p>The value is obtained in four steps:</p>
+    <ol>
+      <li>The text is split into lines at every unescaped line break.</li>
+      <li>Unescaped spaces and tabs at the end of every line except the last are removed.</li>
+      <li>If the string begins with an empty line, that line is dropped and the smallest indentation of all non-empty lines is removed from every line. The last line always counts, so the position of the closing delimiter helps determine how much is removed. The removed characters must be the same in all lines; mixing tabs and spaces there is an error.</li>
+      <li>The lines are joined with a line feed (U+000A), then the escape sequences are resolved.</li>
+    </ol>
+  </section>
+
+  <section class="form" id="escape">
+    <h3>escape</h3>
+    <p>XTJSON has all escape sequences of JSON and five more from ECMAScript: <code>\'</code>, <code>\v</code>, <code>\0</code>, <code>\xHH</code> and <code>\u{…}</code>. They apply in all string forms. <code>\u{…}</code> stands for a code point up to 10FFFF outside the surrogate range. Every other sequence that begins with a backslash is an error, including a backslash before a line break.</p>
+    <div class="diagram"><svg class="rr" viewBox="0 0 531 456" width="531" height="456" role="img" aria-label="Railroad diagram: escape">
+<path class="cap" d="M8 12v16m4 -16v16"/>
+<path d="M12 20H30"/>
+<rect class="t" x="30" y="8" width="28" height="24" rx="12"/>
+<text class="t" x="44" y="20">\</text>
+<path d="M58 20H68"/>
+<path d="M68 20H88"/>
+<path d="M481 20H501"/>
+<rect class="t" x="88" y="8" width="28" height="24" rx="12"/>
+<text class="t" x="102" y="20">&quot;</text>
+<text class="l" x="130" y="20">quotation mark</text>
+<path d="M224 20H481"/>
+<path d="M68 20a10 10 0 0 1 10 10v12a10 10 0 0 0 10 10"/>
+<path d="M481 52a10 10 0 0 0 10 -10v-12a10 10 0 0 1 10 -10"/>
+<rect class="t" x="88" y="40" width="28" height="24" rx="12"/>
+<text class="t" x="102" y="52">&#x27;</text>
+<text class="l" x="130" y="52">apostrophe</text>
+<path d="M198 52H481"/>
+<path d="M68 20a10 10 0 0 1 10 10v44a10 10 0 0 0 10 10"/>
+<path d="M481 84a10 10 0 0 0 10 -10v-44a10 10 0 0 1 10 -10"/>
+<rect class="t" x="88" y="72" width="28" height="24" rx="12"/>
+<text class="t" x="102" y="84">\</text>
+<text class="l" x="130" y="84">backslash</text>
+<path d="M191 84H481"/>
+<path d="M68 20a10 10 0 0 1 10 10v76a10 10 0 0 0 10 10"/>
+<path d="M481 116a10 10 0 0 0 10 -10v-76a10 10 0 0 1 10 -10"/>
+<rect class="t" x="88" y="104" width="28" height="24" rx="12"/>
+<text class="t" x="102" y="116">/</text>
+<text class="l" x="130" y="116">slash</text>
+<path d="M165 116H481"/>
+<path d="M68 20a10 10 0 0 1 10 10v108a10 10 0 0 0 10 10"/>
+<path d="M481 148a10 10 0 0 0 10 -10v-108a10 10 0 0 1 10 -10"/>
+<rect class="t" x="88" y="136" width="28" height="24" rx="12"/>
+<text class="t" x="102" y="148">b</text>
+<text class="l" x="130" y="148">backspace</text>
+<path d="M191 148H481"/>
+<path d="M68 20a10 10 0 0 1 10 10v140a10 10 0 0 0 10 10"/>
+<path d="M481 180a10 10 0 0 0 10 -10v-140a10 10 0 0 1 10 -10"/>
+<rect class="t" x="88" y="168" width="28" height="24" rx="12"/>
+<text class="t" x="102" y="180">f</text>
+<text class="l" x="130" y="180">form feed</text>
+<path d="M191 180H481"/>
+<path d="M68 20a10 10 0 0 1 10 10v172a10 10 0 0 0 10 10"/>
+<path d="M481 212a10 10 0 0 0 10 -10v-172a10 10 0 0 1 10 -10"/>
+<rect class="t" x="88" y="200" width="28" height="24" rx="12"/>
+<text class="t" x="102" y="212">n</text>
+<text class="l" x="130" y="212">line feed</text>
+<path d="M191 212H481"/>
+<path d="M68 20a10 10 0 0 1 10 10v204a10 10 0 0 0 10 10"/>
+<path d="M481 244a10 10 0 0 0 10 -10v-204a10 10 0 0 1 10 -10"/>
+<rect class="t" x="88" y="232" width="28" height="24" rx="12"/>
+<text class="t" x="102" y="244">r</text>
+<text class="l" x="130" y="244">carriage return</text>
+<path d="M231 244H481"/>
+<path d="M68 20a10 10 0 0 1 10 10v236a10 10 0 0 0 10 10"/>
+<path d="M481 276a10 10 0 0 0 10 -10v-236a10 10 0 0 1 10 -10"/>
+<rect class="t" x="88" y="264" width="28" height="24" rx="12"/>
+<text class="t" x="102" y="276">t</text>
+<text class="l" x="130" y="276">tab</text>
+<path d="M152 276H481"/>
+<path d="M68 20a10 10 0 0 1 10 10v268a10 10 0 0 0 10 10"/>
+<path d="M481 308a10 10 0 0 0 10 -10v-268a10 10 0 0 1 10 -10"/>
+<rect class="t" x="88" y="296" width="28" height="24" rx="12"/>
+<text class="t" x="102" y="308">v</text>
+<text class="l" x="130" y="308">vertical tab</text>
+<path d="M211 308H481"/>
+<path d="M68 20a10 10 0 0 1 10 10v300a10 10 0 0 0 10 10"/>
+<path d="M481 340a10 10 0 0 0 10 -10v-300a10 10 0 0 1 10 -10"/>
+<rect class="t" x="88" y="328" width="28" height="24" rx="12"/>
+<text class="t" x="102" y="340">0</text>
+<text class="l" x="130" y="340">null; no digit may follow</text>
+<path d="M297 340H481"/>
+<path d="M68 20a10 10 0 0 1 10 10v332a10 10 0 0 0 10 10"/>
+<path d="M481 372a10 10 0 0 0 10 -10v-332a10 10 0 0 1 10 -10"/>
+<rect class="t" x="88" y="360" width="28" height="24" rx="12"/>
+<text class="t" x="102" y="372">x</text>
+<path d="M116 372H126"/>
+<rect class="c" x="126" y="360" width="106" height="24" rx="4"/>
+<text class="c" x="179" y="372">2 hex digits</text>
+<path d="M232 372H481"/>
+<path d="M68 20a10 10 0 0 1 10 10v364a10 10 0 0 0 10 10"/>
+<path d="M481 404a10 10 0 0 0 10 -10v-364a10 10 0 0 1 10 -10"/>
+<rect class="t" x="88" y="392" width="28" height="24" rx="12"/>
+<text class="t" x="102" y="404">u</text>
+<path d="M116 404H126"/>
+<rect class="c" x="126" y="392" width="106" height="24" rx="4"/>
+<text class="c" x="179" y="404">4 hex digits</text>
+<path d="M232 404H481"/>
+<path d="M68 20a10 10 0 0 1 10 10v396a10 10 0 0 0 10 10"/>
+<path d="M481 436a10 10 0 0 0 10 -10v-396a10 10 0 0 1 10 -10"/>
+<rect class="t" x="88" y="424" width="28" height="24" rx="12"/>
+<text class="t" x="102" y="436">u</text>
+<path d="M116 436H126"/>
+<rect class="t" x="126" y="424" width="28" height="24" rx="12"/>
+<text class="t" x="140" y="436">{</text>
+<path d="M154 436H164"/>
+<rect class="c" x="164" y="424" width="279" height="24" rx="4"/>
+<text class="c" x="303.5" y="436">1 or more hex digits, at most 10FFFF</text>
+<path d="M443 436H453"/>
+<rect class="t" x="453" y="424" width="28" height="24" rx="12"/>
+<text class="t" x="467" y="436">}</text>
+<path d="M501 20H519"/>
+<path class="cap" d="M519 12v16m4 -16v16"/>
+</svg></div>
+  </section>
+
+  <section class="form" id="number">
+    <h3>number</h3>
+    <p>A <dfn>number</dfn> is a <a href="#decimal">decimal</a> number as in JSON or an <a href="#integer">integer</a> in hexadecimal, octal or binary notation, optionally with a minus sign in front and a <a href="#suffix">suffix</a> directly behind. White space inside a number is an error.</p>
+    <div class="diagram"><svg class="rr" viewBox="0 0 361 72" width="361" height="72" role="img" aria-label="Railroad diagram: number">
+<path class="cap" d="M8 12v16m4 -16v16"/>
+<path d="M12 20H30"/>
+<path d="M30 20H50"/>
+<path d="M78 20H98"/>
+<path d="M50 20H78"/>
+<path d="M30 20a10 10 0 0 1 10 10v0a10 10 0 0 0 10 10"/>
+<path d="M78 40a10 10 0 0 0 10 -10v0a10 10 0 0 1 10 -10"/>
+<rect class="t" x="50" y="28" width="28" height="24" rx="12"/>
+<text class="t" x="64" y="40">-</text>
+<path d="M98 20H108"/>
+<path d="M108 20H128"/>
+<path d="M198 20H218"/>
+<a href="#decimal">
+<rect class="n" x="128" y="8" width="70" height="24" rx="0"/>
+<text class="n" x="163" y="20">decimal</text>
+</a>
+<path d="M108 20a10 10 0 0 1 10 10v12a10 10 0 0 0 10 10"/>
+<path d="M198 52a10 10 0 0 0 10 -10v-12a10 10 0 0 1 10 -10"/>
+<a href="#integer">
+<rect class="n" x="128" y="40" width="70" height="24" rx="0"/>
+<text class="n" x="163" y="52">integer</text>
+</a>
+<path d="M218 20H228"/>
+<path d="M228 20H248"/>
+<path d="M311 20H331"/>
+<path d="M248 20H311"/>
+<path d="M228 20a10 10 0 0 1 10 10v0a10 10 0 0 0 10 10"/>
+<path d="M311 40a10 10 0 0 0 10 -10v0a10 10 0 0 1 10 -10"/>
+<a href="#suffix">
+<rect class="n" x="248" y="28" width="63" height="24" rx="0"/>
+<text class="n" x="279.5" y="40">suffix</text>
+</a>
+<path d="M331 20H349"/>
+<path class="cap" d="M349 12v16m4 -16v16"/>
+</svg></div>
+  </section>
+
+  <section class="form" id="decimal">
+    <h3>decimal</h3>
+    <p>Without <code>_</code> this is exactly the number grammar of JSON: an integer part, an optional fraction part and an optional exponent. Leading zeros such as <code>0755</code>, a leading <code>+</code> and a missing integer or fraction part (<code>.5</code>, <code>5.</code>) remain errors.</p>
+    <div class="diagram"><svg class="rr" viewBox="0 0 753 112" width="753" height="112" role="img" aria-label="Railroad diagram: decimal">
+<path class="cap" d="M8 12v16m4 -16v16"/>
+<path d="M12 20H30"/>
+<path d="M30 20H50"/>
+<path d="M283 20H303"/>
+<rect class="t" x="50" y="8" width="28" height="24" rx="12"/>
+<text class="t" x="64" y="20">0</text>
+<path d="M78 20H283"/>
+<path d="M30 20a10 10 0 0 1 10 10v12a10 10 0 0 0 10 10"/>
+<path d="M283 52a10 10 0 0 0 10 -10v-12a10 10 0 0 1 10 -10"/>
+<rect class="c" x="50" y="40" width="42" height="24" rx="4"/>
+<text class="c" x="71" y="52">1–9</text>
+<path d="M92 52H102"/>
+<path d="M102 52H122"/>
+<path d="M263 52H283"/>
+<path d="M122 52H263"/>
+<path d="M102 52a10 10 0 0 1 10 10v0a10 10 0 0 0 10 10"/>
+<path d="M263 72a10 10 0 0 0 10 -10v0a10 10 0 0 1 10 -10"/>
+<path d="M122 72H142"/>
+<path d="M170 72H190"/>
+<path d="M142 72H170"/>
+<path d="M122 72a10 10 0 0 1 10 10v0a10 10 0 0 0 10 10"/>
+<path d="M170 92a10 10 0 0 0 10 -10v0a10 10 0 0 1 10 -10"/>
+<rect class="t" x="142" y="80" width="28" height="24" rx="12"/>
+<text class="t" x="156" y="92">_</text>
+<path d="M190 72H200"/>
+<a href="#digits">
+<rect class="n" x="200" y="60" width="63" height="24" rx="0"/>
+<text class="n" x="231.5" y="72">digits</text>
+</a>
+<path d="M303 20H313"/>
+<path d="M313 20H333"/>
+<path d="M434 20H454"/>
+<path d="M333 20H434"/>
+<path d="M313 20a10 10 0 0 1 10 10v0a10 10 0 0 0 10 10"/>
+<path d="M434 40a10 10 0 0 0 10 -10v0a10 10 0 0 1 10 -10"/>
+<rect class="t" x="333" y="28" width="28" height="24" rx="12"/>
+<text class="t" x="347" y="40">.</text>
+<path d="M361 40H371"/>
+<a href="#digits">
+<rect class="n" x="371" y="28" width="63" height="24" rx="0"/>
+<text class="n" x="402.5" y="40">digits</text>
+</a>
+<path d="M454 20H464"/>
+<path d="M464 20H484"/>
+<path d="M703 20H723"/>
+<path d="M484 20H703"/>
+<path d="M464 20a10 10 0 0 1 10 10v0a10 10 0 0 0 10 10"/>
+<path d="M703 40a10 10 0 0 0 10 -10v0a10 10 0 0 1 10 -10"/>
+<path d="M484 40H504"/>
+<path d="M532 40H552"/>
+<rect class="t" x="504" y="28" width="28" height="24" rx="12"/>
+<text class="t" x="518" y="40">e</text>
+<path d="M484 40a10 10 0 0 1 10 10v12a10 10 0 0 0 10 10"/>
+<path d="M532 72a10 10 0 0 0 10 -10v-12a10 10 0 0 1 10 -10"/>
+<rect class="t" x="504" y="60" width="28" height="24" rx="12"/>
+<text class="t" x="518" y="72">E</text>
+<path d="M552 40H562"/>
+<path d="M562 40H582"/>
+<path d="M610 40H630"/>
+<path d="M582 40H610"/>
+<path d="M562 40a10 10 0 0 1 10 10v0a10 10 0 0 0 10 10"/>
+<path d="M610 60a10 10 0 0 0 10 -10v0a10 10 0 0 1 10 -10"/>
+<rect class="t" x="582" y="48" width="28" height="24" rx="12"/>
+<text class="t" x="596" y="60">+</text>
+<path d="M562 40a10 10 0 0 1 10 10v32a10 10 0 0 0 10 10"/>
+<path d="M610 92a10 10 0 0 0 10 -10v-32a10 10 0 0 1 10 -10"/>
+<rect class="t" x="582" y="80" width="28" height="24" rx="12"/>
+<text class="t" x="596" y="92">-</text>
+<path d="M630 40H640"/>
+<a href="#digits">
+<rect class="n" x="640" y="28" width="63" height="24" rx="0"/>
+<text class="n" x="671.5" y="40">digits</text>
+</a>
+<path d="M723 20H741"/>
+<path class="cap" d="M741 12v16m4 -16v16"/>
+</svg></div>
+  </section>
+
+  <section class="form" id="digits">
+    <h3>digits</h3>
+    <p>Between two digits there may be exactly one <code>_</code>. It has no meaning and is discarded when reading. This holds for every digit sequence, including the digits of hexadecimal, octal and binary integers.</p>
+    <div class="diagram"><svg class="rr" viewBox="0 0 148 80" width="148" height="80" role="img" aria-label="Railroad diagram: digits">
+<path class="cap" d="M8 12v16m4 -16v16"/>
+<path d="M12 20H30"/>
+<path d="M30 20H40"/>
+<rect class="c" x="40" y="8" width="42" height="24" rx="4"/>
+<text class="c" x="61" y="20">0–9</text>
+<path d="M82 20H118"/>
+<path d="M108 20a10 10 0 0 1 10 10v0a10 10 0 0 1 -10 10"/>
+<path d="M40 40a10 10 0 0 1 -10 -10v0a10 10 0 0 1 10 -10"/>
+<path d="M40 40H60"/>
+<path d="M88 40H108"/>
+<path d="M60 40H88"/>
+<path d="M40 40a10 10 0 0 1 10 10v0a10 10 0 0 0 10 10"/>
+<path d="M88 60a10 10 0 0 0 10 -10v0a10 10 0 0 1 10 -10"/>
+<rect class="t" x="60" y="48" width="28" height="24" rx="12"/>
+<text class="t" x="74" y="60">_</text>
+<path d="M118 20H136"/>
+<path class="cap" d="M136 12v16m4 -16v16"/>
+</svg></div>
+  </section>
+
+  <section class="form" id="integer">
+    <h3>integer</h3>
+    <p>Integers can be written in hexadecimal (<code>0x</code>), octal (<code>0o</code>) or binary (<code>0b</code>) notation. Case does not matter in the prefix or in the hexadecimal digits. These forms have no fraction part and no exponent. Their value is exact: an implementation that cannot represent it reports an error and never rounds.</p>
+    <div class="diagram"><svg class="rr" viewBox="0 0 335 224" width="335" height="224" role="img" aria-label="Railroad diagram: integer">
+<path class="cap" d="M8 12v16m4 -16v16"/>
+<path d="M12 20H30"/>
+<rect class="t" x="30" y="8" width="28" height="24" rx="12"/>
+<text class="t" x="44" y="20">0</text>
+<path d="M58 20H68"/>
+<path d="M68 20H88"/>
+<path d="M285 20H305"/>
+<path d="M88 20H108"/>
+<path d="M136 20H156"/>
+<rect class="t" x="108" y="8" width="28" height="24" rx="12"/>
+<text class="t" x="122" y="20">x</text>
+<path d="M88 20a10 10 0 0 1 10 10v12a10 10 0 0 0 10 10"/>
+<path d="M136 52a10 10 0 0 0 10 -10v-12a10 10 0 0 1 10 -10"/>
+<rect class="t" x="108" y="40" width="28" height="24" rx="12"/>
+<text class="t" x="122" y="52">X</text>
+<path d="M156 20H166"/>
+<path d="M166 20H176"/>
+<rect class="c" x="176" y="8" width="99" height="24" rx="4"/>
+<text class="c" x="225.5" y="20">0–9 a–f A–F</text>
+<path d="M275 20H285"/>
+<path d="M275 20a10 10 0 0 1 10 10v0a10 10 0 0 1 -10 10"/>
+<path d="M176 40a10 10 0 0 1 -10 -10v0a10 10 0 0 1 10 -10"/>
+<path d="M176 40H191.5"/>
+<path d="M191.5 40H211.5"/>
+<path d="M239.5 40H259.5"/>
+<path d="M211.5 40H239.5"/>
+<path d="M191.5 40a10 10 0 0 1 10 10v0a10 10 0 0 0 10 10"/>
+<path d="M239.5 60a10 10 0 0 0 10 -10v0a10 10 0 0 1 10 -10"/>
+<rect class="t" x="211.5" y="48" width="28" height="24" rx="12"/>
+<text class="t" x="225.5" y="60">_</text>
+<path d="M259.5 40H275"/>
+<path d="M68 20a10 10 0 0 1 10 10v52a10 10 0 0 0 10 10"/>
+<path d="M285 92a10 10 0 0 0 10 -10v-52a10 10 0 0 1 10 -10"/>
+<path d="M88 92H108"/>
+<path d="M136 92H156"/>
+<rect class="t" x="108" y="80" width="28" height="24" rx="12"/>
+<text class="t" x="122" y="92">o</text>
+<path d="M88 92a10 10 0 0 1 10 10v12a10 10 0 0 0 10 10"/>
+<path d="M136 124a10 10 0 0 0 10 -10v-12a10 10 0 0 1 10 -10"/>
+<rect class="t" x="108" y="112" width="28" height="24" rx="12"/>
+<text class="t" x="122" y="124">O</text>
+<path d="M156 92H166"/>
+<path d="M166 92H176"/>
+<rect class="c" x="176" y="80" width="42" height="24" rx="4"/>
+<text class="c" x="197" y="92">0–7</text>
+<path d="M218 92H254"/>
+<path d="M244 92a10 10 0 0 1 10 10v0a10 10 0 0 1 -10 10"/>
+<path d="M176 112a10 10 0 0 1 -10 -10v0a10 10 0 0 1 10 -10"/>
+<path d="M176 112H196"/>
+<path d="M224 112H244"/>
+<path d="M196 112H224"/>
+<path d="M176 112a10 10 0 0 1 10 10v0a10 10 0 0 0 10 10"/>
+<path d="M224 132a10 10 0 0 0 10 -10v0a10 10 0 0 1 10 -10"/>
+<rect class="t" x="196" y="120" width="28" height="24" rx="12"/>
+<text class="t" x="210" y="132">_</text>
+<path d="M254 92H285"/>
+<path d="M68 20a10 10 0 0 1 10 10v124a10 10 0 0 0 10 10"/>
+<path d="M285 164a10 10 0 0 0 10 -10v-124a10 10 0 0 1 10 -10"/>
+<path d="M88 164H108"/>
+<path d="M136 164H156"/>
+<rect class="t" x="108" y="152" width="28" height="24" rx="12"/>
+<text class="t" x="122" y="164">b</text>
+<path d="M88 164a10 10 0 0 1 10 10v12a10 10 0 0 0 10 10"/>
+<path d="M136 196a10 10 0 0 0 10 -10v-12a10 10 0 0 1 10 -10"/>
+<rect class="t" x="108" y="184" width="28" height="24" rx="12"/>
+<text class="t" x="122" y="196">B</text>
+<path d="M156 164H166"/>
+<path d="M166 164H176"/>
+<rect class="c" x="176" y="152" width="42" height="24" rx="4"/>
+<text class="c" x="197" y="164">0 1</text>
+<path d="M218 164H254"/>
+<path d="M244 164a10 10 0 0 1 10 10v0a10 10 0 0 1 -10 10"/>
+<path d="M176 184a10 10 0 0 1 -10 -10v0a10 10 0 0 1 10 -10"/>
+<path d="M176 184H196"/>
+<path d="M224 184H244"/>
+<path d="M196 184H224"/>
+<path d="M176 184a10 10 0 0 1 10 10v0a10 10 0 0 0 10 10"/>
+<path d="M224 204a10 10 0 0 0 10 -10v0a10 10 0 0 1 10 -10"/>
+<rect class="t" x="196" y="192" width="28" height="24" rx="12"/>
+<text class="t" x="210" y="204">_</text>
+<path d="M254 164H285"/>
+<path d="M305 20H323"/>
+<path class="cap" d="M323 12v16m4 -16v16"/>
+</svg></div>
+  </section>
+
+  <section class="form" id="suffix">
+    <h3>suffix</h3>
+    <p>A <dfn>suffix</dfn> of one or two characters directly after the last digit stands for a conversion function that turns the number into another number. Predefined and not changeable are <code>k</code> and <code>K</code> (times 1000), <code>kb</code>, <code>Kb</code>, <code>kB</code> and <code>KB</code> (times 1024), and <code>mb</code>, <code>Mb</code>, <code>mB</code> and <code>MB</code> (times 1048576). The application can pass further suffixes to the parser, for example <code>%</code> for "divided by 100". Case is significant, the longest match applies, and an undefined suffix is an error.</p>
+    <div class="diagram"><svg class="rr" viewBox="0 0 423 60" width="423" height="60" role="img" aria-label="Railroad diagram: suffix">
+<path class="cap" d="M8 12v16m4 -16v16"/>
+<path d="M12 20H30"/>
+<rect class="c" x="30" y="8" width="214" height="24" rx="4"/>
+<text class="c" x="137" y="20">g–n p–w y z G–N P–W Y Z % $</text>
+<path d="M244 20H254"/>
+<path d="M254 20H274"/>
+<path d="M373 20H393"/>
+<path d="M274 20H373"/>
+<path d="M254 20a10 10 0 0 1 10 10v0a10 10 0 0 0 10 10"/>
+<path d="M373 40a10 10 0 0 0 10 -10v0a10 10 0 0 1 10 -10"/>
+<rect class="c" x="274" y="28" width="99" height="24" rx="4"/>
+<text class="c" x="323.5" y="40">a–z A–Z % $</text>
+<path d="M393 20H411"/>
+<path class="cap" d="M411 12v16m4 -16v16"/>
+</svg></div>
+    <p>The first character cannot be <code>a</code> to <code>f</code>, <code>o</code> or <code>x</code> in either case, so a suffix is never confused with a hexadecimal digit, an exponent or a number prefix.</p>
+  </section>
+
+  <section class="form" id="white-space">
+    <h3>white space</h3>
+    <p><dfn>White space</dfn> can be inserted between any pair of tokens. The white space characters are the four of JSON (space, tab, line feed, carriage return) and all further white space characters of ECMAScript, among them the no-break space and the byte order mark. A <a href="#comment">comment</a> counts as white space.</p>
+    <div class="diagram"><svg class="rr" viewBox="0 0 331 120" width="331" height="120" role="img" aria-label="Railroad diagram: white space">
+<path class="cap" d="M8 0v16m4 -16v16"/>
+<path d="M12 8H30"/>
+<path d="M30 8H50"/>
+<path d="M281 8H301"/>
+<path d="M50 8H281"/>
+<path d="M30 8a10 10 0 0 1 10 10v0a10 10 0 0 0 10 10"/>
+<path d="M281 28a10 10 0 0 0 10 -10v0a10 10 0 0 1 10 -10"/>
+<path d="M50 28H60"/>
+<path d="M60 28H80"/>
+<path d="M251 28H271"/>
+<rect class="c" x="80" y="16" width="171" height="24" rx="4"/>
+<text class="c" x="165.5" y="28">white space character</text>
+<path d="M60 28a10 10 0 0 1 10 10v12a10 10 0 0 0 10 10"/>
+<path d="M251 60a10 10 0 0 0 10 -10v-12a10 10 0 0 1 10 -10"/>
+<a href="#line-break">
+<rect class="n" x="80" y="48" width="92" height="24" rx="0"/>
+<text class="n" x="126" y="60">line break</text>
+</a>
+<path d="M172 60H251"/>
+<path d="M60 28a10 10 0 0 1 10 10v44a10 10 0 0 0 10 10"/>
+<path d="M251 92a10 10 0 0 0 10 -10v-44a10 10 0 0 1 10 -10"/>
+<a href="#comment">
+<rect class="n" x="80" y="80" width="70" height="24" rx="0"/>
+<text class="n" x="115" y="92">comment</text>
+</a>
+<path d="M150 92H251"/>
+<path d="M271 28H281"/>
+<path d="M271 28a10 10 0 0 1 10 10v64a10 10 0 0 1 -10 10"/>
+<path d="M60 112a10 10 0 0 1 -10 -10v-64a10 10 0 0 1 10 -10"/>
+<path d="M60 112H165.5"/>
+<path d="M165.5 112H271"/>
+<path d="M301 8H319"/>
+<path class="cap" d="M319 0v16m4 -16v16"/>
+</svg></div>
+  </section>
+
+  <section class="form" id="comment">
+    <h3>comment</h3>
+    <p>A line comment begins with <code>//</code> or <code>#</code> and extends up to the next <a href="#line-break">line break</a> or to the end of the document. A block comment begins with <code>/*</code> and ends at the first <code>*/</code> that follows; block comments cannot be nested. A line break inside a block comment is not a separator.</p>
+    <div class="diagram"><svg class="rr" viewBox="0 0 482 104" width="482" height="104" role="img" aria-label="Railroad diagram: comment">
+<path class="cap" d="M8 12v16m4 -16v16"/>
+<path d="M12 20H30"/>
+<path d="M30 20H50"/>
+<path d="M432 20H452"/>
+<path d="M50 20H70"/>
+<path d="M106 20H126"/>
+<rect class="t" x="70" y="8" width="36" height="24" rx="12"/>
+<text class="t" x="88" y="20">//</text>
+<path d="M50 20a10 10 0 0 1 10 10v12a10 10 0 0 0 10 10"/>
+<path d="M106 52a10 10 0 0 0 10 -10v-12a10 10 0 0 1 10 -10"/>
+<rect class="t" x="70" y="40" width="28" height="24" rx="12"/>
+<text class="t" x="84" y="52">#</text>
+<path d="M98 52H106"/>
+<path d="M126 20H136"/>
+<path d="M136 20H156"/>
+<path d="M412 20H432"/>
+<path d="M156 20H412"/>
+<path d="M136 20a10 10 0 0 1 10 10v0a10 10 0 0 0 10 10"/>
+<path d="M412 40a10 10 0 0 0 10 -10v0a10 10 0 0 1 10 -10"/>
+<path d="M156 40H166"/>
+<rect class="c" x="166" y="28" width="236" height="24" rx="4"/>
+<text class="c" x="284" y="40">any character except LF and CR</text>
+<path d="M402 40H412"/>
+<path d="M402 40a10 10 0 0 1 10 10v0a10 10 0 0 1 -10 10"/>
+<path d="M166 60a10 10 0 0 1 -10 -10v0a10 10 0 0 1 10 -10"/>
+<path d="M166 60H284"/>
+<path d="M284 60H402"/>
+<path d="M30 20a10 10 0 0 1 10 10v44a10 10 0 0 0 10 10"/>
+<path d="M432 84a10 10 0 0 0 10 -10v-44a10 10 0 0 1 10 -10"/>
+<rect class="t" x="50" y="72" width="36" height="24" rx="12"/>
+<text class="t" x="68" y="84">/*</text>
+<path d="M86 84H96"/>
+<rect class="c" x="96" y="72" width="258" height="24" rx="4"/>
+<text class="c" x="225" y="84">any text that does not contain */</text>
+<path d="M354 84H364"/>
+<rect class="t" x="364" y="72" width="36" height="24" rx="12"/>
+<text class="t" x="382" y="84">*/</text>
+<path d="M400 84H432"/>
+<path d="M452 20H470"/>
+<path class="cap" d="M470 12v16m4 -16v16"/>
+</svg></div>
+  </section>
+
+  <section class="form" id="line-break">
+    <h3>line break</h3>
+    <p>A <dfn>line break</dfn> is a line feed, a carriage return, or the sequence of both, which counts as a single line break. All other white space characters, including U+2028 and U+2029, are not line breaks: they neither separate items nor end a line comment.</p>
+    <div class="diagram"><svg class="rr" viewBox="0 0 271 104" width="271" height="104" role="img" aria-label="Railroad diagram: line break">
+<path class="cap" d="M8 12v16m4 -16v16"/>
+<path d="M12 20H30"/>
+<path d="M30 20H50"/>
+<path d="M221 20H241"/>
+<rect class="c" x="50" y="8" width="99" height="24" rx="4"/>
+<text class="c" x="99.5" y="20">LF (U+000A)</text>
+<path d="M149 20H221"/>
+<path d="M30 20a10 10 0 0 1 10 10v12a10 10 0 0 0 10 10"/>
+<path d="M221 52a10 10 0 0 0 10 -10v-12a10 10 0 0 1 10 -10"/>
+<rect class="c" x="50" y="40" width="99" height="24" rx="4"/>
+<text class="c" x="99.5" y="52">CR (U+000D)</text>
+<path d="M149 52H221"/>
+<path d="M30 20a10 10 0 0 1 10 10v44a10 10 0 0 0 10 10"/>
+<path d="M221 84a10 10 0 0 0 10 -10v-44a10 10 0 0 1 10 -10"/>
+<rect class="c" x="50" y="72" width="171" height="24" rx="4"/>
+<text class="c" x="135.5" y="84">CR LF (U+000D U+000A)</text>
+<path d="M241 20H259"/>
+<path class="cap" d="M259 12v16m4 -16v16"/>
+</svg></div>
+  </section>
+</section>
+
+<section id="json-equivalent">
+  <h2>From XTJSON to JSON</h2>
+  <p>The meaning of a document is defined by its <dfn>JSON equivalent</dfn>, which is obtained as follows:</p>
+  <ol>
+    <li>Comments are removed, and white space characters that JSON does not have become spaces.</li>
+    <li>The members of an implicit root object are enclosed in <code>{</code> and <code>}</code>.</li>
+    <li>Exactly one comma is put between two consecutive items; trailing commas are dropped.</li>
+    <li>An identifier at a name position becomes the JSON string with the same characters.</li>
+    <li>Strings become JSON strings in double quotation marks with the same value.</li>
+    <li>Numbers are written as JSON numbers: without <code>_</code>, in decimal notation, and with the suffix replaced by the result of its conversion.</li>
+    <li>Named values other than <code>true</code>, <code>false</code> and <code>null</code> are replaced by the JSON value assigned to them.</li>
+  </ol>
+  <p>A document that uses at least one of the extensions is not a JSON text. It must not be labelled with the media type <code>application/json</code> or sent to recipients that expect JSON.</p>
+</section>
+
+<section id="principles">
+  <h2>Principles</h2>
+  <ul>
+    <li><strong>Definitions belong to the parser, not to the document.</strong> A document can define neither named values nor suffixes. A document that uses only the predefined ones is portable: every conforming parser can read it.</li>
+    <li><strong>Errors instead of guessing.</strong> Unknown escape sequences, undefined identifiers, undefined suffixes and mixed indentation are errors and are not silently interpreted.</li>
+    <li><strong>Never code.</strong> XTJSON is not a subset of a programming language and is never read by evaluating it as program code.</li>
+  </ul>
+</section>
+
+<section id="implementations">
+  <h2>Specification and implementations</h2>
+  <p>The specification is the source of truth. It is available in <a href="https://github.com/cwkr/xtjson/blob/main/docs/xtjson-spec-en.md">English</a> and <a href="https://github.com/cwkr/xtjson/blob/main/docs/xtjson-spec-de.md">German</a>; both versions are equal in rank. This page is an informal overview. Where it differs from the specification, the specification applies.</p>
+  <p>The <a href="https://github.com/cwkr/xtjson/tree/main/scripts">reference parser</a> in the repository is written in Python. It makes the specification testable and comes with the test cases that serve as the conformance corpus for implementations.</p>
+</section>
+
+</main>
+
+<aside id="grammar" aria-labelledby="grammar-title">
+  <h2 id="grammar-title">Grammar</h2>
+  <p>The complete grammar in <a href="https://www.rfc-editor.org/rfc/rfc5234">ABNF</a>, taken from Appendix A of the specification.</p>
+  <pre><code>; ---------- Document ----------
+XTJSON-text    = S ( value / root-members ) S [ line-comment ]
+root-members   = member-list                 ; implicit root object
+
+; ---------- Values ----------
+value          = object / array / string / number / named-value
+named-value    = identifier                  ; true, false, null and
+                                             ; custom definitions (6.4)
+
+; ---------- Objects ----------
+object         = &quot;{&quot; S [ member-list S ] &quot;}&quot;
+member-list    = member *( item-sep member ) [ S &quot;,&quot; ]
+member         = name S &quot;:&quot; S value
+name           = dq-string / sq-string / identifier
+identifier     = id-start *id-continue
+id-start       = ALPHA / &quot;_&quot; / &quot;$&quot;
+id-continue    = ALPHA / DIGIT / &quot;_&quot; / &quot;$&quot;
+
+; ---------- Arrays ----------
+array          = &quot;[&quot; S [ value-list S ] &quot;]&quot;
+value-list     = value *( item-sep value ) [ S &quot;,&quot; ]
+
+; ---------- Separators ----------
+item-sep       = ( S &quot;,&quot; S ) / S-nl
+
+; ---------- White space and comments ----------
+S              = *( blank / block-comment / eol )
+S-nl           = *( blank / block-comment ) eol S
+eol            = [ line-comment ] newline
+blank          = %x09 / %x0B / %x0C /                ; HT, VT, FF
+                 %x20 / %xA0 / %x1680 /              ; category Zs:
+                 %x2000-200A / %x202F /              ;   SP, NBSP and the
+                 %x205F / %x3000 /                   ;   other spaces
+                 %x2028 / %x2029 /                   ; LS, PS
+                 %xFEFF                              ; ZWNBSP (BOM)
+newline        = %x0D.0A / %x0A / %x0D       ; CR LF, LF or CR
+line-comment   = ( &quot;//&quot; / &quot;#&quot; ) *non-eol
+block-comment  = &quot;/*&quot; *( non-star / ( 1*&quot;*&quot; non-star-slash ) ) 1*&quot;*&quot; &quot;/&quot;
+non-eol        = %x00-09 / %x0B-0C / %x0E-10FFFF   ; everything except LF and CR
+non-star       = %x00-29 / %x2B-10FFFF
+non-star-slash = %x00-29 / %x2B-2E / %x30-10FFFF
+
+; ---------- Strings ----------
+string         = ml-dq-string / ml-sq-string / dq-string / sq-string
+dq-string      = DQUOTE *( dq-unescaped / escape-seq ) DQUOTE
+sq-string      = SQUOTE *( sq-unescaped / escape-seq ) SQUOTE
+ml-dq-string   = 3DQUOTE *ml-dq-item 3DQUOTE
+ml-sq-string   = 3SQUOTE *ml-sq-item 3SQUOTE
+ml-dq-item     = [ DQUOTE [ DQUOTE ] ] ( dq-unescaped / ml-plain )
+ml-sq-item     = [ SQUOTE [ SQUOTE ] ] ( sq-unescaped / ml-plain )
+ml-plain       = escape-seq / newline / %x09
+dq-unescaped   = %x20-21 / %x23-5B / %x5D-10FFFF     ; without &quot; and \
+sq-unescaped   = %x20-26 / %x28-5B / %x5D-10FFFF     ; without &#x27; and \
+escape-seq     = %x5C ( char-escape / null-escape / hex-escape /
+                        unicode-escape / codepoint-escape )
+char-escape    = %x22 / %x27 / %x5C / %x2F /         ; &quot; &#x27; \ /
+                 %x62 / %x66 / %x6E / %x72 /         ; b f n r
+                 %x74 / %x76                         ; t v
+null-escape    = %x30                        ; \0, not before a DIGIT
+hex-escape     = %x78 2HEXDIG                ; \xHH
+unicode-escape = %x75 4HEXDIG                ; \uXXXX
+codepoint-escape = %x75 &quot;{&quot; *&quot;0&quot; ( 1*5HEXDIG / ( &quot;10&quot; 4HEXDIG ) ) &quot;}&quot;
+                                             ; \u{…}, at most 10FFFF, not D800-DFFF
+SQUOTE         = %x27                        ; &#x27;
+
+; ---------- Numbers ----------
+number         = [ minus ] ( hex-int / oct-int / bin-int / decimal ) [ suffix ]
+suffix         = suffix-first [ suffix-next ]
+suffix-first   = %x67-6E / %x70-77 / %x79-7A /       ; g-n p-w y z
+                 %x47-4E / %x50-57 / %x59-5A /       ; G-N P-W Y Z
+                 &quot;%&quot; / &quot;$&quot;
+suffix-next    = %x61-7A / %x41-5A / &quot;%&quot; / &quot;$&quot;       ; a-z A-Z % $
+decimal        = int [ frac ] [ exp ]
+int            = zero / ( digit1-9 *( [ &quot;_&quot; ] DIGIT ) )
+frac           = &quot;.&quot; digits
+exp            = e [ minus / plus ] digits
+digits         = DIGIT *( [ &quot;_&quot; ] DIGIT )
+hex-int        = zero ( %x78 / %x58 ) HEXDIG    *( [ &quot;_&quot; ] HEXDIG )     ; 0x 0X
+oct-int        = zero ( %x6F / %x4F ) oct-digit *( [ &quot;_&quot; ] oct-digit )  ; 0o 0O
+bin-int        = zero ( %x62 / %x42 ) BIT       *( [ &quot;_&quot; ] BIT )        ; 0b 0B
+oct-digit      = %x30-37
+digit1-9       = %x31-39
+zero           = %x30
+minus          = %x2D
+plus           = %x2B
+e              = %x65 / %x45                 ; e E</code></pre>
+</aside>
+
+</div>
+
+<footer>
+  <div class="wrap">
+    <p>XTJSON specification draft 0.3 · <a href="https://github.com/cwkr/xtjson">github.com/cwkr/xtjson</a></p>
+  </div>
+</footer>
+
+</body>
+</html>

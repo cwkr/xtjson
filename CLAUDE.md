@@ -26,7 +26,11 @@ scripts/
   tests_zeilenumbruch_strings.py  tests: line breaks, strings, names, escapes
   tests_mehrzeilige_strings.py    tests: value of multi-line strings
   tests_definitionen.py           tests: named values and number suffixes
+  build_index.py                  generates docs/index.html
+  index_template.html             template for docs/index.html
 ```
+
+`docs/` also contains the overview page for GitHub Pages: `index.html` (generated, do not edit by hand) and `style.css` (written by hand).
 
 Implementation source code lives in its own directories next to `docs/` and `scripts/`. Each implementation documents its own build and test commands in a README in its directory; read that before touching it. Do not put implementation code into `docs/` or `scripts/`.
 
@@ -52,6 +56,19 @@ What they check:
 - `compare_versions.py` compares the outline, the ABNF blocks (without comments), the shape of the example values, tables, list items and the number of normative key words per section. Item 7 of its output lists code spans that occur in only one version; only translated example words are acceptable there.
 
 The comparison is mechanical. It does not detect differences of meaning in prose. Always read changed sentences against each other in both versions.
+
+## Overview page
+
+`docs/index.html` is an informal English overview with railroad diagrams, modelled on json.org. It is generated:
+
+```sh
+python3 scripts/build_index.py           # writes docs/index.html
+python3 scripts/build_index.py --check   # fails if docs/index.html is out of date
+```
+
+- The grammar, the example from Appendix B.1, the draft number and the date are copied from `docs/xtjson-spec-en.md`. Rebuild the page after every change to the English version and commit the result with it.
+- The prose is in `scripts/index_template.html`, the diagrams are in `DIAGRAMS` in `scripts/build_index.py`. Both are written by hand from the specification and are not checked against it. After a rule or grammar change, read them against the changed sections and adapt them.
+- The page is not normative. It must not say anything the specification does not say.
 
 ## Rules for changing the specification
 
