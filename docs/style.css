@@ -60,7 +60,8 @@ body {
 .wrap {
   max-width: 46rem;
   margin: 0 auto;
-  padding: 0 1rem;
+  padding-left: 1rem;
+  padding-right: 1rem;
 }
 
 a {
@@ -324,7 +325,8 @@ footer p {
 @media (min-width: 60rem) {
   .wrap {
     max-width: 62rem;
-    padding: 0 1.5rem;
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
   }
 
   main > section > p,
