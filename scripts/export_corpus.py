@@ -10,10 +10,9 @@ Aufruf:
 
 Standard fuer Datei: xtjson-js/test/corpus.json
 
-Die Umrechnungsfunktionen der Suffixe aus tests_definitionen.py lassen sich
-nicht als JSON ausgeben. Exportiert werden nur ihre Namen (c_suffixes); jede
-Implementierung bildet die Funktionen selbst nach und prueft die Namen.
-Die abgelehnten Definitionen (BAD_DEFS) werden nicht exportiert.
+Von den abgelehnten Definitionen (BAD_DEFS) werden nur die exportiert, die
+sich als JSON darstellen lassen (c_bad_values); Werte wie NaN, Mengen oder
+beliebige Objekte prueft jede Implementierung selbst.
 """
 import ast
 import json
@@ -56,8 +55,22 @@ def defs_label(defs):
     if not defs:
         return None
     if set(defs) != {'values'}:
-        raise SystemExit('FEHLER: Definitionen mit Suffixen ausser D lassen sich nicht exportieren: %r' % (defs,))
+        raise SystemExit('FEHLER: unbekannte Definitionen: %r' % (defs,))
     return {'values': defs['values']}
+
+
+def bad_values():
+    """Die abgelehnten benannten Werte aus BAD_DEFS, die sich als JSON darstellen lassen."""
+    out = []
+    for defs in tc.BAD_DEFS:
+        if set(defs) != {'values'}:
+            raise SystemExit('FEHLER: unbekannte Definitionen: %r' % (defs,))
+        try:
+            json.dumps(defs['values'], allow_nan=False)
+        except (TypeError, ValueError):
+            continue
+        out.append(defs['values'])
+    return out
 
 
 def corpus():
@@ -72,9 +85,9 @@ def corpus():
         'b_valid': [[t, v] for t, v in tb.VALID],
         'b_invalid': tb.INVALID,
         'c_values': tc.VALUES,
-        'c_suffixes': sorted(tc.SUFFIXES),
         'c_valid': [[t, defs_label(d), v] for t, d, v in tc.VALID],
         'c_invalid': [[t, defs_label(d)] for t, d in tc.INVALID],
+        'c_bad_values': bad_values(),
     }
 
 
