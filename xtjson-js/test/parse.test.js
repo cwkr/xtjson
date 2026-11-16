@@ -19,7 +19,7 @@ function error(text, defs) {
 
 describe('API', () => {
   test('named exports only, no default export', () => {
-    assert.deepEqual(Object.keys(xtjson).sort(), ['Generator', 'Options', 'Parser', 'ParserError', 'parse', 'stringify']);
+    assert.deepEqual(Object.keys(xtjson).sort(), ['Generator', 'Options', 'Parser', 'ParserError', 'format', 'parse', 'stringify']);
     assert.equal('default' in xtjson, false);
   });
 

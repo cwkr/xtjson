@@ -166,6 +166,21 @@ export function stringify(value: any, space: string | number, options?: Options 
 export function stringify(value: any, options: Options | OptionsInit): string;
 
 /**
+ * Formats an XTJSON document with the indentation `space`, as `stringify`
+ * would lay it out, keeping comments and the notation of names and values.
+ * The text is not parsed or validated; formatting is best effort, and a
+ * valid document keeps its value. Without indentation, a line break that
+ * separates two items becomes a comma.
+ *
+ * @param text the document
+ * @param space indentation as in `stringify`: a number of spaces (at most
+ *   10) or a string of spaces and tabs
+ * @returns the formatted text, without a line break at the end
+ * @throws {TypeError} if `space` is invalid
+ */
+export function format(text: string, space?: string | number | null): string;
+
+/**
  * Parser with fixed options. The options are validated once; the instance
  * can be reused for many documents. Its state is private.
  *

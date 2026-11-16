@@ -337,6 +337,29 @@ export const isSpace = (x) => typeof x === 'number' || typeof x === 'string' || 
 export const isOptions = (x) => typeof x === 'object' && !Array.isArray(x) && !(x instanceof Number) && !(x instanceof String);
 
 /**
+ * Indentation from the `space` argument, as in JSON.stringify: at most 10
+ * spaces, or the first 10 characters of a string of spaces and tabs.
+ * @param {unknown} space
+ * @param {string} caller name of the function, for messages
+ */
+export function indentation(space, caller) {
+  if (space instanceof Number) space = Number(space);
+  else if (space instanceof String) space = String(space);
+  if (typeof space === 'number') {
+    const n = Math.min(10, Math.trunc(space) || 0);
+    return n >= 1 ? ' '.repeat(n) : '';
+  }
+  if (typeof space === 'string') {
+    const gap = space.slice(0, 10);
+    if (!/^[ \t]*$/.test(gap)) {
+      throw new TypeError(`${caller}: "space" may only contain spaces and tabs; other characters would make the indentation invalid`);
+    }
+    return gap;
+  }
+  return '';
+}
+
+/**
  * Assigns the optional arguments by their type. Each kind may occur once,
  * in the order of `kinds`; null and undefined are skipped.
  * @param {string} caller name of the function, for messages

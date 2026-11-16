@@ -43,6 +43,7 @@
     "xtjson.js",
     "parser.js",
     "generator.js",
+    "formatter.js",
     "shared.js",
     "xtjson.d.ts"
   ],
@@ -51,7 +52,7 @@
     "node": ">=18"
   },
   "scripts": {
-    "test": "node --test test/corpus.test.js test/parse.test.js test/stringify.test.js",
+    "test": "node --test test/corpus.test.js test/parse.test.js test/stringify.test.js test/format.test.js",
     "bench": "node bench/bench.js"
   }
 }

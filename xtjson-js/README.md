@@ -181,6 +181,40 @@ unchanged; `n` in addition yields a BigInt, see [Numbers](#numbers).
 with it. A plain object with the same properties can be passed as well, but
 `parse` and `stringify` validate it again on every call.
 
+### `format(text, space?)`
+
+Formats an XTJSON document and returns the text. `space` works as in
+`stringify`. The layout follows `stringify`: one member or array item per
+line, indented by `space` per level, a space after each `:`, and empty
+objects and arrays as `{}` and `[]`. Unlike `stringify`, `format` keeps
+comments, the notation of names, strings and numbers (quotation marks,
+suffixes, hexadecimal numbers, ...) and the commas of the text; a line break
+that separates two items stays a line break. At most one blank line between
+items is kept. Multi-line strings that begin with an empty line are indented
+anew, which does not change their value; other multi-line strings are left
+as they are.
+
+```js
+format('{"a":[1,2], /* note */ b:64mb}', 2);
+// {
+//   "a": [
+//     1,
+//     2
+//   ], /* note */
+//   b: 64mb
+// }
+```
+
+Without indentation (`space` omitted, `0` or `''`), white space and line
+breaks are removed where possible: a line break that separates two items
+becomes a comma, and a line comment still ends its line.
+
+`format` does not parse or validate the text. It works on a best-effort
+basis: a valid document keeps its value, and an invalid document is
+formatted as far as possible instead of throwing an error. Line breaks are
+written as LF, and the result has no line break at the end. Only an invalid
+`space` throws a `TypeError`.
+
 ### Telling the arguments apart
 
 The optional arguments after `text` or `value` are told apart by their type,
@@ -264,8 +298,8 @@ generator.stringify(value, replacer, 2);
 
 ### Exports
 
-The package has only named exports: `parse`, `stringify`, `Parser`,
-`Generator`, `Options` and `ParserError`. There is no default export.
+The package has only named exports: `parse`, `stringify`, `format`,
+`Parser`, `Generator`, `Options` and `ParserError`. There is no default export.
 
 ## Numbers
 
@@ -292,14 +326,15 @@ The package has only named exports: `parse`, `stringify`, `Parser`,
 
 ## Development
 
-The source consists of four modules:
+The source consists of five modules:
 
 | File | Contents |
 |---|---|
 | `xtjson.js` | entry point of the package; only re-exports |
 | `parser.js` | `Parser`, `ParserError`, `parse` |
 | `generator.js` | `Generator`, `stringify` |
-| `shared.js` | `Options`, the character tables, the I-JSON check for strings and the assignment of optional arguments; used by parser and generator |
+| `formatter.js` | `format` |
+| `shared.js` | `Options`, the character tables, the I-JSON check for strings and the assignment of optional arguments; used by the other modules |
 
 Rules for the modules:
 
@@ -338,6 +373,9 @@ dependencies to install. The tests also run with `bun test` and
 - `test/stringify.test.js` tests `stringify` and `Generator`: the call forms, the behaviour
   of `JSON.stringify`, the output format, named values, multi-line strings,
   and a round trip of random values through `stringify` and `parse`.
+- `test/format.test.js` tests `format`: the layout, and that every valid text
+  of the corpus and the specification keeps its value and is formatted
+  stably.
 
 ### Benchmark
 

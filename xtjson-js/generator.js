@@ -15,7 +15,7 @@
  */
 
 import {
-  CharacterTables, ID_PART, ID_START, ijsonStringIssue, isDigit, isOptions, isReplacer, isSpace,
+  CharacterTables, ID_PART, ID_START, ijsonStringIssue, indentation, isDigit, isOptions, isReplacer, isSpace,
   readArguments, resolveOptions,
 } from './shared.js';
 
@@ -48,9 +48,6 @@ const DIVIDING_SUFFIXES = [['pct', 2], ['ms', 3]];
 /** Integers with at least this magnitude get `_` between groups of digits. */
 const GROUPING_THRESHOLD = 10000;
 const GROUPING_DIGITS = 5; // digits of GROUPING_THRESHOLD
-
-/** Maximum length of the indentation, as in JSON.stringify. */
-const MAX_GAP = 10;
 
 const HAS_LINE_SEPARATOR = /[\u2028\u2029]/;
 const LINE_SEPARATORS = /[\u2028\u2029]/g;
@@ -314,7 +311,7 @@ export class Generator {
       generator.#configure(this.#state);
       return generator.stringify(value, replacer, space);
     }
-    const gap = indentation(space);
+    const gap = indentation(space, 'stringify');
     const list = Array.isArray(replacer) ? propertyList(replacer) : undefined;
     this.#replacer = typeof replacer === 'function' ? replacer : undefined;
     this.#propertyList = list;
@@ -511,24 +508,6 @@ export class Generator {
     if (this.#gap === '') return open + items + close;
     return open + '\n' + inner + items + '\n' + indent + close;
   }
-}
-
-/** Indentation from the `space` argument, as in JSON.stringify. */
-function indentation(space) {
-  if (space instanceof Number) space = Number(space);
-  else if (space instanceof String) space = String(space);
-  if (typeof space === 'number') {
-    const n = Math.min(MAX_GAP, Math.trunc(space) || 0);
-    return n >= 1 ? ' '.repeat(n) : '';
-  }
-  if (typeof space === 'string') {
-    const gap = space.slice(0, MAX_GAP);
-    if (!/^[ \t]*$/.test(gap)) {
-      throw new TypeError('stringify: "space" may only contain spaces and tabs; other characters would make the indentation invalid');
-    }
-    return gap;
-  }
-  return '';
 }
 
 /** Names from a replacer array, as in JSON.stringify. */
