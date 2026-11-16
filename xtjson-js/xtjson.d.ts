@@ -69,8 +69,8 @@ export interface OptionsInit {
    */
   writeNumberSuffixes?: boolean;
   /**
-   * `stringify` writes strings and quoted names in `'` and multi-line
-   * strings in `'''` instead of `"` and `"""`. Default: false.
+   * `stringify` writes strings and quoted names in `'` instead of `"`.
+   * Default: false.
    */
   writeSingleQuotes?: boolean;
 }
@@ -90,7 +90,7 @@ export class Options implements OptionsInit {
   get ijson(): boolean;
   /** True if `stringify` writes number suffixes. */
   get writeNumberSuffixes(): boolean;
-  /** True if `stringify` writes strings in `'` and `'''`. */
+  /** True if `stringify` writes strings in `'`. */
   get writeSingleQuotes(): boolean;
   get [Symbol.toStringTag](): 'Options';
 }
@@ -135,7 +135,7 @@ export function parse(text: string, options: Options | OptionsInit): any;
  *
  * Output: an object at the top level without braces; names without
  * quotation marks where possible; with `space`, one item per line without
- * commas and strings with line breaks as multi-line strings; numbers of
+ * commas and strings with line breaks across several lines; numbers of
  * 10000 or more grouped with `_`; number suffixes only with
  * `writeNumberSuffixes`; `bigint` values with the suffix `n`; strings in `"`, or in `'` with
  * `writeSingleQuotes`; strings, numbers, booleans and `null` as named values

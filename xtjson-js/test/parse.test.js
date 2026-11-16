@@ -247,7 +247,7 @@ describe('I-JSON mode', () => {
 
   test('unpaired surrogates in strings and names are an error', () => {
     for (const text of [String.raw`"\uDEAD"`, String.raw`"\uD83D"`, String.raw`["\uDE00\uD83D"]`,
-      String.raw`{"\uD800": 1}`, String.raw`'''x\uDC00'''`, String.raw`a: "\uD83Dx"`]) {
+      String.raw`{"\uD800": 1}`, "'x\t\\uDC00'", String.raw`a: "\uD83Dx"`]) {
       assert.match(error(text, ijson).message, /unpaired surrogate U\+D[89A-F][0-9A-F]{2}, which is not permitted in I-JSON mode/, text);
     }
     assert.equal(parse(String.raw`"😀\u{1F600}"`, ijson), '\u{1F600}\u{1F600}');
@@ -418,9 +418,25 @@ describe('strings', () => {
     assert.equal(e.column, 6);
   });
 
-  test('multi-line string as a value of a member', () => {
-    const text = 'sql: """\n    SELECT 1\n      FROM t\n    """\nn: 1';
+  test('string across several lines as a value of a member', () => {
+    const text = 'sql: "\n    SELECT 1\n      FROM t\n    "\nn: 1';
     assert.deepEqual(parse(text), { sql: 'SELECT 1\n  FROM t\n', n: 1 });
+    assert.deepEqual(parse("a: 'x\r\ny'\r\nb: 2"), { a: 'x\ny', b: 2 });
+    assert.equal(parse('"a\tb"'), 'a\tb');
+  });
+
+  test('line continuation', () => {
+    assert.equal(parse('"\n  long \\\n  line\\\n  "'), 'long line');
+    assert.equal(parse('"a\\\r\nb\\\rc\\\nd"'), 'abcd');
+    assert.equal(parse('"a  \\\n  b"'), 'a    b'); // no empty first line: nothing removed
+    assert.equal(parse('"\\\n  a"'), '  a'); // the first line is not empty
+    assert.equal(parse('"\n\\\n  a\n  "'), '  a\n  '); // a line with only the backslash counts
+    assert.equal(parse('"a\\\\\nb"'), 'a\\\nb'); // an escaped backslash
+  });
+
+  test('names across several lines', () => {
+    assert.deepEqual(parse('"\n  a\n  ": 1'), { 'a\n': 1 });
+    assert.deepEqual(parse('{"a\\\nb": 1}'), { ab: 1 });
   });
 
   test('long strings with and without escapes', () => {
@@ -494,11 +510,13 @@ describe('error messages', () => {
     ['{2fa: true}', /must begin with a letter/, 1, 2],
     ['{max-age: 1}', /Unexpected '-' in an identifier/, 1, 5],
     ['{größe: 1}', /Unexpected 'ö' \(U\+00F6\) in an identifier/, 1, 4],
-    ['{"""a""": 1}', /multi-line string is not permitted as a name/, 1, 2],
-    ['"""a""": 1', /multi-line string is not permitted as a name/, 1, 1],
+    ['{"""a""": 1}', /Three quotation marks in a row do not delimit a string; a string in " may extend across several lines/, 1, 2],
+    ['"""a""": 1', /Three quotation marks in a row/, 1, 1],
+    ["'''a'''", /Three quotation marks in a row/, 1, 1],
     ["'It's'", /Unexpected 's' after the root value/, 1, 5],
-    ['"a\nb"', /Line break in a single-line string/, 1, 3],
-    ['"a\\\nb"', /no line continuation/, 1, 3],
+    ['"a\\ \nb"', /White space between a backslash and a line break is not permitted/, 1, 3],
+    ['"a\\\t\r\nb"', /White space between a backslash and a line break/, 1, 3],
+    ['"a\\ b"', /Unknown escape sequence '\\ '/, 1, 3],
     ['"\\a"', /Unknown escape sequence '\\a'/, 1, 2],
     ['"\\1"', /no octal escape sequences/, 1, 2],
     ['"\\01"', /'\\0' must not be followed by a digit/, 1, 2],
@@ -509,9 +527,10 @@ describe('error messages', () => {
     ['"\\u{ 41 }"', /at least one hexadecimal digit/, 1, 2],
     ['"\\u{41 }"', /must be closed with '}'/, 1, 2],
     ['"abc', /Unterminated string/, 1, 1],
-    ['"""abc', /Unterminated multi-line string/, 1, 1],
-    ['x: """\n\ta\n  b\n  """', /Inconsistent indentation/, 3, 1],
-    ['"a\tb"', /Control character U\+0009 must be escaped/, 1, 3],
+    ['"a\n  b', /Unterminated string/, 1, 1],
+    ['x: "\n\ta\n  b\n  "', /Inconsistent indentation in a string/, 3, 1],
+    ['"a\fb"', /Control character U\+000C must be escaped/, 1, 3],
+    ['"a\n\u000bb"', /Control character U\+000B must be escaped/, 2, 1],
     ['[1\u000b2]', /found '2'/, 1, 4],
     ['[1\u20282]', /U\+2028 and U\+2029 are not line breaks/, 1, 4],
     ['[1,\u200b2]', /U\+200B, which is not a white space character/, 1, 4],

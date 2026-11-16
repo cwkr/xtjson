@@ -53,9 +53,24 @@ describe('format', () => {
     assert.equal(format('a: 1 // c\nb: 2'), 'a:1 // c\nb:2');
   });
 
-  test('re-indents multi-line strings that begin with an empty line', () => {
-    assert.equal(format('a: {b: """\n      x\n        y\n      """}', 2), 'a: {\n  b: """\n    x\n      y\n    """\n}');
-    assert.equal(format('a: """x\n      y"""', 2), 'a: """x\n      y"""');
+  test('re-indents strings across several lines that begin with an empty line', () => {
+    assert.equal(format('a: {b: "\n      x\n        y\n      "}', 2), 'a: {\n  b: "\n    x\n      y\n    "\n}');
+    assert.equal(format("a: ['\n      x\n      ']", 2), "a: [\n  '\n    x\n    '\n]");
+    assert.equal(format('a: "x\n      y"', 2), 'a: "x\n      y"');
+  });
+
+  test('keeps line continuations and the white space before them', () => {
+    assert.equal(format('a: {b: "\n      long \\\n      line\\\n      "}', 2), 'a: {\n  b: "\n    long \\\n    line\\\n    "\n}');
+  });
+
+  test('leaves strings with white space after a backslash unchanged', () => {
+    const text = 'a: {b: "\n      x\\  \n      "}';
+    assert.equal(format(text, 2), 'a: {\n  b: "\n      x\\  \n      "\n}');
+  });
+
+  test('a string across several lines is one token', () => {
+    assert.equal(format('a: "x\n// no comment\n[1, 2]"', 2), 'a: "x\n// no comment\n[1, 2]"');
+    assert.equal(format('a: "x\ny"\nb: 1'), 'a:"x\ny",b:1');
   });
 
   test('space works as in stringify', () => {

@@ -320,57 +320,57 @@ describe('named values', () => {
     assert.equal(stringify([1000, 2000], { namedValues: { thousand: 1000 }, writeNumberSuffixes: true }), '[thousand,2k]');
   });
 
-  test('a string that equals a named value is not a multi-line string', () => {
+  test('a string that equals a named value is not written across several lines', () => {
     assert.equal(stringify(['a\nb'], 2, { namedValues: { ab: 'a\nb' } }), '[\n  ab\n]');
   });
 });
 
-describe('multi-line strings', () => {
+describe('strings across several lines', () => {
   // The member `s` one level deep, without the enclosing object:
-  // 's: """' at indentation 2 (removed here), the text at indentation 4.
+  // 's: "' at indentation 2 (removed here), the text at indentation 4.
   const ml = (value) => {
     const text = stringify({ o: { s: value } }, 2);
     assert.ok(text.startsWith('o: {\n  ') && text.endsWith('\n}'));
     return text.slice('o: {\n  '.length, -'\n}'.length);
   };
 
-  test('strings with a line break are multi-line strings when space is given', () => {
-    assert.equal(ml('a\nb'), 's: """\n    a\n    b"""');
-    assert.equal(ml('a\nb\n'), 's: """\n    a\n    b\n    """');
-    assert.equal(ml('a\n\nb'), 's: """\n    a\n\n    b"""');
-    assert.equal(ml('\n'), 's: """\n\n    """');
+  test('strings with a line break are written across several lines when space is given', () => {
+    assert.equal(ml('a\nb'), 's: "\n    a\n    b"');
+    assert.equal(ml('a\nb\n'), 's: "\n    a\n    b\n    "');
+    assert.equal(ml('a\n\nb'), 's: "\n    a\n\n    b"');
+    assert.equal(ml('\n'), 's: "\n\n    "');
     assert.equal(stringify({ s: 'a\nb' }), 's:"a\\nb"');
-    assert.equal(stringify('a\nb', '\t'), '"""\n\ta\n\tb"""');
+    assert.equal(stringify('a\nb', '\t'), '"\n\ta\n\tb"');
   });
 
   test('nested indentation follows the structure', () => {
     assert.equal(stringify({ x: { list: ['a\nb'] } }, 2),
-      'x: {\n  list: [\n    """\n      a\n      b"""\n  ]\n}');
+      'x: {\n  list: [\n    "\n      a\n      b"\n  ]\n}');
   });
 
   test('white space that 8.3 would remove is escaped', () => {
-    assert.equal(ml('a  \nb'), 's: """\n    a \\x20\n    b"""');
-    assert.equal(ml('a\t\nb'), 's: """\n    a\\t\n    b"""');
-    assert.equal(ml('  \nb'), 's: """\n     \\x20\n    b"""');
-    assert.equal(ml('a\nb  '), 's: """\n    a\n    b  """');
+    assert.equal(ml('a  \nb'), 's: "\n    a \\x20\n    b"');
+    assert.equal(ml('a\t\nb'), 's: "\n    a\\t\n    b"');
+    assert.equal(ml('  \nb'), 's: "\n     \\x20\n    b"');
+    assert.equal(ml('a\nb  '), 's: "\n    a\n    b  "');
   });
 
   test('indentation of all lines is kept', () => {
-    assert.equal(ml('  a\n  b'), 's: """\n      a\n    \\x20 b"""');
-    assert.equal(ml('  a\n  b\n'), 's: """\n      a\n      b\n    """');
-    assert.equal(ml('  a\nb'), 's: """\n      a\n    b"""');
-    assert.equal(ml('\ta\n\tb'), 's: """\n    \ta\n    \\tb"""');
+    assert.equal(ml('  a\n  b'), 's: "\n      a\n    \\x20 b"');
+    assert.equal(ml('  a\n  b\n'), 's: "\n      a\n      b\n    "');
+    assert.equal(ml('  a\nb'), 's: "\n      a\n    b"');
+    assert.equal(ml('\ta\n\tb'), 's: "\n    \ta\n    \\tb"');
   });
 
   test('quotation marks, backslashes and control characters', () => {
-    assert.equal(ml('say "hi"\nx'), 's: """\n    say "hi"\n    x"""');
-    assert.equal(ml('a"""b\nx'), 's: """\n    a""\\"b\n    x"""');
-    assert.equal(ml('x\nend"'), 's: """\n    x\n    end\\""""');
-    assert.equal(ml('x\nend""'), 's: """\n    x\n    end"\\""""');
-    assert.equal(ml('a\\b\nc\rd\ne\u0000'), 's: """\n    a\\\\b\n    c\\rd\n    e\\u0000"""');
-    assert.equal(ml('a\r\nb'), 's: """\n    a\\r\n    b"""');
-    assert.equal(ml('x' + LS + '\ny'), 's: """\n    x\\u2028\n    y"""');
-    assert.equal(ml(ch(0xd83d, 0xde00) + '\n' + ch(0xdead)), 's: """\n    ' + ch(0xd83d, 0xde00) + '\n    \\uDEAD"""');
+    assert.equal(ml('say "hi"\nx'), 's: "\n    say \\"hi\\"\n    x"');
+    assert.equal(ml('a"""b\nx'), 's: "\n    a\\"\\"\\"b\n    x"');
+    assert.equal(ml('x\nend"'), 's: "\n    x\n    end\\""');
+    assert.equal(ml("it's\nx"), 's: "\n    it\'s\n    x"');
+    assert.equal(ml('a\\b\nc\rd\ne\u0000'), 's: "\n    a\\\\b\n    c\\rd\n    e\\u0000"');
+    assert.equal(ml('a\r\nb'), 's: "\n    a\\r\n    b"');
+    assert.equal(ml('x' + LS + '\ny'), 's: "\n    x\\u2028\n    y"');
+    assert.equal(ml(ch(0xd83d, 0xde00) + '\n' + ch(0xdead)), 's: "\n    ' + ch(0xd83d, 0xde00) + '\n    \\uDEAD"');
   });
 
   test('every example reads back as the same string', () => {
@@ -423,13 +423,13 @@ describe('single quotation marks', () => {
     assert.deepEqual(parse(text), value);
   });
 
-  test("multi-line strings are written in '''", () => {
-    const value = { s: "line 1\nit's '''quoted'''\nend'" };
+  test("strings across several lines are written in '", () => {
+    const value = { s: "line 1\nit's 'quoted'\nend'" };
     const text = stringify(value, 2, sq);
-    assert.equal(text, "s: '''\n  line 1\n  it's ''\\'quoted''\\'\n  end\\''''");
+    assert.equal(text, "s: '\n  line 1\n  it\\'s \\'quoted\\'\n  end\\''");
     assert.deepEqual(parse(text), value);
-    // double quotation marks need no escaping inside '''
-    assert.equal(stringify(['"""\n"'], 2, sq), "[\n  '''\n    \"\"\"\n    \"'''\n]");
+    // double quotation marks need no escaping inside '
+    assert.equal(stringify(['"""\n"'], 2, sq), "[\n  '\n    \"\"\"\n    \"'\n]");
   });
 
   test('is off by default and can be read back', () => {

@@ -94,12 +94,12 @@ function configText(sections) {
       `    'alpha'`,
       `    'beta', 'gamma'`,
       `  ]`,
-      `  motd: """`,
+      `  motd: "`,
       `    Welcome to service ${i}.`,
-      `    Second line with a tab:\\t and a quote "x".`,
+      `    Second line with a tab:\\t and a quote 'x'.`,
       ``,
       `    Last line.`,
-      `    """`,
+      `    "`,
       `  "quoted name": 'it\\'s \\u{1F600} \\x41\\u0042'`,
       `  limits: { soft: 10k, hard: 2h, window: 5min }`,
       `}`,
@@ -116,9 +116,9 @@ port: 8080            // a line break replaces the comma
 cache: 64mb
 debug: false
 hosts: ['a.example.org', 'b.example.org']
-motd: """
+motd: "
   Welcome.
-  """
+  "
 `;
 
 function stringArray(texts, n) {

@@ -170,7 +170,7 @@ export class Options {
    *   `ijson`: true for the I-JSON mode.
    *   `maxDepth`: maximum nesting depth of objects and arrays (default 1000).
    *   `writeNumberSuffixes`: `stringify` writes number suffixes (default false).
-   *   `writeSingleQuotes`: `stringify` writes strings in `'` and `'''` (default false).
+   *   `writeSingleQuotes`: `stringify` writes strings in `'` (default false).
    * @throws {TypeError} if an option is unknown or invalid, or a definition
    *   violates 6.4
    */
@@ -258,8 +258,8 @@ export class Options {
   }
 
   /**
-   * True if `stringify` writes strings and quoted names in `'` and
-   * multi-line strings in `'''` instead of `"` and `"""`.
+   * True if `stringify` writes strings and quoted names in `'` instead
+   * of `"`.
    * @returns {boolean}
    */
   get writeSingleQuotes() {

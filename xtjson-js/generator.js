@@ -141,7 +141,7 @@ function isBlankCode(c) {
   return c === SPACE || c === TAB;
 }
 
-/** Escape sequence for a single character in a multi-line string. */
+/** Escape sequence for a single character in a string across several lines. */
 function escapeCode(c) {
   switch (c) {
     case SPACE: return '\\x20';
@@ -157,40 +157,27 @@ function escapeCode(c) {
 }
 
 /**
- * Text of one line of a multi-line string (8.3). Escapes what would end the
- * string or change its value: backslashes, control characters except tab,
- * unpaired surrogates, U+2028 and U+2029, the third of three quotation
- * marks in a row, a quotation mark directly before the closing delimiter
- * (`beforeDelimiter`) and a space or tab at the end of a line that step 2
- * would remove (`trailingBlank`). `quote` is the code of the quotation mark
- * of the delimiter.
+ * Text of one line of a string across several lines (8.3). Escapes what
+ * would end the string or change its value: the delimiter `quote` (the code
+ * of its quotation mark), backslashes, control characters except tab,
+ * unpaired surrogates, U+2028 and U+2029, and a space or tab at the end of
+ * a line that step 2 would remove (`trailingBlank`).
  */
-function escapeMultiLineText(text, trailingBlank, beforeDelimiter, quote) {
+function escapeLineText(text, trailingBlank, quote) {
   const n = text.length;
   let out = '';
   let chunk = 0; // start of the text that is not yet copied to `out`
-  let quotes = 0; // unescaped quotation marks in a row
   for (let i = 0; i < n; i++) {
     const c = text.charCodeAt(i);
     let escape = false;
-    if (c === quote) {
-      if (quotes === 2 || (beforeDelimiter && i === n - 1)) {
-        escape = true;
-        quotes = 0;
-      } else {
-        quotes++;
-      }
-    } else {
-      quotes = 0;
-      if (isBlankCode(c)) {
-        escape = trailingBlank && i === n - 1;
-      } else if (c < SPACE || c === BACKSLASH || c === 0x2028 || c === 0x2029) {
-        escape = true;
-      } else if (c >= 0xd800 && c <= 0xdfff) {
-        const d = text.charCodeAt(i + 1);
-        if (c <= 0xdbff && d >= 0xdc00 && d <= 0xdfff) i++; // a surrogate pair
-        else escape = true;
-      }
+    if (isBlankCode(c)) {
+      escape = trailingBlank && i === n - 1;
+    } else if (c === quote || c < SPACE || c === BACKSLASH || c === 0x2028 || c === 0x2029) {
+      escape = true;
+    } else if (c >= 0xd800 && c <= 0xdfff) {
+      const d = text.charCodeAt(i + 1);
+      if (c <= 0xdbff && d >= 0xdc00 && d <= 0xdfff) i++; // a surrogate pair
+      else escape = true;
     }
     if (escape) {
       out += text.slice(chunk, i) + escapeCode(c);
@@ -201,23 +188,23 @@ function escapeMultiLineText(text, trailingBlank, beforeDelimiter, quote) {
 }
 
 /**
- * A multi-line string (8.3) whose lines are indented with `indent`, with
- * the delimiter `"""` or `'''` (`quote`). The text begins with an empty
- * line, so that exactly `indent` is removed again when it is read.
+ * A string across several lines (8.3) whose lines are indented with
+ * `indent`, with the delimiter `"` or `'` (`quote`). The text begins with an
+ * empty line, so that exactly `indent` is removed again when it is read.
  */
 function multiLineString(value, indent, quote) {
-  const delimiter = String.fromCharCode(quote).repeat(3);
+  const delimiter = String.fromCharCode(quote);
   const parts = value.split('\n');
   const last = parts.length - 1;
   const lines = [];
   for (let i = 0; i < last; i++) {
-    lines.push(parts[i] === '' ? '' : indent + escapeMultiLineText(parts[i], true, false, quote));
+    lines.push(parts[i] === '' ? '' : indent + escapeLineText(parts[i], true, quote));
   }
   if (parts[last] === '') {
     // The value ends with a line break: the closing delimiter gets its own line.
     lines.push(indent + delimiter);
   } else {
-    let text = escapeMultiLineText(parts[last], false, true, quote);
+    let text = escapeLineText(parts[last], false, quote);
     // The last line counts towards the smallest indentation. If it and all
     // other lines begin with white space, more than `indent` would be
     // removed; escaping its first character prevents that.
@@ -539,12 +526,13 @@ let defaultGenerator;
  * an object at the top level is written without braces; names that are
  * identifiers are written without quotation marks; with `space`, items are
  * separated by line breaks instead of commas and strings that contain a
- * line break are written as multi-line strings; numbers of 10000 or more
+ * line break are written across several lines, with their text indented
+ * one level deeper (8.3); numbers of 10000 or more
  * are grouped with `_`; with the option `writeNumberSuffixes`, integers that are
  * multiples of 1048576, 1024, 1000, 3600 or 60 get the suffix `mb`, `kb`,
  * `k`, `h` or `min`, and fractions between -1 and 1 the suffix `pct` or `ms`
  * where they fit; BigInt values are written with the suffix `n`; with the
- * option `writeSingleQuotes`, strings are written in `'` and `'''`; primitive
+ * option `writeSingleQuotes`, strings are written in `'`; primitive
  * values for which a named value is defined are written as that named
  * value.
  *

@@ -3,7 +3,7 @@
 XTJSON parser and generator for JavaScript. XTJSON is a syntactic superset of
 JSON for files that are written and maintained by people, such as
 configuration files. See the specification in
-[`docs/xtjson-spec-en.md`](../docs/xtjson-spec-en.md) (draft 0.4).
+[`docs/xtjson-spec-en.md`](../docs/xtjson-spec-en.md) (draft 0.5).
 
 - ES modules in plain JavaScript, with TypeScript declarations. Importing
   them has no side effects.
@@ -19,9 +19,9 @@ const config = parse(`
 name: 'demo-service'
 port: 8080            // a line break replaces the comma
 cache: 64mb
-motd: """
+motd: "
   Welcome.
-  """
+  "
 `);
 // { name: 'demo-service', port: 8080, cache: 67108864, motd: 'Welcome.\n' }
 
@@ -29,9 +29,9 @@ stringify(config, 2);
 // name: "demo-service"
 // port: 8080
 // cache: 64mb
-// motd: """
+// motd: "
 //   Welcome.
-//   """
+//   "
 ```
 
 ## API
@@ -90,15 +90,15 @@ The output differs from `JSON.stringify` in these points:
   `"` (or `'`, see `writeSingleQuotes`).
 - **Strings** are written in `"`. Besides the escapes of `JSON.stringify`,
   U+2028 and U+2029 are escaped. With the option `writeSingleQuotes` they are
-  written in `'` and multi-line strings in `'''`; then `'` is escaped and
-  `"` is not.
+  written in `'`; then `'` is escaped and `"` is not.
 - **With `space`**, every item is on its own line and the line break is the
   separator: there are no commas at the ends of lines. Strings that contain a
-  line break (LF) are written as multi-line strings with `"""`, with the text
-  indented one level deeper than the line on which the string begins. White
-  space that the rules of section 8.3 would remove, a carriage return and
-  quotation marks that would end the string are escaped, so the string always
-  reads back unchanged. `space` may only contain spaces and tabs; other
+  line break (LF) are written across several lines (section 8.3): the opening
+  quotation mark is followed by a line break, and the text is indented one
+  level deeper than the line on which the string begins. White space that the
+  rules of section 8.3 would remove, a carriage return, backslashes and the
+  quotation mark of the delimiter are escaped, so the string always reads
+  back unchanged. `space` may only contain spaces and tabs; other
   characters would not be valid indentation, so they are a `TypeError`.
 - **Numbers** are written in decimal. An integer part of 10000 or more gets
   `_` between groups of three digits (`12_345`, `1_234_567.25`); smaller
@@ -164,7 +164,7 @@ stringify({ owner: 'not specified', boss: null }, options);
 - `writeNumberSuffixes`: `true` lets `stringify` write number suffixes, see
   above. Default `false`. `parse` ignores it.
 - `writeSingleQuotes`: `true` lets `stringify` write strings and quoted names in
-  `'` and multi-line strings in `'''`. Default `false`. `parse` ignores it.
+  `'`. Default `false`. `parse` ignores it.
 
 Other properties are a `TypeError`, so that a misspelt option is not
 silently ignored.
@@ -190,9 +190,10 @@ objects and arrays as `{}` and `[]`. Unlike `stringify`, `format` keeps
 comments, the notation of names, strings and numbers (quotation marks,
 suffixes, hexadecimal numbers, ...) and the commas of the text; a line break
 that separates two items stays a line break. At most one blank line between
-items is kept. Multi-line strings that begin with an empty line are indented
-anew, which does not change their value; other multi-line strings are left
-as they are.
+items is kept. Strings across several lines that begin with an empty line
+are indented anew, which does not change their value; line continuations
+and the white space before them are kept. Other strings are left as they
+are.
 
 ```js
 format('{"a":[1,2], /* note */ b:64mb}', 2);
@@ -371,7 +372,7 @@ dependencies to install. The tests also run with `bun test` and
 - `test/parse.test.js` tests the API of `parse` and `Parser`, the I-JSON
   mode, error messages and positions, numbers and limits.
 - `test/stringify.test.js` tests `stringify` and `Generator`: the call forms, the behaviour
-  of `JSON.stringify`, the output format, named values, multi-line strings,
+  of `JSON.stringify`, the output format, named values, strings across several lines,
   and a round trip of random values through `stringify` and `parse`.
 - `test/format.test.js` tests `format`: the layout, and that every valid text
   of the corpus and the specification keeps its value and is formatted

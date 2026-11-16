@@ -394,11 +394,11 @@ export class Parser {
     }
 
     let value;
-    if (((c === DQUOTE || c === SQUOTE) && !this.#atTripleQuote(c)) || hasFlag(this.#flags, c, ID_START)) {
-      // 6.2: a single-line string or an identifier followed by ':' starts an
-      // implicit root object.
+    if (c === DQUOTE || c === SQUOTE || hasFlag(this.#flags, c, ID_START)) {
+      // 6.2: a string or an identifier followed by ':' starts an implicit
+      // root object.
       const isIdentifier = c !== DQUOTE && c !== SQUOTE;
-      const token = isIdentifier ? this.#readIdentifier() : this.#readSingleLineString(c);
+      const token = isIdentifier ? this.#readIdentifier() : this.#readString(c);
       this.#skipSpace();
       if (this.#peek() === COLON) {
         value = {};
@@ -414,18 +414,9 @@ export class Parser {
 
     this.#skipSpace();
     if (this.#pos < this.#len) {
-      if (this.#peek() === COLON && (c === DQUOTE || c === SQUOTE) && this.#atTripleQuote(c, start)) {
-        this.#fail('A multi-line string is not permitted as a name', start);
-      }
       this.#fail(`Unexpected ${describeAt(this.#text, this.#pos)} after the root value; a document contains exactly one value`);
     }
     return value;
-  }
-
-  /** True if the code units at `pos` are three quotation marks `q`. */
-  #atTripleQuote(q, pos = this.#pos) {
-    const text = this.#text;
-    return text.charCodeAt(pos) === q && text.charCodeAt(pos + 1) === q && text.charCodeAt(pos + 2) === q;
   }
 
   // ----- Values (6.3) -----------------------------------------------------
@@ -439,9 +430,7 @@ export class Parser {
         return this.#parseArray();
       case DQUOTE:
       case SQUOTE:
-        return this.#text.charCodeAt(this.#pos + 1) === c && this.#text.charCodeAt(this.#pos + 2) === c
-          ? this.#readMultiLineString(c)
-          : this.#readSingleLineString(c);
+        return this.#readString(c);
       case MINUS:
         return this.#parseNumber();
       default:
@@ -560,13 +549,10 @@ export class Parser {
     }
   }
 
-  /** Name of a member (7.2): single-line string or identifier. */
+  /** Name of a member (7.2): string or identifier. */
   #readName() {
     const c = this.#peek();
-    if (c === DQUOTE || c === SQUOTE) {
-      if (this.#atTripleQuote(c)) this.#fail('A multi-line string is not permitted as a name');
-      return this.#readSingleLineString(c);
-    }
+    if (c === DQUOTE || c === SQUOTE) return this.#readString(c);
     if (hasFlag(this.#flags, c, ID_START)) return this.#readIdentifier();
     if (isDigit(c) || c === MINUS) {
       this.#fail('A name without quotation marks must begin with a letter, "_" or "$"; write this name in quotation marks');
@@ -635,8 +621,12 @@ export class Parser {
 
   // ----- Strings (8) ------------------------------------------------------
 
-  /** Single-line string (8.1) delimited by `q`. */
-  #readSingleLineString(q) {
+  /**
+   * String (8) delimited by `q`. A string without a line break, a tab and a
+   * line continuation is its own value (8.3) and is read on a fast path;
+   * every other string is read by #readStringLines.
+   */
+  #readString(q) {
     const text = this.#text;
     const len = this.#len;
     const start = this.#pos;
@@ -649,22 +639,28 @@ export class Parser {
       // the loop as well.
       while ((c = text.charCodeAt(pos)) >= SPACE && c !== q && c !== BACKSLASH) pos++;
       if (c === q) {
+        if (pos === start + 1 && text.charCodeAt(pos + 1) === q) {
+          // An empty string directly followed by another string is always an
+          // error (7.3); name the likely intent.
+          this.#fail(`Three quotation marks in a row do not delimit a string; a string in ${String.fromCharCode(q)} may extend across several lines`, start);
+        }
         this.#pos = pos + 1;
         const value = chunk === start + 1 ? text.slice(chunk, pos) : out + text.slice(chunk, pos);
         if (this.#ijson) this.#checkIJSONString(value, start);
         return value;
       }
       if (c === BACKSLASH) {
+        const d = text.charCodeAt(pos + 1);
+        if (d === LF || d === CR) return this.#readStringLines(q, start);
         out += text.slice(chunk, pos);
         this.#pos = pos;
         out += this.#readEscape();
         pos = chunk = this.#pos;
+      } else if (c === LF || c === CR || c === TAB) {
+        return this.#readStringLines(q, start);
       } else if (pos >= len) {
         this.#fail('Unterminated string', start);
       } else {
-        if (c === LF || c === CR) {
-          this.#fail('Line break in a single-line string; write \\n or use a multi-line string (""" or \'\'\')', pos);
-        }
         this.#fail(`Control character ${hex4(c)} must be escaped in a string`, pos);
       }
     }
@@ -714,9 +710,16 @@ export class Parser {
         this.#pos = at + 6;
         return String.fromCharCode(unit);
       }
-      case LF:
-      case CR:
-        return this.#fail('A backslash before a line break is not permitted; there is no line continuation', at);
+      case SPACE:
+      case TAB: {
+        let i = at + 2;
+        while (text.charCodeAt(i) === SPACE || text.charCodeAt(i) === TAB) i++;
+        const e = text.charCodeAt(i);
+        if (e === LF || e === CR) {
+          return this.#fail('White space between a backslash and a line break is not permitted; in a line continuation the line break must follow the backslash directly', at);
+        }
+        return this.#fail(`Unknown escape sequence '\\${String.fromCharCode(c)}'`, at);
+      }
       case EOF:
         return this.#fail('Unterminated escape sequence', at);
       default:
@@ -752,10 +755,9 @@ export class Parser {
     return String.fromCodePoint(value);
   }
 
-  /** Multi-line string (8.3) delimited by three `q`. */
-  #readMultiLineString(q) {
-    const start = this.#pos;
-    const value = this.#multiLineValue(q);
+  /** String with a line break, a tab or a line continuation (8.3); `start` is the offset of its delimiter. */
+  #readStringLines(q, start) {
+    const value = this.#stringLinesValue(q, start);
     if (this.#ijson) this.#checkIJSONString(value, start);
     return value;
   }
@@ -768,23 +770,26 @@ export class Parser {
     }
   }
 
-  /** Value of a multi-line string according to the four steps of 8.3. */
-  #multiLineValue(q) {
+  /** Value of the string at `start` according to the four steps of 8.3. */
+  #stringLinesValue(q, start) {
     const text = this.#text;
     const len = this.#len;
-    const start = this.#pos;
-    let pos = start + 3;
+    let pos = start + 1;
 
     // Step 1: form lines. For each line we keep its decoded text, the number
-    // of unescaped spaces and tabs at its beginning (`lead`) and its offset
-    // for error messages. `trail` counts the unescaped spaces and tabs at
-    // the end of the current line.
+    // of unescaped spaces and tabs at its beginning (`lead`), whether it
+    // ends with a line continuation (`conts`) and its offset for error
+    // messages. `trail` counts the unescaped spaces and tabs at the end of
+    // the current line.
     //
     // Step 2 is done on the way: unescaped white space at the end of every
     // line but the last is removed. It always lies at the end of the current
-    // chunk of raw text, because an escape sequence resets `trail`.
+    // chunk of raw text, because an escape sequence resets `trail`. A line
+    // that ends with a line continuation keeps it: the backslash belongs to
+    // the line until step 4, so the white space is not at its end.
     const lines = [];
     const leads = [];
+    const conts = [];
     const offsets = [];
     let line = '';
     let chunk = pos;
@@ -794,12 +799,13 @@ export class Parser {
     offsets.push(pos);
 
     for (;;) {
-      if (pos >= len) this.#fail('Unterminated multi-line string', start);
+      if (pos >= len) this.#fail('Unterminated string', start);
       const c = text.charCodeAt(pos);
-      if (c === q && text.charCodeAt(pos + 1) === q && text.charCodeAt(pos + 2) === q) {
+      if (c === q) {
         lines.push(chunk === pos ? line : line + text.slice(chunk, pos)); // the last line keeps its white space
         leads.push(lead);
-        this.#pos = pos + 3;
+        conts.push(false);
+        this.#pos = pos + 1;
         break;
       }
       if (c === SPACE || c === TAB) {
@@ -809,6 +815,7 @@ export class Parser {
       } else if (c === LF || c === CR) {
         lines.push(chunk === pos - trail ? line : line + text.slice(chunk, pos - trail));
         leads.push(leading ? 0 : lead); // a line of white space only is empty now
+        conts.push(false);
         pos += c === CR && text.charCodeAt(pos + 1) === LF ? 2 : 1;
         offsets.push(pos);
         line = '';
@@ -816,12 +823,27 @@ export class Parser {
         lead = trail = 0;
         leading = true;
       } else if (c === BACKSLASH) {
-        line += text.slice(chunk, pos);
-        this.#pos = pos;
-        line += this.#readEscape();
-        pos = chunk = this.#pos;
-        leading = false;
-        trail = 0;
+        const d = text.charCodeAt(pos + 1);
+        if (d === LF || d === CR) {
+          // Line continuation (8.2): the line ends here, keeps its white
+          // space and is not empty.
+          lines.push(line + text.slice(chunk, pos));
+          leads.push(lead);
+          conts.push(true);
+          pos += d === CR && text.charCodeAt(pos + 2) === LF ? 3 : 2;
+          offsets.push(pos);
+          line = '';
+          chunk = pos;
+          lead = trail = 0;
+          leading = true;
+        } else {
+          line += text.slice(chunk, pos);
+          this.#pos = pos;
+          line += this.#readEscape();
+          pos = chunk = this.#pos;
+          leading = false;
+          trail = 0;
+        }
       } else if (c < SPACE) {
         this.#fail(`Control character ${hex4(c)} must be escaped in a string`, pos);
       } else {
@@ -834,27 +856,32 @@ export class Parser {
     const last = lines.length - 1;
     if (last === 0) return lines[0];
 
-    // Step 3: remove indentation, only if the string begins with an empty line.
-    if (lines[0] !== '') return lines.join('\n');
-    let indent = Infinity;
-    for (let k = 1; k <= last; k++) {
-      if (lines[k] !== '' || k === last) indent = Math.min(indent, leads[k]);
+    // Step 3: remove indentation, only if the string begins with an empty
+    // line. A line with a line continuation is never empty.
+    let first = 0;
+    let indent = 0;
+    if (lines[0] === '' && !conts[0]) {
+      first = 1;
+      indent = Infinity;
+      for (let k = 1; k <= last; k++) {
+        if (lines[k] !== '' || conts[k] || k === last) indent = Math.min(indent, leads[k]);
+      }
     }
 
-    // Step 4: join the lines after the first with LF.
+    // Step 4: join the lines with LF; a line continuation joins them without.
     let prefix;
     let value = '';
-    for (let k = 1; k <= last; k++) {
+    for (let k = first; k <= last; k++) {
       let content = lines[k];
       // Empty lines stay empty. (An empty last line would make indent 0.)
       if (indent > 0 && content !== '') {
         if (prefix === undefined) prefix = content.slice(0, indent);
         else if (!content.startsWith(prefix)) {
-          this.#fail('Inconsistent indentation in a multi-line string: the removed indentation must consist of the same characters in all lines (do not mix tabs and spaces)', offsets[k]);
+          this.#fail('Inconsistent indentation in a string: the removed indentation must consist of the same characters in all lines (do not mix tabs and spaces)', offsets[k]);
         }
         content = content.slice(indent);
       }
-      value = k === 1 ? content : value + '\n' + content;
+      value = k === first ? content : value + (conts[k - 1] ? '' : '\n') + content;
     }
     return value;
   }

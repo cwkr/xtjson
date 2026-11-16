@@ -164,19 +164,13 @@ function tokenize(text) {
   return tokens;
 }
 
-/** End of the string that begins at `i`; a single-line string ends at a line break at the latest. */
+/**
+ * End of the string that begins at `i`: behind its closing quotation mark,
+ * or the end of the text. A string may extend across several lines (8.1).
+ */
 function stringEnd(text, i) {
   const quote = text[i];
-  const triple = quote.repeat(3);
-  if (text.startsWith(triple, i)) {
-    for (let j = i + 3; j < text.length; j++) {
-      if (text[j] === '\\') j++;
-      else if (text.startsWith(triple, j)) return j + 3;
-    }
-    return text.length;
-  }
   for (let j = i + 1; j < text.length; j++) {
-    if (text[j] === '\n') return j;
     if (text[j] === '\\') j++;
     else if (text[j] === quote) return j + 1;
   }
@@ -184,16 +178,19 @@ function stringEnd(text, i) {
 }
 
 /**
- * Indents a multi-line string that begins with an empty line by `indent`
- * instead of its smallest indentation, which keeps its value (8.3). Other
- * strings, and strings whose indentation is not uniform, are returned
- * unchanged.
+ * Indents a string across several lines that begins with an empty line by
+ * `indent` instead of its smallest indentation, which keeps its value (8.3).
+ * Other strings, strings whose indentation is not uniform, and strings with
+ * white space after a backslash at the end of a line (an error, which
+ * removing that white space would hide) are returned unchanged.
  */
 function reindent(s, indent) {
   const lines = s.split('\n');
-  if (lines.length < 2 || !/^("""|''')[ \t]*$/.test(lines[0])) return s;
+  if (lines.length < 2 || !/^["'][ \t]*$/.test(lines[0])) return s;
   const last = lines.length - 1;
-  // White space at the end of a line is removed by the rules anyway.
+  if (lines.some((l, k) => k < last && /(?:^|[^\\])(?:\\\\)*\\[ \t]+$/.test(l))) return s;
+  // White space at the end of a line is removed by the rules anyway. A line
+  // that ends with a line continuation ends with its backslash.
   const text = lines.map((l, k) => (k === last ? l : l.replace(/[ \t]+$/, '')));
   const counted = text.filter((l, k) => k > 0 && (l !== '' || k === last));
   const min = Math.min(...counted.map((l) => /^[ \t]*/.exec(l)[0].length));
