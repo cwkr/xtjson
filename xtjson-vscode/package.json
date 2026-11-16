@@ -1,0 +1,80 @@
+{
+  "name": "xtjson",
+  "displayName": "XTJSON",
+  "description": "Syntax highlighting, folding and formatting for XTJSON, a superset of JSON for files maintained by people",
+  "version": "0.1.0",
+  "publisher": "cwkr",
+  "license": "MIT",
+  "author": "Christian Winkler",
+  "contributors": [
+    {
+      "name": "Claude Opus 5.5",
+      "email": "noreply@anthropic.com"
+    }
+  ],
+  "homepage": "https://github.com/cwkr/xtjson/tree/main/xtjson-vscode#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cwkr/xtjson.git",
+    "directory": "xtjson-vscode"
+  },
+  "bugs": "https://github.com/cwkr/xtjson/issues",
+  "keywords": [
+    "xtjson",
+    "json",
+    "configuration",
+    "comments"
+  ],
+  "categories": [
+    "Programming Languages",
+    "Formatters"
+  ],
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "type": "module",
+  "main": "./dist/extension.cjs",
+  "activationEvents": [],
+  "contributes": {
+    "languages": [
+      {
+        "id": "xtjson",
+        "aliases": [
+          "XTJSON",
+          "xtjson"
+        ],
+        "extensions": [
+          ".xtjson",
+          ".xtj"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "xtjson",
+        "scopeName": "source.xtjson",
+        "path": "./syntaxes/xtjson.tmLanguage.json"
+      }
+    ],
+    "configurationDefaults": {
+      "[xtjson]": {
+        "editor.defaultFormatter": "cwkr.xtjson"
+      }
+    }
+  },
+  "scripts": {
+    "build": "node build.js",
+    "watch": "node build.js --watch",
+    "test": "node --test test/folding.test.js test/format.test.js test/grammar.test.js",
+    "package": "npm run build && vsce package",
+    "vscode:prepublish": "npm run build"
+  },
+  "devDependencies": {
+    "@cwkr/xtjson": "file:../xtjson-js",
+    "@vscode/vsce": "^3.6.0",
+    "esbuild": "^0.25.0",
+    "vscode-oniguruma": "^2.0.1",
+    "vscode-textmate": "^9.2.0"
+  }
+}

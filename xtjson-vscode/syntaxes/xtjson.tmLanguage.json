@@ -1,0 +1,161 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "XTJSON",
+  "scopeName": "source.xtjson",
+  "comment": "TextMate grammar for XTJSON (docs/xtjson-spec-en.md, Appendix A). It is lexical: it highlights tokens and marks some invalid notations, but it does not check the structure of the document.",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#property-names" },
+    { "include": "#strings" },
+    { "include": "#numbers" },
+    { "include": "#named-values" },
+    { "include": "#punctuation" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.block.xtjson",
+          "begin": "/\\*",
+          "end": "\\*/",
+          "beginCaptures": { "0": { "name": "punctuation.definition.comment.begin.xtjson" } },
+          "endCaptures": { "0": { "name": "punctuation.definition.comment.end.xtjson" } }
+        },
+        {
+          "name": "comment.line.double-slash.xtjson",
+          "match": "(//).*$",
+          "captures": { "1": { "name": "punctuation.definition.comment.xtjson" } }
+        },
+        {
+          "name": "comment.line.number-sign.xtjson",
+          "match": "(#).*$",
+          "captures": { "1": { "name": "punctuation.definition.comment.xtjson" } }
+        }
+      ]
+    },
+    "property-names": {
+      "comment": "A name: an identifier or a single-line string that is followed by ':' on the same line (7.2).",
+      "patterns": [
+        {
+          "name": "support.type.property-name.xtjson",
+          "match": "(?<![A-Za-z0-9_$])[A-Za-z_$][A-Za-z0-9_$]*(?=[ \\t]*:)"
+        },
+        {
+          "name": "support.type.property-name.xtjson",
+          "begin": "\"(?=(?:[^\"\\\\\\n]|\\\\.)*\"[ \\t]*:)",
+          "end": "\"",
+          "beginCaptures": { "0": { "name": "punctuation.support.type.property-name.begin.xtjson" } },
+          "endCaptures": { "0": { "name": "punctuation.support.type.property-name.end.xtjson" } },
+          "patterns": [{ "include": "#string-content" }]
+        },
+        {
+          "name": "support.type.property-name.xtjson",
+          "begin": "'(?=(?:[^'\\\\\\n]|\\\\.)*'[ \\t]*:)",
+          "end": "'",
+          "beginCaptures": { "0": { "name": "punctuation.support.type.property-name.begin.xtjson" } },
+          "endCaptures": { "0": { "name": "punctuation.support.type.property-name.end.xtjson" } },
+          "patterns": [{ "include": "#string-content" }]
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.triple.double.xtjson",
+          "begin": "\"\"\"",
+          "end": "\"\"\"",
+          "beginCaptures": { "0": { "name": "punctuation.definition.string.begin.xtjson" } },
+          "endCaptures": { "0": { "name": "punctuation.definition.string.end.xtjson" } },
+          "patterns": [{ "include": "#multi-line-content" }]
+        },
+        {
+          "name": "string.quoted.triple.single.xtjson",
+          "begin": "'''",
+          "end": "'''",
+          "beginCaptures": { "0": { "name": "punctuation.definition.string.begin.xtjson" } },
+          "endCaptures": { "0": { "name": "punctuation.definition.string.end.xtjson" } },
+          "patterns": [{ "include": "#multi-line-content" }]
+        },
+        {
+          "name": "string.quoted.double.xtjson",
+          "begin": "\"",
+          "end": "\"|$",
+          "beginCaptures": { "0": { "name": "punctuation.definition.string.begin.xtjson" } },
+          "endCaptures": { "0": { "name": "punctuation.definition.string.end.xtjson" } },
+          "patterns": [{ "include": "#string-content" }]
+        },
+        {
+          "name": "string.quoted.single.xtjson",
+          "begin": "'",
+          "end": "'|$",
+          "beginCaptures": { "0": { "name": "punctuation.definition.string.begin.xtjson" } },
+          "endCaptures": { "0": { "name": "punctuation.definition.string.end.xtjson" } },
+          "patterns": [{ "include": "#string-content" }]
+        }
+      ]
+    },
+    "string-content": {
+      "comment": "Single-line strings: control characters must be escaped (8.1).",
+      "patterns": [
+        { "include": "#escapes" },
+        { "name": "invalid.illegal.unescaped-control-character.xtjson", "match": "[\\x{00}-\\x{1F}]" }
+      ]
+    },
+    "multi-line-content": {
+      "comment": "Multi-line strings: line breaks and tabs may appear unescaped (8.3).",
+      "patterns": [
+        { "include": "#escapes" },
+        { "name": "invalid.illegal.unescaped-control-character.xtjson", "match": "[\\x{00}-\\x{08}\\x{0B}\\x{0C}\\x{0E}-\\x{1F}]" }
+      ]
+    },
+    "escapes": {
+      "comment": "The escape sequences of the table in 8.2; every other sequence with a backslash is an error.",
+      "patterns": [
+        {
+          "name": "constant.character.escape.xtjson",
+          "match": "\\\\(?:[\"'\\\\/bfnrtv]|0(?![0-9])|x\\h{2}|u\\h{4}|u\\{0*(?![dD][89a-fA-F]\\h{2}\\})(?:\\h{1,5}|10\\h{4})\\})"
+        },
+        { "name": "invalid.illegal.unrecognized-string-escape.xtjson", "match": "\\\\.?" }
+      ]
+    },
+    "numbers": {
+      "comment": "Numbers (9.1 to 9.3) with an optional suffix from the table in 9.5. Anything else that begins like a number is an error.",
+      "patterns": [
+        {
+          "match": "(?<![A-Za-z0-9_$.])(-?(?:0[xX]\\h(?:_?\\h)*|0[oO][0-7](?:_?[0-7])*|0[bB][01](?:_?[01])*|(?:0|[1-9](?:_?[0-9])*)(?:\\.[0-9](?:_?[0-9])*)?(?:[eE][+-]?[0-9](?:_?[0-9])*)?))(min|ms|mb|mB|Mb|MB|kb|kB|Kb|KB|pct|px|k|K|s|h|L|n)?(?![A-Za-z0-9_$.])",
+          "captures": {
+            "1": { "name": "constant.numeric.xtjson" },
+            "2": { "name": "keyword.other.unit.suffix.xtjson" }
+          }
+        },
+        {
+          "name": "invalid.illegal.number.xtjson",
+          "match": "(?<![A-Za-z0-9_$.])(?:-?[0-9.](?:[eE][+-]|[A-Za-z0-9_$.])*|-)"
+        }
+      ]
+    },
+    "named-values": {
+      "patterns": [
+        {
+          "name": "constant.language.xtjson",
+          "match": "(?<![A-Za-z0-9_$])(?:true|false|null)(?![A-Za-z0-9_$])"
+        },
+        {
+          "comment": "A custom named value (6.4); whether it is defined is up to the application.",
+          "name": "variable.other.constant.xtjson",
+          "match": "(?<![A-Za-z0-9_$])[A-Za-z_$][A-Za-z0-9_$]*"
+        }
+      ]
+    },
+    "punctuation": {
+      "patterns": [
+        { "name": "punctuation.definition.dictionary.begin.xtjson", "match": "\\{" },
+        { "name": "punctuation.definition.dictionary.end.xtjson", "match": "\\}" },
+        { "name": "punctuation.definition.array.begin.xtjson", "match": "\\[" },
+        { "name": "punctuation.definition.array.end.xtjson", "match": "\\]" },
+        { "name": "punctuation.separator.key-value.xtjson", "match": ":" },
+        { "name": "punctuation.separator.comma.xtjson", "match": "," }
+      ]
+    }
+  }
+}

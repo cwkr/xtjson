@@ -1,0 +1,9 @@
+src/**
+test/**
+build.js
+node_modules/**
+**/*.map
+*.vsix
+.gitignore
+.vscode/**
+package-lock.json

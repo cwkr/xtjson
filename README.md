@@ -38,6 +38,7 @@ Both language versions are equal in rank.
 | [`docs/`](docs) | the specification in English and German, and the overview page for GitHub Pages (`index.html` is generated) |
 | [`scripts/`](scripts) | reference parser, conformance tests and tools for the specification (Python, standard library only) |
 | [`xtjson-js/`](xtjson-js) | JavaScript implementation, npm package [`@cwkr/xtjson`](xtjson-js/README.md) |
+| [`xtjson-vscode/`](xtjson-vscode) | [extension for Visual Studio Code](xtjson-vscode/README.md): syntax highlighting, folding and formatting |
 
 The specification is the source of truth. The reference parser and the tests
 in `scripts/` follow it, and the implementations follow both.
@@ -80,3 +81,5 @@ Parts of this repository were written with the help of AI (Claude).
   [CC0 1.0 Universal](LICENSE).
 - The JavaScript implementation in [`xtjson-js/`](xtjson-js) is licensed
   under the [MIT License](xtjson-js/LICENSE).
+- The extension for Visual Studio Code in [`xtjson-vscode/`](xtjson-vscode)
+  is licensed under the [MIT License](xtjson-vscode/LICENSE).

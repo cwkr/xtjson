@@ -30,6 +30,7 @@ scripts/
   index_template.html             template for docs/index.html
   export_corpus.py                exports the test cases as JSON for implementations
 xtjson-js/                        JavaScript implementation (npm package @cwkr/xtjson)
+xtjson-vscode/                    extension for Visual Studio Code (uses format from xtjson-js)
 ```
 
 `docs/` also contains the overview page for GitHub Pages: `index.html` (generated, do not edit by hand) and `style.css` (written by hand).
