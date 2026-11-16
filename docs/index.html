@@ -892,7 +892,7 @@ tags: [
 
   <section class="form" id="suffix">
     <h3>suffix</h3>
-    <p>A <dfn>suffix</dfn> directly after the last digit stands for a conversion that turns the number into another number. It consists of the same characters as an <a href="#identifier">identifier</a>, but cannot begin with <code>_</code>. Case is significant and the longest match applies.</p>
+    <p>A <dfn>suffix</dfn> directly after the last digit stands for a conversion that turns the number into another number. It consists of the same characters as an <a href="#identifier">identifier</a>, with a restricted first character. Case is significant and the longest match applies.</p>
     <div class="diagram"><svg class="rr" viewBox="0 0 466 164" width="466" height="164" role="img" aria-label="Railroad diagram: suffix">
 <path class="cap" d="M8 12v16m4 -16v16"/>
 <path d="M12 20H30"/>
@@ -939,7 +939,7 @@ tags: [
 <path d="M436 20H454"/>
 <path class="cap" d="M454 12v16m4 -16v16"/>
 </svg></div>
-    <p>The first character cannot be <code>a</code> to <code>f</code>, <code>o</code> or <code>x</code> in either case, and it cannot be <code>_</code>, so a suffix is never confused with a hexadecimal digit, an exponent, a number prefix or digit grouping.</p>
+    <p>The first character cannot be <code>_</code>, and it cannot be <code>a</code> to <code>f</code>, <code>o</code> or <code>x</code> in either case, so a suffix is never confused with a hexadecimal digit, an exponent, a number prefix or digit grouping.</p>
     <p>All suffixes are predefined and cannot be changed; the application cannot add any. A suffix that is not in this table is an error:</p>
     <div class="table"><table>
       <thead>
