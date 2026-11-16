@@ -303,3 +303,10 @@ numbers, a small document) and prints calls per second. `JSON.parse` and
 selects the cases whose name contains it (`node bench/bench.js stringify`),
 `--json` prints the results as JSON. The numbers vary with the load of the
 machine; to compare two versions, run them alternately.
+
+## License
+
+MIT, see [`LICENSE`](LICENSE). Copyright (c) 2026 Christian Winkler.
+
+This package was written with the help of AI (Claude); see `contributors` in
+`package.json`.
