@@ -3,14 +3,14 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import XTJSON, { parse, XTJSONOptions, XTJSONError } from '../xtjson.js';
+import XTJSON, { parse, Options, ParserError } from '../xtjson.js';
 
-/** Asserts an XTJSONError and returns it. */
+/** Asserts a ParserError and returns it. */
 function error(text, defs) {
   try {
     XTJSON.parse(text, null, defs);
   } catch (e) {
-    assert.ok(e instanceof XTJSONError, `expected XTJSONError, got ${e}`);
+    assert.ok(e instanceof ParserError, `expected ParserError, got ${e}`);
     return e;
   }
   assert.fail(`should be invalid: ${JSON.stringify(text)}`);
@@ -29,10 +29,10 @@ describe('API', () => {
     assert.equal(XTJSON.parse({ toString: () => 'a: 1' }).a, 1);
   });
 
-  test('XTJSONError is a SyntaxError', () => {
+  test('ParserError is a SyntaxError', () => {
     const e = error('[1 2]');
     assert.ok(e instanceof SyntaxError);
-    assert.equal(e.name, 'XTJSONError');
+    assert.equal(e.name, 'ParserError');
   });
 
   test('parsed objects are plain objects', () => {
@@ -85,14 +85,14 @@ describe('reviver', () => {
 
   test('other primitive values as second argument are a TypeError', () => {
     for (const arg of ['not a function', 1, true, 1n, Symbol('s')]) {
-      assert.throws(() => XTJSON.parse('[1]', arg), (e) => e instanceof TypeError && !(e instanceof XTJSONError));
+      assert.throws(() => XTJSON.parse('[1]', arg), (e) => e instanceof TypeError && !(e instanceof ParserError));
     }
   });
 });
 
 describe('call forms', () => {
   const init = { namedValues: { nil: null } };
-  const defs = new XTJSONOptions(init);
+  const defs = new Options(init);
   const text = '[nil, 50pct, 1]';
   const expected = [null, 0.5, 1];
   const double = (k, v) => (typeof v === 'number' ? v * 2 : v);
@@ -135,26 +135,26 @@ describe('options: named values', () => {
     assert.deepEqual(XTJSON.parse(text, null, { namedValues: Object.entries(init.namedValues) }), expected);
   });
 
-  test('XTJSONOptions keeps the order of the named values', () => {
-    const defs = new XTJSONOptions({ namedValues: [['zeta', 1], ['alpha', 2], ['mid', 3]] });
+  test('Options keeps the order of the named values', () => {
+    const defs = new Options({ namedValues: [['zeta', 1], ['alpha', 2], ['mid', 3]] });
     assert.deepEqual([...defs.namedValues.keys()], ['zeta', 'alpha', 'mid']);
-    const fromObject = new XTJSONOptions({ namedValues: { zeta: 1, alpha: 2, $x: 3, _y: 4 } });
+    const fromObject = new Options({ namedValues: { zeta: 1, alpha: 2, $x: 3, _y: 4 } });
     assert.deepEqual([...fromObject.namedValues.keys()], ['zeta', 'alpha', '$x', '_y']);
   });
 
-  test('XTJSONOptions is immutable and independent of its input', () => {
+  test('Options is immutable and independent of its input', () => {
     const source = { a: 1 };
-    const defs = new XTJSONOptions({ namedValues: source });
+    const defs = new Options({ namedValues: source });
     source.a = 2;
     source.other = 1;
     assert.equal(XTJSON.parse('a', null, defs), 1);
     assert.ok(Object.isFrozen(defs));
     defs.namedValues.set('other', 1); // a copy; does not change defs
-    assert.throws(() => XTJSON.parse('other', null, defs), XTJSONError);
+    assert.throws(() => XTJSON.parse('other', null, defs), ParserError);
   });
 
-  test('an XTJSONOptions instance can be used as init', () => {
-    const copy = new XTJSONOptions(new XTJSONOptions({ ...init, ijson: true }));
+  test('an Options instance can be used as init', () => {
+    const copy = new Options(new Options({ ...init, ijson: true }));
     assert.deepEqual(XTJSON.parse('[name, 1pct]', null, copy), ['demo', 0.01]);
     assert.equal(copy.ijson, true);
   });
@@ -166,25 +166,16 @@ describe('options: named values', () => {
 
   test('objects and arrays are not permitted as named values (6.4)', () => {
     for (const value of [[], {}, [1, 2], { a: 1 }, [[]], new Date(), new Map()]) {
-      assert.throws(() => new XTJSONOptions({ namedValues: { x: value } }),
+      assert.throws(() => new Options({ namedValues: { x: value } }),
         (e) => e instanceof TypeError && /the named value 'x' is an? (array|object); a named value must be a string, a number, true, false or null/.test(e.message));
     }
   });
 
   test('unknown options are a TypeError', () => {
-    assert.throws(() => new XTJSONOptions({ values: { nil: null } }),
-      /Unknown XTJSON option "values"; named values are given as "namedValues"/);
+    assert.throws(() => new Options({ suffixes: { q: Math.abs } }), /Unknown XTJSON option "suffixes"\./);
     assert.throws(() => XTJSON.parse('1', { ijosn: true }),
       /Unknown XTJSON option "ijosn"\. The options are "namedValues", "ijson", "maxDepth", "writeNumberSuffixes" and "writeSingleQuotes"/);
     assert.deepEqual(XTJSON.parse('1', { namedValues: undefined, ijson: undefined, maxDepth: undefined }), 1);
-  });
-
-  test('custom number suffixes are not supported (9.5)', () => {
-    for (const suffixes of [{ q: Math.abs }, {}, new Map(), []]) {
-      assert.throws(() => new XTJSONOptions({ suffixes }), /custom number suffixes are not supported/);
-      assert.throws(() => XTJSON.parse('1', { suffixes }), TypeError);
-    }
-    assert.equal('suffixes' in new XTJSONOptions(), false);
   });
 
   test('invalid options throw TypeError', () => {
@@ -200,26 +191,26 @@ describe('options: named values', () => {
       ['abc', /must be an object/],
     ];
     for (const [defs, pattern] of cases) {
-      assert.throws(() => new XTJSONOptions(defs), (e) => e instanceof TypeError && pattern.test(e.message));
+      assert.throws(() => new Options(defs), (e) => e instanceof TypeError && pattern.test(e.message));
       assert.throws(() => XTJSON.parse('1', null, defs), TypeError);
     }
   });
 });
 
 describe('I-JSON mode', () => {
-  const ijson = new XTJSONOptions({ ijson: true });
+  const ijson = new Options({ ijson: true });
 
   test('is off by default and can be read back', () => {
-    assert.equal(new XTJSONOptions().ijson, false);
+    assert.equal(new Options().ijson, false);
     assert.equal(ijson.ijson, true);
-    assert.equal(new XTJSONOptions(ijson).ijson, true);
+    assert.equal(new Options(ijson).ijson, true);
     assert.deepEqual(XTJSON.parse('{"a": 1, "a": 2}'), { a: 2 });
   });
 
   test('"ijson" must be a boolean', () => {
     for (const value of [1, 'true', null, {}]) {
       if (value === null) continue; // null means "not given"
-      assert.throws(() => new XTJSONOptions({ ijson: value }), /"ijson" must be true or false/);
+      assert.throws(() => new Options({ ijson: value }), /"ijson" must be true or false/);
     }
   });
 
@@ -258,7 +249,7 @@ describe('I-JSON mode', () => {
   });
 
   test('values of named values count as well', () => {
-    const defs = new XTJSONOptions({
+    const defs = new Options({
       ijson: true,
       namedValues: { bad: 'ok' + String.fromCharCode(0xffff), lone: '\uD800', good: 'b' },
     });
@@ -447,14 +438,14 @@ describe('limits', () => {
     assert.deepEqual(XTJSON.parse('a: 1', { maxDepth: 1 }), { a: 1 });
     assert.match(error('a: []', { maxDepth: 1 }).message, /limit of 1/);
     assert.equal(XTJSON.parse(nested(1500), { maxDepth: 2000 }).length, 1);
-    assert.equal(new XTJSONOptions().maxDepth, 1000);
-    assert.equal(new XTJSONOptions({ maxDepth: 5 }).maxDepth, 5);
-    assert.equal(new XTJSONOptions(new XTJSONOptions({ maxDepth: 5 })).maxDepth, 5);
+    assert.equal(new Options().maxDepth, 1000);
+    assert.equal(new Options({ maxDepth: 5 }).maxDepth, 5);
+    assert.equal(new Options(new Options({ maxDepth: 5 })).maxDepth, 5);
   });
 
   test('maxDepth must be a positive integer', () => {
     for (const maxDepth of [0, -1, 1.5, Infinity, NaN, '10', 2 ** 53, true]) {
-      assert.throws(() => new XTJSONOptions({ maxDepth }), /"maxDepth" must be a positive integer/, String(maxDepth));
+      assert.throws(() => new Options({ maxDepth }), /"maxDepth" must be a positive integer/, String(maxDepth));
     }
   });
 
@@ -527,8 +518,8 @@ describe('error messages', () => {
     ['10MS', /Unknown number suffix 'MS'; did you mean 'ms'\? Suffixes are case-sensitive/, 1, 3],
     ['10kB_', /Unknown number suffix 'kB_'/, 1, 3],
     ['10l', /did you mean 'L'\?/, 1, 3],
-    ['50%', /'%' is not permitted after a number; for a percentage use the suffix 'pct'/, 1, 3],
-    ['10k%', /Unexpected '%' after the number suffix 'k'/, 1, 4],
+    ['50%', /Unexpected '%' after the root value/, 1, 3],
+    ['10k%', /Unexpected '%' after the root value/, 1, 4],
     ['10_k', /'_' is only permitted between two digits/, 1, 3],
     ['10ab', /a number suffix cannot begin with a to f, o or x/, 1, 3],
     ['10x', /a number suffix cannot begin with a to f, o or x/, 1, 3],

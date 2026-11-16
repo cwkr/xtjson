@@ -3,7 +3,7 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import XTJSON, { stringify, XTJSONOptions } from '../xtjson.js';
+import XTJSON, { stringify, Options } from '../xtjson.js';
 
 const ch = (...codes) => String.fromCharCode(...codes);
 const LS = ch(0x2028);
@@ -11,7 +11,7 @@ const LS = ch(0x2028);
 /** XTJSON.stringify must read back as the value JSON.stringify gives. */
 function assertRoundTrip(value, args = [], options = undefined) {
   const text = XTJSON.stringify(value, ...args);
-  const json = JSON.stringify(value, ...args.filter((a) => !(a instanceof XTJSONOptions) && !isPlainOptions(a)));
+  const json = JSON.stringify(value, ...args.filter((a) => !(a instanceof Options) && !isPlainOptions(a)));
   if (json === undefined) {
     assert.equal(text, undefined);
     return;
@@ -37,7 +37,7 @@ describe('API', () => {
 
   test('call forms are told apart by type', () => {
     const value = { a: null, list: [1, 2] };
-    const options = new XTJSONOptions({ namedValues: { nil: null } });
+    const options = new Options({ namedValues: { nil: null } });
     const upper = (k, v) => (typeof v === 'number' ? v * 10 : v);
     assert.equal(XTJSON.stringify(value), 'a:null,list:[1,2]');
     assert.equal(XTJSON.stringify(value, options), 'a:nil,list:[1,2]');
@@ -262,15 +262,11 @@ describe('output format', () => {
     // toJSON and the replacer come first, as in JSON.stringify
     assert.equal(XTJSON.stringify({ n: 1n }, (k, v) => (typeof v === 'bigint' ? String(v) : v)), 'n:"1"');
   });
-
-  test('custom suffixes are a TypeError', () => {
-    assert.throws(() => XTJSON.stringify([1], { suffixes: { q: Math.abs } }), /custom number suffixes are not supported/);
-  });
 });
 
 describe('named values', () => {
   test('primitive values are written as named values', () => {
-    const options = new XTJSONOptions({
+    const options = new Options({
       namedValues: { nil: null, yes: true, no: false, zero: 0, unknown: 'not specified' },
     });
     const value = { a: null, b: true, c: false, d: 0, e: -0, f: 'not specified', g: [1], h: { a: 1 }, nil: 'x' };
@@ -280,7 +276,7 @@ describe('named values', () => {
   });
 
   test('the named value defined last wins; predefined ones only if none matches', () => {
-    const options = new XTJSONOptions({ namedValues: [['nil', null], ['none', null], ['one', 1], ['uno', 1]] });
+    const options = new Options({ namedValues: [['nil', null], ['none', null], ['one', 1], ['uno', 1]] });
     assert.equal(XTJSON.stringify([null, 1, true], options), '[none,uno,true]');
     assert.equal(XTJSON.stringify([null], { namedValues: { nil: null } }), '[nil]');
     assert.equal(XTJSON.stringify([null]), '[null]');
@@ -409,12 +405,12 @@ describe('single quotation marks', () => {
 
   test('is off by default and can be read back', () => {
     assert.equal(XTJSON.stringify(["'"]), `["'"]`);
-    assert.equal(new XTJSONOptions().writeSingleQuotes, false);
-    assert.equal(new XTJSONOptions(sq).writeSingleQuotes, true);
-    assert.equal(new XTJSONOptions({ writeNumberSuffixes: true }).writeNumberSuffixes, true);
-    assert.equal(new XTJSONOptions().writeNumberSuffixes, false);
+    assert.equal(new Options().writeSingleQuotes, false);
+    assert.equal(new Options(sq).writeSingleQuotes, true);
+    assert.equal(new Options({ writeNumberSuffixes: true }).writeNumberSuffixes, true);
+    assert.equal(new Options().writeNumberSuffixes, false);
     for (const name of ['writeSingleQuotes', 'writeNumberSuffixes']) {
-      assert.throws(() => new XTJSONOptions({ [name]: 1 }), new RegExp(`"${name}" must be true or false`));
+      assert.throws(() => new Options({ [name]: 1 }), new RegExp(`"${name}" must be true or false`));
     }
   });
 });
@@ -477,10 +473,10 @@ describe('round trip', () => {
     const rnd = random(12345);
     const namedValues = [['nil', null], ['one', 1], ['empty', ''], ['nl', '\n'], ['kilo', 1000], ['yes', true]];
     const variants = [
-      new XTJSONOptions({ namedValues }),
-      new XTJSONOptions({ writeNumberSuffixes: true, writeSingleQuotes: true }),
-      new XTJSONOptions({ namedValues, writeNumberSuffixes: true }),
-      new XTJSONOptions({ namedValues, writeSingleQuotes: true }),
+      new Options({ namedValues }),
+      new Options({ writeNumberSuffixes: true, writeSingleQuotes: true }),
+      new Options({ namedValues, writeNumberSuffixes: true }),
+      new Options({ namedValues, writeSingleQuotes: true }),
     ];
     for (let i = 0; i < 2000; i++) {
       const value = randomValue(rnd, 0);

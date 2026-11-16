@@ -30,7 +30,7 @@ export type DefinitionEntries<T> =
   | Iterable<readonly [string, T]>;
 
 /** Options for `parse` and `stringify`. */
-export interface XTJSONOptionsInit {
+export interface OptionsInit {
   /**
    * Named values (6.4): identifier → string, number, boolean or `null`, in
    * a fixed order; objects and arrays are not permitted. `true`, `false`
@@ -40,7 +40,7 @@ export interface XTJSONOptionsInit {
    * ones are used only if no custom one matches.
    *
    * There is no option for number suffixes: they are fixed by section 9.5.
-   * Unknown properties, such as `suffixes` or `values`, are a `TypeError`.
+   * Unknown properties are a `TypeError`.
    */
   namedValues?: DefinitionEntries<NamedValue>;
   /**
@@ -54,9 +54,9 @@ export interface XTJSONOptionsInit {
   /**
    * Maximum nesting depth of objects and arrays, a positive integer; an
    * implicit root object counts as a level. `parse` reports a deeper
-   * document as an `XTJSONError`, `stringify` a deeper value as a
+   * document as a `ParserError`, `stringify` a deeper value as a
    * `TypeError`. Default: 1000. A very large value can exceed the call
-   * stack of the engine; `parse` then also throws an `XTJSONError`.
+   * stack of the engine; `parse` then also throws a `ParserError`.
    */
   maxDepth?: number;
   /**
@@ -76,11 +76,11 @@ export interface XTJSONOptionsInit {
 
 /**
  * Validated, immutable options. Create them once and pass them to every
- * call; plain `XTJSONOptionsInit` objects are validated again on each call.
+ * call; plain `OptionsInit` objects are validated again on each call.
  */
-export class XTJSONOptions implements XTJSONOptionsInit {
+export class Options implements OptionsInit {
   /** @throws {TypeError} if an option is unknown or invalid, or a definition violates section 6.4. */
-  constructor(init?: XTJSONOptionsInit | null);
+  constructor(init?: OptionsInit | null);
   /** The named values in their defined order (a new Map). */
   get namedValues(): Map<string, NamedValue>;
   /** The maximum nesting depth of objects and arrays. */
@@ -91,12 +91,12 @@ export class XTJSONOptions implements XTJSONOptionsInit {
   get writeNumberSuffixes(): boolean;
   /** True if `stringify` writes strings in `'` and `'''`. */
   get writeSingleQuotes(): boolean;
-  get [Symbol.toStringTag](): 'XTJSONOptions';
+  get [Symbol.toStringTag](): 'Options';
 }
 
 /** Error in an XTJSON document. */
-export class XTJSONError extends SyntaxError {
-  name: 'XTJSONError';
+export class ParserError extends SyntaxError {
+  name: 'ParserError';
   /** The violated rule, without position. */
   readonly reason: string;
   /** 1-based line number (LF, CR and CR LF are line breaks). */
@@ -113,9 +113,6 @@ export type Reviver = (this: any, key: string, value: any) => any;
 /** Replacer function as in `JSON.stringify`. */
 export type Replacer = (this: any, key: string, value: any) => any;
 
-/** Options as an instance or as a plain object. */
-export type Options = XTJSONOptions | XTJSONOptionsInit;
-
 /**
  * Parses an XTJSON document and returns its value. Numbers become `number`;
  * a number with the suffix `n` and without a fraction part becomes a
@@ -125,12 +122,12 @@ export type Options = XTJSONOptions | XTJSONOptionsInit;
  * @param reviver transforms the result, as in `JSON.parse`; `null` or
  *   `undefined` for none
  * @param options named values, the I-JSON mode and the maximum nesting depth
- * @throws {XTJSONError} if the text is not a valid XTJSON document
+ * @throws {ParserError} if the text is not a valid XTJSON document
  * @throws {TypeError} if the arguments or the options are invalid
  */
-export function parse(text: string, reviver?: Reviver | null, options?: Options | null): any;
+export function parse(text: string, reviver?: Reviver | null, options?: Options | OptionsInit | null): any;
 /** Parses an XTJSON document with options. */
-export function parse(text: string, options: Options): any;
+export function parse(text: string, options: Options | OptionsInit): any;
 
 /**
  * Writes a value as an XTJSON document, like `JSON.stringify`.
@@ -158,14 +155,14 @@ export function stringify(
   value: any,
   replacer?: Replacer | (string | number)[] | null,
   space?: string | number | null,
-  options?: Options | null,
+  options?: Options | OptionsInit | null,
 ): string;
 /** Writes a value with a replacer and options, without indentation. */
-export function stringify(value: any, replacer: Replacer | (string | number)[] | null, options: Options): string;
+export function stringify(value: any, replacer: Replacer | (string | number)[] | null, options: Options | OptionsInit): string;
 /** Writes a value with indentation and optional options. */
-export function stringify(value: any, space: string | number, options?: Options | null): string;
+export function stringify(value: any, space: string | number, options?: Options | OptionsInit | null): string;
 /** Writes a value with options, without indentation. */
-export function stringify(value: any, options: Options): string;
+export function stringify(value: any, options: Options | OptionsInit): string;
 
 export interface XTJSON {
   parse: typeof parse;

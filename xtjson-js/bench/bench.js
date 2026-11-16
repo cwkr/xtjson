@@ -13,7 +13,7 @@
  * measured on the same data as a point of reference.
  */
 
-import XTJSON, { XTJSONOptions } from '../xtjson.js';
+import XTJSON, { Options } from '../xtjson.js';
 
 const args = globalThis.Deno ? globalThis.Deno.args : globalThis.process.argv.slice(2);
 const asJSON = args.includes('--json');
@@ -155,8 +155,8 @@ const escapedStrings = stringArray(['line\nbreak and\ttab', 'quote " and backsla
 const plainStringsText = JSON.stringify(plainStrings);
 const escapedStringsText = JSON.stringify(escapedStrings);
 const numbers = numberText();
-const options = new XTJSONOptions({ namedValues: { nil: null, unknown: 'not specified' }, ijson: true });
-const suffixOptions = new XTJSONOptions({ writeNumberSuffixes: true, writeSingleQuotes: true });
+const options = new Options({ namedValues: { nil: null, unknown: 'not specified' }, ijson: true });
+const suffixOptions = new Options({ writeNumberSuffixes: true, writeSingleQuotes: true });
 
 /** [name, size of the document in characters, function] */
 const CASES = [

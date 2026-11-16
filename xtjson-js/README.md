@@ -135,9 +135,9 @@ Without options, only the predefined named values `true`, `false` and `null`
 are active. An application can define further named values:
 
 ```js
-import XTJSON, { XTJSONOptions } from '@cwkr/xtjson';
+import XTJSON, { Options } from '@cwkr/xtjson';
 
-const options = new XTJSONOptions({
+const options = new Options({
   namedValues: { nil: null, unknown: 'not specified' },
 });
 
@@ -157,9 +157,9 @@ XTJSON.stringify({ owner: 'not specified', boss: null }, options);
 - `maxDepth`: the maximum nesting depth of objects and arrays, a positive
   integer. Default `1000`. An implicit root object counts as a level, so
   `a: [1]` has depth 2. `parse` reports a deeper document as an
-  `XTJSONError`, `stringify` a deeper value as a `TypeError`. A very large
+  `ParserError`, `stringify` a deeper value as a `TypeError`. A very large
   limit can exceed the call stack of the JavaScript engine (with Node.js at
-  a depth of a few thousand); `parse` then reports an `XTJSONError` too.
+  a depth of a few thousand); `parse` then reports a `ParserError` too.
 - `writeNumberSuffixes`: `true` lets `stringify` write number suffixes, see
   above. Default `false`. `parse` ignores it.
 - `writeSingleQuotes`: `true` lets `stringify` write strings and quoted names in
@@ -175,7 +175,7 @@ section 9.5 and always active when parsing: `k`, `K` (times 1000), `kb`,
 by 100), `px`, `L` and `n`. `s`, `px`, `L` and `n` leave the value
 unchanged; `n` in addition yields a BigInt, see [Numbers](#numbers).
 
-`XTJSONOptions` validates the options once. Create it once and reuse it for
+`Options` validates the options once. Create it once and reuse it for
 `parse` and `stringify`. A plain object with the same properties can be
 passed as well, but it is validated again on every call.
 
@@ -220,7 +220,7 @@ including texts with duplicate names.
 
 ### Errors
 
-- An invalid document throws an `XTJSONError`, a subclass of `SyntaxError`.
+- An invalid document throws a `ParserError`, a subclass of `SyntaxError`.
   Its message names the violated rule and the position, for example
   `Undefined named value 'ture'; text without quotation marks is not a string, write "ture" for a string (line 3, column 9)`.
   The properties `reason`, `line`, `column` (both 1-based; columns count
@@ -228,12 +228,12 @@ including texts with duplicate names.
   details.
 - Errors of the application throw a `TypeError`: invalid options (for
   example an attempt to redefine `true`, an invalid identifier, an object or
-  array as a named value, custom suffixes), invalid arguments, and
+  array as a named value, an unknown option), invalid arguments, and
   values that `stringify` cannot write.
 
 ### Named exports
 
-`parse`, `stringify`, `XTJSONOptions` and `XTJSONError` are also available as
+`parse`, `stringify`, `Options` and `ParserError` are also available as
 named exports.
 
 ## Numbers

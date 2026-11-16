@@ -14,11 +14,11 @@
  * Design notes:
  * - Single-pass recursive descent parser working directly on UTF-16 code
  *   units of the input; no token array is built.
- * - Errors in the document throw `XTJSONError` (a `SyntaxError`) with line and
+ * - Errors in the document throw `ParserError` (a `SyntaxError`) with line and
  *   column. Errors of the application (invalid options or arguments, values
  *   that cannot be written) throw `TypeError`.
  * - Custom named values (section 6.4) and the I-JSON mode (section 12) are
- *   passed as options. `XTJSONOptions` validates them once and can be reused
+ *   passed as options. `Options` validates them once and can be reused
  *   for many calls. The number suffixes (section 9.5) are fixed.
  */
 
@@ -47,7 +47,6 @@ const SPACE = 0x20;
 const DQUOTE = 0x22;
 const HASH = 0x23;
 const DOLLAR = 0x24;
-const PERCENT = 0x25;
 const SQUOTE = 0x27;
 const STAR = 0x2a;
 const PLUS = 0x2b;
@@ -152,7 +151,7 @@ const RADIX_PREFIX = { 2: '0b', 8: '0o', 16: '0x' };
  * Error in an XTJSON document. Extends `SyntaxError`, like the errors of
  * `JSON.parse`.
  */
-export class XTJSONError extends SyntaxError {
+export class ParserError extends SyntaxError {
   /**
    * @param {string} reason description of the violated rule
    * @param {number} line 1-based line number
@@ -162,7 +161,7 @@ export class XTJSONError extends SyntaxError {
    */
   constructor(reason, line, column, offset, options) {
     super(`${reason} (line ${line}, column ${column})`, options);
-    this.name = 'XTJSONError';
+    this.name = 'ParserError';
     this.reason = reason;
     this.line = line;
     this.column = column;
@@ -216,7 +215,7 @@ function describeAt(text, offset) {
 // ---------------------------------------------------------------------------
 // Options: named values (6.4) and I-JSON mode (12)
 
-/** Internal state of `XTJSONOptions` instances. */
+/** Internal state of `Options` instances. */
 const OPTIONS = new WeakMap();
 
 /**
@@ -228,7 +227,7 @@ const OPTIONS = new WeakMap();
  * values have the same value, `stringify` writes the one defined last.
  * Validate once and reuse the instance for many calls.
  */
-export class XTJSONOptions {
+export class Options {
   /**
    * @param {{namedValues?: object, ijson?: boolean, maxDepth?: number,
    *   writeNumberSuffixes?: boolean, writeSingleQuotes?: boolean}} [init]
@@ -325,7 +324,7 @@ export class XTJSONOptions {
   }
 
   get [Symbol.toStringTag]() {
-    return 'XTJSONOptions';
+    return 'Options';
   }
 }
 
@@ -354,12 +353,9 @@ function booleanOption(init, name) {
 /** Rejects unknown properties of a plain options object. */
 function checkOptionNames(init) {
   for (const key of Object.keys(init)) {
-    if (OPTION_NAMES.has(key)) continue;
-    if (key === 'suffixes') {
-      throw new TypeError('Invalid XTJSON option: custom number suffixes are not supported; the suffixes are fixed by section 9.5 of the specification');
+    if (!OPTION_NAMES.has(key)) {
+      throw new TypeError(`Unknown XTJSON option ${quote(key)}. The options are ${OPTION_LIST}`);
     }
-    const hint = key === 'values' ? '; named values are given as "namedValues"' : '';
-    throw new TypeError(`Unknown XTJSON option ${quote(key)}${hint}. The options are ${OPTION_LIST}`);
   }
 }
 
@@ -394,7 +390,7 @@ function resolveOptions(options) {
   if (options === undefined || options === null) return DEFAULT_OPTIONS;
   const state = OPTIONS.get(options);
   if (state !== undefined) return state;
-  return OPTIONS.get(new XTJSONOptions(options));
+  return OPTIONS.get(new Options(options));
 }
 
 /** Entries of a plain object, a Map or an iterable of pairs. */
@@ -471,7 +467,7 @@ class Parser {
 
   fail(reason, offset = this.pos, cause) {
     const { line, column } = locate(this.text, offset);
-    throw new XTJSONError(reason, line, column, offset, cause === undefined ? undefined : { cause });
+    throw new ParserError(reason, line, column, offset, cause === undefined ? undefined : { cause });
   }
 
   failUnexpected(expected, offset = this.pos) {
@@ -1060,7 +1056,7 @@ class Parser {
         }
         // The number ends here unless the next character continues it or is
         // an error after a number.
-        if (digits <= 15 && (!(c < 128) || (c !== DOT && c !== PERCENT && (CHAR_FLAGS[c] & ID_PART) === 0))) {
+        if (digits <= 15 && (!(c < 128) || (c !== DOT && (CHAR_FLAGS[c] & ID_PART) === 0))) {
           this.pos = pos;
           if (fraction !== 0) n /= POWERS_OF_TEN[fraction];
           return negative ? -n : n;
@@ -1148,8 +1144,8 @@ class Parser {
       while (hasFlag(text.charCodeAt(pos), ID_PART)) pos++;
       const suffix = text.slice(suffixStart, pos);
       c = text.charCodeAt(pos);
-      if (c === DOT || c === PERCENT) {
-        this.fail(`Unexpected '${String.fromCharCode(c)}' after the number suffix '${suffix}'`, pos);
+      if (c === DOT) {
+        this.fail(`Unexpected '.' after the number suffix '${suffix}'`, pos);
       }
       if (typeof value !== 'bigint') {
         // `value` is exact for non-decimal numbers (checked in radixValue) and
@@ -1157,8 +1153,6 @@ class Parser {
         const exact = radix !== 10 || (isInteger && Math.abs(value) <= Number.MAX_SAFE_INTEGER);
         value = this.applySuffix(suffix, value, exact, start, suffixStart);
       }
-    } else if (c === PERCENT) {
-      this.fail("'%' is not permitted after a number; for a percentage use the suffix 'pct' (50pct is 0.5)", pos);
     } else if (c === DOT) {
       this.fail(radix === 10
         ? "Unexpected '.' in a number"
@@ -1858,14 +1852,14 @@ const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[
  *     parse(text, options)            // an object
  *
  * @param {string} text the document
- * @param {Function | XTJSONOptions | object | null} [reviver]
+ * @param {Function | Options | object | null} [reviver]
  *   a function transforms the result, as in `JSON.parse`; an object are the
  *   options
- * @param {XTJSONOptions | object | null} [options] custom named values,
+ * @param {Options | object | null} [options] custom named values,
  *   the I-JSON mode and the maximum nesting depth
  * @returns {any} the value; a number with the suffix `n` and without a
  *   fraction part becomes a BigInt if its value is an integer
- * @throws {XTJSONError} if the text is not a valid XTJSON document
+ * @throws {ParserError} if the text is not a valid XTJSON document
  * @throws {TypeError} if the arguments or the options are invalid
  */
 function parse(text, reviver, options) {
@@ -1879,7 +1873,7 @@ function parse(text, reviver, options) {
   if (typeof source.isWellFormed === 'function' ? !source.isWellFormed() : LONE_SURROGATE.test(source)) {
     const offset = source.search(LONE_SURROGATE);
     const { line, column } = locate(source, offset);
-    throw new XTJSONError(
+    throw new ParserError(
       `Unpaired surrogate ${hex4(source.charCodeAt(offset))}; the text is not valid Unicode and cannot be encoded as UTF-8`,
       line, column, offset);
   }
@@ -1890,7 +1884,7 @@ function parse(text, reviver, options) {
   } catch (error) {
     // A large maxDepth can exceed the call stack of the engine (RangeError
     // in V8 and JavaScriptCore, InternalError in SpiderMonkey).
-    if (!(error instanceof XTJSONError) && parser.depth > 0 &&
+    if (!(error instanceof ParserError) && parser.depth > 0 &&
         (error instanceof RangeError || error?.name === 'InternalError')) {
       parser.fail(`Nesting depth ${parser.depth} exceeds the call stack of the JavaScript engine; use a smaller maxDepth`, parser.pos, error);
     }
@@ -1924,11 +1918,11 @@ function parse(text, reviver, options) {
  *     stringify(value, options)                    // options: object
  *
  * @param {any} value
- * @param {Function | Array<string | number> | number | string | XTJSONOptions | object | null} [replacer]
- * @param {number | string | XTJSONOptions | object | null} [space]
+ * @param {Function | Array<string | number> | number | string | Options | object | null} [replacer]
+ * @param {number | string | Options | object | null} [space]
  *   indentation: a number of spaces (at most 10) or a string of spaces and
  *   tabs
- * @param {XTJSONOptions | object | null} [options] named values, the
+ * @param {Options | object | null} [options] named values, the
  *   I-JSON mode, the maximum nesting depth, number suffixes and quotation
  *   marks
  * @returns {string | undefined} undefined if the value cannot be written

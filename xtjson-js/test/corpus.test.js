@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-import XTJSON, { XTJSONError } from '../xtjson.js';
+import XTJSON, { ParserError } from '../xtjson.js';
 
 const corpus = JSON.parse(readFileSync(new URL('./corpus.json', import.meta.url), 'utf8'));
 
@@ -55,7 +55,7 @@ function assertValid(text, expected, defs) {
 }
 
 function assertInvalid(text, defs) {
-  assert.throws(() => XTJSON.parse(text, null, defs), XTJSONError, `should be invalid: ${show(text)}`);
+  assert.throws(() => XTJSON.parse(text, null, defs), ParserError, `should be invalid: ${show(text)}`);
 }
 
 const groups = [
@@ -111,7 +111,7 @@ test('tests_definitionen.py: invalid texts', () => {
   for (const [text, label] of corpus.c_invalid) assertInvalid(text, defsFor(label));
 });
 
-test('tests_definitionen.py: invalid definitions are a TypeError, not an XTJSONError', () => {
+test('tests_definitionen.py: invalid definitions are a TypeError, not a ParserError', () => {
   const bad = [
     ...corpus.c_bad_values.map((values) => ({ namedValues: values })),
     // BAD_DEFS that cannot be exported as JSON
@@ -120,7 +120,7 @@ test('tests_definitionen.py: invalid definitions are a TypeError, not an XTJSONE
   assert.ok(bad.length > 10);
   for (const defs of bad) {
     assert.throws(() => XTJSON.parse('1', null, defs), (error) => {
-      return error instanceof TypeError && !(error instanceof XTJSONError);
+      return error instanceof TypeError && !(error instanceof ParserError);
     }, JSON.stringify(defs.namedValues));
   }
 });
