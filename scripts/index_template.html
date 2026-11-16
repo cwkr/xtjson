@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>XTJSON – JSON for files maintained by people</title>
-<meta name="description" content="XTJSON is a syntactic superset of JSON for files that are written and maintained by people: comments, names without quotation marks, line breaks as separators, multi-line strings and more, with the unchanged JSON data model.">
+<meta name="description" content="XTJSON is a syntactic superset of JSON for files that are written and maintained by people: comments, names without quotation marks, line breaks as separators, strings across several lines and more, with the unchanged JSON data model.">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -41,7 +41,7 @@
     <li><strong>Trailing commas</strong> in objects and arrays.</li>
     <li><strong>Optional braces</strong> around the object at the top level.</li>
     <li><strong>Strings in single quotation marks:</strong> <code>'…'</code>.</li>
-    <li><strong>Multi-line strings</strong> with <code>"""</code> or <code>'''</code>, with the indentation removed.</li>
+    <li><strong>Strings across several lines</strong>, with the indentation removed, and line continuation with <code>\</code>.</li>
     <li><strong>More escape sequences:</strong> <code>\'</code>, <code>\v</code>, <code>\0</code>, <code>\xHH</code> and <code>\u{…}</code>.</li>
     <li><strong>Hexadecimal, octal and binary integers:</strong> <code>0xFF</code>, <code>0o755</code>, <code>0b1010</code>.</li>
     <li><strong>Digit grouping</strong> with <code>_</code>: <code>1_000_000</code>.</li>
@@ -114,7 +114,7 @@
 
   <section class="form" id="name">
     <h3>name</h3>
-    <p>A <dfn>name</dfn> is a single-line <a href="#string">string</a> or an <a href="#identifier">identifier</a>. A multi-line string is not permitted as a name. The notation does not matter for the identity of a name: <code>a</code>, <code>"a"</code> and <code>'a'</code> denote the same name. At a name position an identifier is always a name, so <code>{null: null}</code> has the name <code>"null"</code>.</p>
+    <p>A <dfn>name</dfn> is a <a href="#string">string</a> or an <a href="#identifier">identifier</a>. The notation does not matter for the identity of a name: <code>a</code>, <code>"a"</code> and <code>'a'</code> denote the same name. At a name position an identifier is always a name, so <code>{null: null}</code> has the name <code>"null"</code>.</p>
     <div class="diagram">{{rr:name}}</div>
   </section>
 
@@ -126,26 +126,20 @@
 
   <section class="form" id="string">
     <h3>string</h3>
-    <p>A <dfn>string</dfn> is a sequence of zero or more Unicode characters. A single-line string is enclosed in double or in single quotation marks; both forms are equivalent. The delimiter, the backslash and the control characters U+0000 to U+001F must be written as an <a href="#escape">escape</a>, so a single-line string cannot extend across a line break.</p>
+    <p>A <dfn>string</dfn> is a sequence of zero or more Unicode characters, enclosed in double or in single quotation marks; both forms are equivalent. A string may extend across several lines: <a href="#line-break">line breaks</a> and tabs may appear in it unescaped. The delimiter, the backslash and all other control characters, including vertical tab and form feed, must be written as an <a href="#escape">escape</a>.</p>
     <div class="diagram">{{rr:string}}</div>
-  </section>
-
-  <section class="form" id="multi-line-string">
-    <h3>multi-line string</h3>
-    <p>A <dfn>multi-line string</dfn> begins and ends with three double or three single quotation marks. Line breaks and tabs may appear in it unescaped. One or two delimiter characters in a row may also appear unescaped, but not immediately before the closing delimiter.</p>
-    <div class="diagram">{{rr:multi-line string}}</div>
-    <p>The value is obtained in four steps:</p>
+    <p>A string without a line break has the same value as in JSON. For a string across several lines, the value is obtained in four steps:</p>
     <ol>
-      <li>The text is split into lines at every unescaped line break.</li>
-      <li>Unescaped spaces and tabs at the end of every line except the last are removed.</li>
+      <li>The text is split into lines at every line break, including the line break of a line continuation (<code>\</code> before a line break).</li>
+      <li>Unescaped spaces and tabs at the end of every line except the last are removed. A line that ends with a line continuation keeps the white space before the <code>\</code>.</li>
       <li>If the string begins with an empty line, that line is dropped and the smallest indentation of all non-empty lines is removed from every line. The last line always counts, so the position of the closing delimiter helps determine how much is removed. The removed characters must be the same in all lines; mixing tabs and spaces there is an error.</li>
-      <li>The lines are joined with a line feed (U+000A), then the escape sequences are resolved.</li>
+      <li>The lines are joined with a line feed (U+000A), then the escape sequences are resolved. A line continuation drops its <code>\</code> together with the line feed, so the indentation of the continued line is removed, but no line break remains.</li>
     </ol>
   </section>
 
   <section class="form" id="escape">
     <h3>escape</h3>
-    <p>XTJSON has all escape sequences of JSON and five more from ECMAScript: <code>\'</code>, <code>\v</code>, <code>\0</code>, <code>\xHH</code> and <code>\u{…}</code>. They apply in all string forms. <code>\u{…}</code> stands for a code point up to 10FFFF outside the surrogate range. Every other sequence that begins with a backslash is an error, including a backslash before a line break.</p>
+    <p>XTJSON has all escape sequences of JSON and six more from ECMAScript: <code>\'</code>, <code>\v</code>, <code>\0</code>, <code>\xHH</code>, <code>\u{…}</code> and the line continuation, a backslash directly before a <a href="#line-break">line break</a>, which yields nothing. They apply in both string forms. <code>\u{…}</code> stands for a code point up to 10FFFF outside the surrogate range. Every other sequence that begins with a backslash is an error, including a backslash before a space or tab.</p>
     <div class="diagram">{{rr:escape}}</div>
   </section>
 
@@ -214,7 +208,7 @@
 
   <section class="form" id="line-break">
     <h3>line break</h3>
-    <p>A <dfn>line break</dfn> is a line feed, a carriage return, or the sequence of both, which counts as a single line break. All other white space characters, including U+2028 and U+2029, are not line breaks: they neither separate items nor end a line comment.</p>
+    <p>A <dfn>line break</dfn> is a line feed, a carriage return, or the sequence of both, which counts as a single line break. In a string it becomes a line feed. All other white space characters, including U+2028 and U+2029, are not line breaks: they neither separate items nor end a line comment.</p>
     <div class="diagram">{{rr:line break}}</div>
   </section>
 </section>
@@ -238,7 +232,7 @@
   <h2>Principles</h2>
   <ul>
     <li><strong>Definitions belong to the parser, not to the document.</strong> A document can define neither named values nor suffixes. Named values can be defined by the application; suffixes are fixed by the specification. A document that uses only the predefined named values is portable: every conforming parser can read it.</li>
-    <li><strong>Errors instead of guessing.</strong> Unknown escape sequences, undefined identifiers, unknown suffixes and mixed indentation are errors and are not silently interpreted.</li>
+    <li><strong>Errors instead of guessing.</strong> Unknown escape sequences, white space after a line continuation, undefined identifiers, unknown suffixes and mixed indentation are errors and are not silently interpreted.</li>
     <li><strong>Never code.</strong> XTJSON is not a subset of a programming language and is never read by evaluating it as program code.</li>
   </ul>
 </section>

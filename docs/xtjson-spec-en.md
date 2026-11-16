@@ -1,6 +1,6 @@
 # XTJSON
 
-**Specification, draft 0.4** · Date: 15 November 2026
+**Specification, draft 0.5** · Date: 16 November 2026
 
 ## Contents
 
@@ -39,12 +39,12 @@ The extensions over JSON are:
 | E3 | Optional braces around the object at the top level | [6.2](#62-implicit-root-object) |
 | E4 | Names (keys) without quotation marks | [7.2](#72-names) |
 | E5 | Line break as a separator in place of a comma | [7.3](#73-separators) |
-| E6 | Strings in single quotation marks (`'…'`) | [8.1](#81-single-line-strings) |
+| E6 | Strings in single quotation marks (`'…'`) | [8.1](#81-delimiters-and-characters) |
 | E7 | Integers in hexadecimal, octal and binary notation | [9.2](#92-hexadecimal-octal-binary) |
 | E8 | `_` for grouping digits | [9.3](#93-digit-grouping) |
 | E9 | Additional escape sequences: `\v`, `\0`, `\xHH`, `\u{…}` | [8.2](#82-escape-sequences) |
 | E10 | Additional white space characters: all white space characters of ECMAScript | [5.1](#51-white-space) |
-| E11 | Multi-line strings with `"""` or `'''` | [8.3](#83-multi-line-strings) |
+| E11 | Strings across several lines, with indentation removed, and line continuation with `\` | [8.3](#83-line-breaks-in-strings) |
 | E12 | Named values: identifiers as values, aliases for JSON values defined in the parser (`nil`) | [6.4](#64-named-values) |
 | E13 | Number suffixes (`10k`, `64mb`, `50pct`) | [9.5](#95-number-suffixes) |
 
@@ -66,6 +66,7 @@ The grammar is written in ABNF [RFC5234]. The rules in sections 5–9 are excerp
 | white space character | one of the characters in the table in 5.1 |
 | line break | U+000A, U+000D or the sequence U+000D U+000A (5.2) |
 | escaped, unescaped | escaped: written as an escape sequence according to 8.2; unescaped: written as the character itself |
+| line continuation | a `\` immediately before a line break in a string; it contributes nothing to the value (8.2) |
 | definition | the assignment of a JSON value to a named value (6.4) |
 | predefined | fixed by this specification and not changeable |
 | custom definition | a definition that the application passes to the parser |
@@ -89,7 +90,7 @@ This section is normative. It states what "fully compatible" with [RFC8259] (STD
 - An XTJSON parser is not a conforming processor in the sense of [ECMA-404], because such a processor is not to accept non-conforming input. It is, however, a permitted parser in the sense of [RFC8259] section 9, which explicitly allows parsers to accept extensions.
 - Whoever generates JSON MUST adhere strictly to the JSON grammar ([RFC8259] section 10). The mapping in section 10 is the bridge.
 
-Informative – why K1 and K2 hold: every extension occupies only notations that are a syntax error in JSON. `/`, `#`, `'` and the additional white space characters (5.1) do not occur in JSON outside strings; the additional escape sequences are invalid `\` sequences in JSON; three quotation marks in a row cannot start a value in JSON; a name without quotation marks, a comma before a closing bracket, a `:` after the root value, two items without a comma, and `0x`, `0o`, `0b` and `_` in numbers are invalid in JSON; so are an identifier at a value position other than `true`, `false` and `null`, and a suffix directly after a number. The three literals of JSON are predefined and cannot be changed, and no suffix begins with `e` or `E`, so the exponent of a JSON number is never read as a suffix. The line break rule (E5) applies only where JSON requires a comma; everywhere else a line break remains insignificant white space.
+Informative – why K1 and K2 hold: every extension occupies only notations that are a syntax error in JSON. `/`, `#`, `'` and the additional white space characters (5.1) do not occur in JSON outside strings; the additional escape sequences are invalid `\` sequences in JSON; an unescaped line break or tab in a string is invalid in JSON; a name without quotation marks, a comma before a closing bracket, a `:` after the root value, two items without a comma, and `0x`, `0o`, `0b` and `_` in numbers are invalid in JSON; so are an identifier at a value position other than `true`, `false` and `null`, and a suffix directly after a number. The three literals of JSON are predefined and cannot be changed, and no suffix begins with `e` or `E`, so the exponent of a JSON number is never read as a suffix. A string without a line break keeps its JSON value, because the rules of 8.3 change only strings that extend across several lines. The line break rule (E5) applies only where JSON requires a comma; everywhere else a line break remains insignificant white space.
 
 ## 4. Encoding
 
@@ -123,7 +124,7 @@ The white space characters are exactly the characters in the following table. Th
 
 - U+0020, U+00A0, U+1680, U+2000–U+200A, U+202F, U+205F and U+3000 are the characters of the Unicode category Zs (Space_Separator), which ECMAScript has treated as white space as a whole since ES3. The list in this specification is closed; it does not change if future Unicode versions change the category Zs.
 - Only U+000A and U+000D are line breaks, alone or as the sequence CR LF (5.2). All other characters in the table are plain white space: they do not separate items (7.3) and do not end a line comment. In contrast to ECMAScript, this also holds for U+2028 and U+2029, which are line terminators there.
-- Inside strings nothing changes compared to JSON: the control characters U+0009 to U+000D MUST be escaped; all other characters in the table may appear unescaped. Exceptions apply in multi-line strings (8.3).
+- Inside strings the tab and the line breaks (U+0009, U+000A, U+000D) may appear unescaped, unlike in JSON (8.1). The vertical tab U+000B and the form feed U+000C MUST be escaped as in JSON; all other characters in the table may appear unescaped.
 - Characters that are not in the table are not white space, even if they are invisible or have the Unicode property White_Space (for example U+0085, U+180E, U+200B). Outside strings and comments they are an error.
 
 White space and comments are permitted between any tokens. Inside a number, including its suffix, and inside an identifier they are an error (`- 1`, `10 k`, `tr ue`); inside a string they are content.
@@ -132,7 +133,7 @@ White space and comments are permitted between any tokens. Inside a number, incl
 
 A line break (`newline`) is U+000A (LF), U+000D (CR) or the sequence U+000D U+000A (CR LF). The sequence counts as a single line break. All other white space characters from 5.1, including U+2028 and U+2029, are **not** line breaks.
 
-Line breaks have three functions: they end a line comment (5.3), they can serve as a separator between two items ([7.3](#73-separators)), and they divide a multi-line string into lines ([8.3](#83-multi-line-strings)). Everywhere else they are ordinary white space. A line break inside a block comment is part of the comment and has none of these functions.
+Line breaks have three functions: they end a line comment (5.3), they can serve as a separator between two items ([7.3](#73-separators)), and they divide a string into lines ([8.3](#83-line-breaks-in-strings)). Everywhere else they are ordinary white space. A line break inside a block comment is part of the comment and has none of these functions.
 
 ### 5.3 Comments
 
@@ -189,7 +190,7 @@ Rules:
 - The short form exists only at the top level. Nested objects need braces.
 - Mixed forms are invalid: nothing may follow a braced root value (`{a: 1} b: 2` is an error), and an implicit root object is not closed with `}`.
 
-**Detection.** A parser decides after the first token: if it is a single-line string or an identifier and the next token is a `:`, the document is an implicit root object. Otherwise a single value is read. Because a `:` never follows the root value in JSON, no JSON text is reinterpreted.
+**Detection.** A parser decides after the first token: if it is a string or an identifier and the next token is a `:`, the document is an implicit root object. Otherwise a single value is read. Because a `:` never follows the root value in JSON, no JSON text is reinterpreted.
 
 ### 6.3 Values
 
@@ -260,13 +261,13 @@ value-list   = value *( item-sep value ) [ S "," ]
 ### 7.2 Names
 
 ```abnf
-name         = dq-string / sq-string / identifier
+name         = string / identifier
 identifier   = id-start *id-continue
 id-start     = ALPHA / "_" / "$"
 id-continue  = ALPHA / DIGIT / "_" / "$"
 ```
 
-- A name is a single-line string (8.1) or an identifier. A multi-line string (8.3) is not permitted as a name.
+- A name is a string (section 8) or an identifier. Like every other string, a name may extend across several lines; its value is determined according to 8.3.
 - An identifier begins with an ASCII letter, `_` or `$`; after that, ASCII digits are permitted as well. As a name it stands for exactly the character sequence as written; there are no escape sequences in identifiers.
 - Every other name MUST be in quotation marks: names with spaces, hyphens, dots or non-ASCII characters, names that begin with a digit, and the empty name.
 - `true`, `false`, `null` and all other named values (6.4) are permitted as identifiers at a name position and yield ordinary names there (`"true"`, `"nil"`). A value never appears at a name position, so this is unambiguous.
@@ -331,29 +332,32 @@ After the last item of an object, an array or the implicit root object there MAY
 
 ## 8. Strings
 
-### 8.1 Single-line strings
+### 8.1 Delimiters and characters
 
 ```abnf
-string        = ml-dq-string / ml-sq-string / dq-string / sq-string
-dq-string     = DQUOTE *( dq-unescaped / escape-seq ) DQUOTE
-sq-string     = SQUOTE *( sq-unescaped / escape-seq ) SQUOTE
+string        = dq-string / sq-string
+dq-string     = DQUOTE *( dq-unescaped / str-plain / escape-seq ) DQUOTE
+sq-string     = SQUOTE *( sq-unescaped / str-plain / escape-seq ) SQUOTE
+str-plain     = %x09 / newline
 ```
 
-- A single-line string is enclosed in double (`"`) or in single (`'`) quotation marks. Both forms are equivalent and permitted wherever a string may appear, including as a name.
+- A string is enclosed in double (`"`) or in single (`'`) quotation marks. Both forms are equivalent and permitted wherever a string may appear, including as a name.
 - It ends at the first unescaped occurrence of the character with which it began.
 - In a `"` string, `'` may appear unescaped; in a `'` string, `"` may appear unescaped. The respective delimiter MUST be escaped (`\"` or `\'`).
-- As in JSON, the backslash and the control characters U+0000 to U+001F MUST be escaped. A single-line string therefore cannot extend across a line break; multi-line strings (8.3) exist for that purpose.
+- A string may extend across several lines: line breaks according to 5.2 and the tab U+0009 may appear unescaped. The backslash and all other control characters (U+0000 to U+0008, U+000B, U+000C, U+000E to U+001F) MUST be escaped as in JSON.
 - All other characters may appear unescaped as in JSON, including U+007F, U+2028, U+2029 and the non-ASCII white space characters from 5.1.
+- The character sequences `//`, `/*` and `#` have no special meaning in a string, and a line break in a string is not a separator according to 7.3.
+- The value of a string is determined according to 8.3. For a string without a line break it is, as in JSON, the sequence of its characters after the escape sequences (8.2) have been resolved.
 
 ### 8.2 Escape sequences
 
 ```abnf
 escape-seq       = %x5C ( char-escape / null-escape / hex-escape /
-                          unicode-escape / codepoint-escape )
+                          unicode-escape / codepoint-escape / newline )
 codepoint-escape = %x75 "{" *"0" ( 1*5HEXDIG / ( "10" 4HEXDIG ) ) "}"
 ```
 
-XTJSON has all escape sequences of JSON and, in addition, five more from ECMAScript [ECMA-262]: `\'`, `\v`, `\0`, `\xHH` and `\u{…}`. All of them apply in all string forms, including multi-line strings (8.3). The column "Origin" gives JSON if the sequence already applies there, and otherwise the ECMAScript edition that introduced it.
+XTJSON has all escape sequences of JSON and, in addition, six more from ECMAScript [ECMA-262]: `\'`, `\v`, `\0`, `\xHH`, `\u{…}` and the line continuation, a `\` before a line break. All of them apply in both string forms. The column "Origin" gives JSON if the sequence already applies there, and otherwise the ECMAScript edition that introduced it.
 
 | Sequence | Result | Origin |
 |---|---|---|
@@ -370,6 +374,7 @@ XTJSON has all escape sequences of JSON and, in addition, five more from ECMAScr
 | `\xHH` | U+00HH (two hexadecimal digits) | ES1 (1997) |
 | `\v` | U+000B vertical tab | ES3 (1999) |
 | `\0` | U+0000 null | ES3 (1999) |
+| `\` before a line break | nothing (line continuation) | ES5 (2009) |
 | `\u{…}` | code point U+0000 to U+10FFFF (one or more hexadecimal digits) | ES2015 (ES6) |
 
 Rules:
@@ -377,7 +382,8 @@ Rules:
 - **`\xHH` and `\uXXXX`** require exactly two and exactly four hexadecimal digits respectively, in upper or lower case. The letters `x` and `u` themselves are lower case. `\xHH` stands for the code point U+00HH, not for a byte. Characters outside the BMP are written either with `\u{…}` or, as in JSON, as a surrogate pair of two `\uXXXX` sequences.
 - **`\u{…}`** contains at least one hexadecimal digit between the braces, in upper or lower case; leading zeros are permitted, `_` and white space are not. The value MUST NOT be greater than 10FFFF. The sequence stands for exactly this code point: `\u{1F600}` is equivalent to the surrogate pair `\uD83D\uDE00`, `\u{e4}` to `\u00E4`. A value in the surrogate range (D800 to DFFF) is an error; a single surrogate can only be written with `\uXXXX`, as in JSON.
 - **`\0`** MUST NOT be followed immediately by a decimal digit. `\1` to `\9` are errors. There are thus no octal escape sequences.
-- **Every other sequence with `\` is an error.** This holds in particular for `\` before any other character (`\a`, `\-`, `\N`, `\X41`) and for `\` before a line break (no line continuation).
+- **Line continuation.** A `\` that is followed immediately by a line break (LF, CR or CR LF, see 5.2) contributes nothing to the value: neither the backslash nor the line break appears in it. The line break MUST follow the `\` immediately; a space or tab after the `\` is an error. Unlike in ECMAScript, U+2028 and U+2029 are not line breaks here either. How a line continuation affects the indentation of the following line is determined by 8.3.
+- **Every other sequence with `\` is an error.** This holds in particular for `\` before any other character (`\a`, `\-`, `\N`, `\X41`) and for `\` before a space or tab.
 
 ```xtjson
 [
@@ -393,44 +399,28 @@ Rules:
 ]
 ```
 
-### 8.3 Multi-line strings
+### 8.3 Line breaks in strings
 
-```abnf
-ml-dq-string  = 3DQUOTE *ml-dq-item 3DQUOTE
-ml-sq-string  = 3SQUOTE *ml-sq-item 3SQUOTE
-ml-dq-item    = [ DQUOTE [ DQUOTE ] ] ( dq-unescaped / ml-plain )
-ml-sq-item    = [ SQUOTE [ SQUOTE ] ] ( sq-unescaped / ml-plain )
-ml-plain      = escape-seq / newline / %x09
-```
+A string that contains a line break extends across several lines. Its value is then not simply the sequence of its characters: white space at the end of lines is removed, and indentation can be removed. Line continuations (8.2) join lines without a line break.
 
-A multi-line string begins and ends with three double (`"""`) or three single (`'''`) quotation marks. It is permitted wherever a value may appear; it is not permitted as a name (7.2). Both forms are equivalent. It may also be written on a single line.
+In this section, "white space" means only unescaped spaces (U+0020) and tabs (U+0009). All other white space characters from 5.1 are ordinary text here. The value of a string is obtained in four steps:
 
-**Notation**
-
-- **Detection.** If a string begins with three identical quotation marks in a row, it is always a multi-line string.
-- **End.** The string ends at the first occurrence of three identical unescaped delimiter characters in a row. One or two delimiter characters in a row may appear unescaped in the text, but not immediately before the closing delimiter; there they are escaped (`\"` or `\'`). The other quotation mark may appear unescaped any number of times.
-- **Line breaks and tab.** Line breaks according to 5.2 and U+0009 may appear unescaped in the string. All other control characters (U+0000 to U+001F) MUST be escaped as in single-line strings.
-- **Escape sequences** apply as in 8.2. A `\` before a line break is an error.
-- The character sequences `//`, `/*` and `#` have no special meaning in the string, and a line break in the string is not a separator according to 7.3.
-
-**Value**
-
-In this section, "white space" means only unescaped spaces (U+0020) and tabs (U+0009). All other white space characters from 5.1 are ordinary text here. The value of a multi-line string is obtained in four steps:
-
-1. **Form lines.** The text between the delimiters is split into lines at every unescaped line break. The first line begins after the opening delimiter, the last one ends before the closing delimiter. A text without a line break consists of a single line. Escape sequences such as `\n` are not line breaks in this sense.
-2. **Remove white space at the end of lines.** From every line except the last, the unescaped white space at its end is removed. This always happens. The last line remains unchanged, because it does not end at a line end but at the closing delimiter.
-3. **Remove indentation.** This step applies only if the string begins with an empty line, that is: if there are at least two lines and the first one is empty after step 2.
+1. **Form lines.** The text between the delimiters is split into lines at every line break according to 5.2, including the line break of a line continuation. The first line begins after the opening delimiter, the last one ends before the closing delimiter. A text without a line break consists of a single line. Escape sequences such as `\n` are not line breaks in this sense. The `\` of a line continuation remains at the end of its line until step 4.
+2. **Remove white space at the end of lines.** From every line except the last, the white space at its end is removed. This always happens. A line that ends with the `\` of a line continuation has no white space at its end; white space before the `\` is kept. The last line remains unchanged, because it does not end at a line end but at the closing delimiter.
+3. **Remove indentation.** This step applies only if the string begins with an empty line, that is: if there are at least two lines and the first one is empty after step 2. A line that contains the `\` of a line continuation is not empty.
    1. The first line is dropped.
    2. The indentation of a line is the sequence of white space characters at its beginning; its length is the number of these characters. A tab counts as one character.
    3. The smallest indentation of all non-empty lines is determined. The last line always counts, even if it is empty or consists only of white space.
    4. From every line, as many characters are removed at the beginning as the smallest indentation indicates. Empty lines remain empty. The removed characters MUST be the same in all lines from which characters are removed; otherwise the string is an error, for example if one line is indented with a tab and another with spaces.
-4. **Join.** The lines are joined with one U+000A each, regardless of whether the line break is written in the file as LF, CR or CR LF. After that the escape sequences are resolved.
+4. **Join.** The lines are joined with one U+000A each, regardless of whether the line break is written in the file as LF, CR or CR LF. After that the escape sequences are resolved; a line continuation thereby removes its `\` together with the following U+000A.
 
 Consequences of these rules:
 
-- If nothing or only white space follows the opening delimiter up to the line break, this white space and the line break are not part of the value. A line break before the closing delimiter is part of the value.
+- A string without a line break is not changed by steps 1 to 3. Its value is the same as in JSON.
+- If nothing or only white space follows the opening delimiter up to the line break, this white space and the line break are not part of the value. A line break before the closing delimiter is part of the value, unless it is written as a line continuation.
 - The position of the closing delimiter helps determine how much indentation is removed: if it is as far left as the text, the common indentation disappears entirely; if it is further left, the difference is kept; if it is at the start of the line, nothing is removed; if it is further right, the excess white space before it remains at the end of the value.
-- If the text begins on the line of the opening delimiter, no indentation is removed.
+- If the text begins on the line of the opening delimiter, no indentation is removed. This also holds if the first line consists only of the `\` of a line continuation.
+- A line continuation joins two lines. The indentation of the following line is removed in step 3 like that of every other line; white space before the `\` is kept.
 - White space that is to be kept at the end or at the beginning of a line is written as an escape sequence, for example `\x20` or `\t`.
 - Empty lines within the text are kept as empty lines and do not affect the indentation.
 
@@ -438,29 +428,36 @@ In the following table `·` stands for a space and `⏎` for a line break. The r
 
 | Written | Value | Explanation |
 |---|---|---|
-| `"""⏎··a⏎··b⏎··"""` | `"a\nb\n"` | common indentation of 2 removed |
-| `"""⏎····a⏎··"""` | `"  a\n"` | the closing delimiter is further left |
-| `"""⏎··a⏎"""` | `"  a\n"` | the closing delimiter is at the start of the line |
-| `"""⏎··a⏎····"""` | `"a\n  "` | the closing delimiter is further right |
-| `"""⏎··a⏎⏎··b"""` | `"a\n\nb"` | the empty line does not count |
-| `"""a··⏎··b"""` | `"a\n  b"` | does not begin with an empty line: only the line end is cleaned |
-| `"""⏎a··⏎b\x20⏎"""` | `"a\nb \n"` | escaped white space at the end of a line is kept |
-| `"""a··"""` | `"a  "` | no line end, nothing removed |
+| `"⏎··a⏎··b⏎··"` | `"a\nb\n"` | common indentation of 2 removed |
+| `"⏎····a⏎··"` | `"  a\n"` | the closing delimiter is further left |
+| `"⏎··a⏎"` | `"  a\n"` | the closing delimiter is at the start of the line |
+| `"⏎··a⏎····"` | `"a\n  "` | the closing delimiter is further right |
+| `"⏎··a⏎⏎··b"` | `"a\n\nb"` | the empty line does not count |
+| `"a··⏎··b"` | `"a\n  b"` | does not begin with an empty line: only the line end is cleaned |
+| `"⏎a··⏎b\x20⏎"` | `"a\nb \n"` | escaped white space at the end of a line is kept |
+| `"a··"` | `"a  "` | no line end, nothing removed |
+| `"⏎··a·\⏎··b⏎··"` | `"a b\n"` | line continuation: the space before `\` is kept, the indentation of the next line is removed |
+| `"⏎··a\⏎··"` | `"a"` | line continuation before the closing delimiter: no line break at the end |
+| `"a\⏎··b"` | `"a  b"` | does not begin with an empty line: no indentation is removed |
+| `"\⏎··a"` | `"  a"` | the first line contains `\` and is not empty |
 
 ```xtjson
 {
-  sql: '''
-    SELECT "name"
+  sql: "
+    SELECT name
       FROM customers
      WHERE city = 'Köln'
-    '''
-  note: """
+    "
+  note: '
       Two characters of indentation remain,
       because the closing delimiter is further left.
-    """
-  direct: """The text begins on the line of the delimiter:
-    no indentation is removed here."""
-  single_line: """also permitted on one line"""
+    '
+  direct: "The text begins on the line of the delimiter:
+    no indentation is removed here."
+  long_line: "
+    A long line can be written across \
+    several lines with line continuations.\
+    "
 }
 ```
 
@@ -468,10 +465,10 @@ JSON equivalent:
 
 ```json
 {
-  "sql": "SELECT \"name\"\n  FROM customers\n WHERE city = 'Köln'\n",
+  "sql": "SELECT name\n  FROM customers\n WHERE city = 'Köln'\n",
   "note": "  Two characters of indentation remain,\n  because the closing delimiter is further left.\n",
   "direct": "The text begins on the line of the delimiter:\n    no indentation is removed here.",
-  "single_line": "also permitted on one line"
+  "long_line": "A long line can be written across several lines with line continuations."
 }
 ```
 
@@ -631,7 +628,7 @@ The **JSON equivalent** of an XTJSON document is obtained by the following steps
 2. **Implicit root object:** the members are enclosed in `{` `}`.
 3. **Separators:** between any two consecutive items there is exactly one comma. Trailing commas are dropped.
 4. **Names:** an identifier at a name position becomes the JSON string with the same character sequence.
-5. **Strings:** a `'` string becomes the `"` string with the same content; unescaped `"` become `\"`. Escape sequences that JSON does not have are replaced in all string forms: `\'` by `'`, `\v` by `\u000B`, `\0` by `\u0000`, `\xHH` by `\u00HH`, `\u{…}` by the `\uXXXX` sequence of the same code point, above U+FFFF by the corresponding surrogate pair. A multi-line string becomes the `"` string that represents the value according to 8.3; characters that may not appear unescaped in a JSON string (`"`, `\` and control characters such as line break and tab) are escaped in the process.
+5. **Strings:** a `'` string becomes the `"` string with the same content; unescaped `"` become `\"`. Escape sequences that JSON does not have are replaced in both string forms: `\'` by `'`, `\v` by `\u000B`, `\0` by `\u0000`, `\xHH` by `\u00HH`, `\u{…}` by the `\uXXXX` sequence of the same code point, above U+FFFF by the corresponding surrogate pair. A string with a line break becomes the `"` string that represents its value according to 8.3; line continuations are thereby dropped, and characters that may not appear unescaped in a JSON string (`"`, `\` and control characters such as line break and tab) are escaped.
 6. **Numbers:** all `_` are removed from decimal numbers; otherwise the notation remains unchanged. Hexadecimal, octal and binary numbers become the decimal integer of the same value, with a leading minus sign if preceded by `-`. A number with a suffix is replaced by the result of the conversion, written as a JSON number (9.5).
 7. **Named values:** `true`, `false` and `null` remain unchanged. Every other named value is replaced by the JSON value that its definition assigns to it (6.4).
 
@@ -671,13 +668,14 @@ The recommendations of [I-JSON] for protocols also apply unchanged to XTJSON doc
 ## 13. Security considerations
 
 - **No `eval`.** XTJSON is not a subset of JavaScript or of any other programming language and MUST NOT be read by evaluating it as program code.
-- **Resource limits.** Deeply nested structures, very long strings or numbers, and unterminated block comments and multi-line strings can overload parsers. Parsers SHOULD set limits (section 11).
+- **Resource limits.** Deeply nested structures, very long strings or numbers, and unterminated block comments and strings can overload parsers. Parsers SHOULD set limits (section 11).
 - **Divergent interpretation.** If two components process the same document differently, checks can be bypassed. This concerns above all duplicate names, which other JSON tools may treat differently from what 7.2 specifies, and numbers outside the exact range. Where a document controls security-relevant decisions, the I-JSON profile is RECOMMENDED.
 - **Definitions.** The meaning of a document with custom named values depends on the definitions of the parser. Two parsers with different definitions read the same document differently, or one of them rejects it. Custom definitions are therefore part of the interface between author and application and SHOULD be documented. The conversions of the suffixes are fixed by this specification alone; a document can bring along neither definitions nor code.
 - **Confusion with JSON.** An XTJSON document that is passed off as JSON leads to errors with strict recipients and to inconsistent behaviour with lenient ones. Hence the delimitation in K5.
 - **Comments.** Comments are lost in the mapping to JSON and are not seen by programs. Invisible characters and characters that control text direction in comments and strings can make the displayed text differ from the processed text; tools SHOULD point this out.
 - **U+2028 and U+2029.** Some editors display these characters as a line change. In XTJSON they neither end a line comment nor separate items. Text that is displayed below a line comment can therefore still belong to the comment and is then not processed. Tools SHOULD make these characters visible outside strings or warn about them.
-- **Multi-line strings.** White space at the end of lines and, where applicable, the indentation are not part of the value (8.3). The value can therefore differ from what is seen. Where every character matters, for example in key material or signed texts, white space is better written as an escape sequence.
+- **Strings across several lines.** White space at the end of lines and, where applicable, the indentation are not part of the value (8.3). The value can therefore differ from what is seen. Where every character matters, for example in key material or signed texts, white space is better written as an escape sequence.
+- **Missing closing quotation mark.** Because a string may extend across several lines, a forgotten closing quotation mark does not end the string at the end of the line: the following lines become part of the string up to the next matching quotation mark. The error is then reported far from its cause, and in rare cases the document remains valid with a different value. Tools SHOULD make the extent of strings across several lines visible.
 
 ---
 
@@ -699,7 +697,7 @@ named-value    = identifier                  ; true, false, null and
 object         = "{" S [ member-list S ] "}"
 member-list    = member *( item-sep member ) [ S "," ]
 member         = name S ":" S value
-name           = dq-string / sq-string / identifier
+name           = string / identifier
 identifier     = id-start *id-continue
 id-start       = ALPHA / "_" / "$"
 id-continue    = ALPHA / DIGIT / "_" / "$"
@@ -729,18 +727,15 @@ non-star       = %x00-29 / %x2B-10FFFF
 non-star-slash = %x00-29 / %x2B-2E / %x30-10FFFF
 
 ; ---------- Strings ----------
-string         = ml-dq-string / ml-sq-string / dq-string / sq-string
-dq-string      = DQUOTE *( dq-unescaped / escape-seq ) DQUOTE
-sq-string      = SQUOTE *( sq-unescaped / escape-seq ) SQUOTE
-ml-dq-string   = 3DQUOTE *ml-dq-item 3DQUOTE
-ml-sq-string   = 3SQUOTE *ml-sq-item 3SQUOTE
-ml-dq-item     = [ DQUOTE [ DQUOTE ] ] ( dq-unescaped / ml-plain )
-ml-sq-item     = [ SQUOTE [ SQUOTE ] ] ( sq-unescaped / ml-plain )
-ml-plain       = escape-seq / newline / %x09
+string         = dq-string / sq-string
+dq-string      = DQUOTE *( dq-unescaped / str-plain / escape-seq ) DQUOTE
+sq-string      = SQUOTE *( sq-unescaped / str-plain / escape-seq ) SQUOTE
+str-plain      = %x09 / newline              ; HT and line breaks (8.1)
 dq-unescaped   = %x20-21 / %x23-5B / %x5D-10FFFF     ; without " and \
 sq-unescaped   = %x20-26 / %x28-5B / %x5D-10FFFF     ; without ' and \
 escape-seq     = %x5C ( char-escape / null-escape / hex-escape /
-                        unicode-escape / codepoint-escape )
+                        unicode-escape / codepoint-escape / newline )
+                                             ; \ before newline: line continuation
 char-escape    = %x22 / %x27 / %x5C / %x2F /         ; " ' \ /
                  %x62 / %x66 / %x6E / %x72 /         ; b f n r
                  %x74 / %x76                         ; t v
@@ -781,8 +776,9 @@ Notes on tokenization (informative):
 - Whether a `named-value` is defined is decided not by the grammar but by the set of definitions (6.4).
 - A line comment always extends to the next line break: `eol` requires a `newline` after it, and `non-eol` excludes only U+000A and U+000D. Only at the end of the document may the line break be missing.
 - The sequence CR LF is always a single `newline`, never two.
-- For multi-line strings the grammar describes only the notation. Their value results from the steps in 8.3.
-- A parser needs two characters of lookahead (for `"""` and `'''`) and the information "since the last token a line break has occurred outside a block comment". Only at the start of the document is one further token of lookahead needed (6.2).
+- For strings the grammar describes only the notation. Their value results from the steps in 8.3.
+- Three quotation marks in a row (`"""` or `'''`) do not delimit a string: they are an empty string followed directly by the start of another string, and therefore always an error (7.3).
+- Apart from the current character, a parser needs only the information "since the last token a line break has occurred outside a block comment". Only at the start of the document is one further token of lookahead needed (6.2).
 
 ## Appendix B – Examples
 
@@ -816,11 +812,11 @@ limits: {
   banner: 'Welcome to demo-service\x21'
 }
 
-// multi-line string: the common indentation is not part of the value
-motd: """
+// string across several lines: the common indentation is not part of the value
+motd: "
   Welcome.
   Maintenance: Sundays 02:00.
-  """
+  "
 
 tags: [
   'internal'
@@ -887,23 +883,22 @@ In the tables `⏎` stands for a line break. The tables apply to a parser withou
 | `{größe: 1}` | non-ASCII character in the identifier |
 | `{a.b: 1}` | `.` is not permitted in an identifier |
 | `{max-age: 1}` | `-` is not permitted in an identifier |
-| `{"""a""": 1}` | multi-line string as a name |
 
 **Strings**
 
 | Text | Reason |
 |---|---|
 | `'It's'` | `'` not escaped in a `'` string |
-| `"a` ⏎ `b"` | line break in a single-line string |
-| `"a\` ⏎ `b"` | no line continuation |
+| `"a` VT `b"` | U+000B is not escaped |
+| `"a\` SPACE ⏎ `b"` | white space between `\` and the line break |
 | `"\a"`, `"\N"`, `"\-"` | unknown escape sequence |
 | `"\1"` and `"\01"` | digit after `\` or after `\0` |
 | `"\x4"` and `"\u12"` | too few hexadecimal digits |
 | `"\u{110000}"`, `"\u{D800}"` | code point greater than U+10FFFF or in the surrogate range |
 | `"\u{}"`, `"\u{1_F600}"`, `"\u{ 41 }"`, `"\U{41}"` | no digit, `_` or white space in the braces, capital `U` |
-| `"""abc` | multi-line string not terminated |
-| `"""a""""` | quotation mark immediately before the closing delimiter not escaped |
-| `"""⏎` TAB `a⏎··b⏎·"""` | the removed indentation is not the same in all lines |
+| `"abc` | string not terminated |
+| `"""a"""` | three quotation marks do not delimit a string: an empty string followed by further strings without a separator |
+| `"⏎` TAB `a⏎··b⏎·"` | the removed indentation is not the same in all lines |
 
 **White space, line breaks and comments**
 
@@ -944,7 +939,8 @@ The following extensions, known from other JSON dialects, are **not** part of XT
 - objects and arrays as named values
 - definitions inside the document: a document cannot define named values or suffixes
 - custom suffixes of the application; suffixes with characters other than those of an identifier (`50%`), or with white space before the suffix; suffixes that yield anything other than a number
-- line continuation with `\`, heredocs and raw strings without escape sequences
+- strings delimited by three quotation marks (`"""…"""`, `'''…'''`), heredocs and raw strings without escape sequences
+- a line continuation with white space between `\` and the line break
 - `\` before arbitrary characters (`\a` for `a`) and octal escape sequences (`\1`, `\012`)
 - `+` as a sign, `.5`, `5.`, and `Infinity` and `NaN` as numbers
 - a fraction part or exponent on hexadecimal, octal and binary numbers
@@ -966,23 +962,26 @@ Informative. Decisions at points where several solutions were possible, with the
 | Duplicate names | the last member applies; forbidden in the I-JSON profile | A fixed behaviour prevents two parsers from reading the same document differently. A general prohibition would exclude valid JSON texts and violate K1. |
 | Characters in identifiers | ASCII letters, digits, `_`, `$` | Needs no Unicode tables and avoids confusable characters. Names such as `max-age` are written in quotation marks. |
 | `true`/`false`/`null` as a name | permitted | Unambiguous at a name position; avoids a special rule. |
-| Line break | LF, CR or CR LF; CR LF counts as one | A single definition that is the same everywhere for separators, line comments and multi-line strings, independent of the line endings of the file. |
+| Line break | LF, CR or CR LF; CR LF counts as one | A single definition that is the same everywhere for separators, line comments and strings, independent of the line endings of the file. |
 | Additional white space | all white space and line terminator characters of ECMAScript 2026; only the line break according to 5.2 is a separator | In this way the structure of a document does not depend on characters that editors display inconsistently or not at all. Unlike in ECMAScript, U+2028 and U+2029 are therefore not line terminators. |
 | Category Zs | given as a fixed list | Parsers need no Unicode tables, and the grammar does not change with new Unicode versions. ECMAScript, by contrast, refers to the current category in each case. |
 | U+FEFF | white space everywhere, not only at the start of the document | Follows from adopting the ECMAScript white space characters. A special rule for the BOM at the start of the document is thus not needed. |
 | Line break in a block comment | does not count as a separator | A block comment behaves like a space everywhere and never changes the structure. The separator rule can thus be expressed completely in ABNF. |
-| Additional escape sequences | only `\'`, `\v`, `\0`, `\xHH` and `\u{…}` | There is no line continuation and no `\` before arbitrary characters: single-line strings stay on one line, and a typo such as `\N` instead of `\n` is reported as an error instead of silently yielding `N`. |
-| Multi-line strings: escape sequences | effective in `"""` and `'''` alike | Both forms remain equivalent, as with single-line strings. |
-| Multi-line strings: end | at the first `"""` or `'''` | A simple rule; a quotation mark directly before the end is escaped. |
-| Multi-line strings: line endings | CR and CR LF become LF | The value does not depend on the line endings with which the file is saved. |
-| Multi-line strings: tab | permitted unescaped | Text indented with tabs should not be an error. |
-| Multi-line strings: white space at the end of lines | unescaped white space before a line break is always removed | Invisible characters at the end of a line should not change the value. Before the closing delimiter, white space is visible and is therefore kept. |
-| Multi-line strings: indentation | the smallest indentation is removed if the string begins with an empty line | The text can be indented together with the surrounding structure. To keep the indentation, begin the text on the line of the opening delimiter. |
-| Multi-line strings: last line | always counts towards the smallest indentation | The position of the closing delimiter makes it possible to determine how much indentation is kept. |
-| Multi-line strings: empty lines | do not count towards the smallest indentation | Otherwise the smallest indentation would be zero for every text with paragraphs. |
-| Multi-line strings: measure of indentation | number of characters; a tab counts as one; the removed characters must be the same in all lines | No assumption about tab widths. Mixed indentation is reported as an error instead of shifting the text unnoticed. |
-| Multi-line strings: as a name | not permitted | A name across several lines is almost always a mistake. |
-| Multi-line strings: what counts as white space | only unescaped spaces and tabs | Other white space characters can belong to the text, for example U+3000 at the start of a paragraph or U+00A0 at the end of a line. |
+| Additional escape sequences | only `\'`, `\v`, `\0`, `\xHH`, `\u{…}` and the line continuation | There is no `\` before arbitrary characters: a typo such as `\N` instead of `\n` is reported as an error instead of silently yielding `N`. |
+| Strings across several lines | permitted in both string forms; no separate notation such as `"""` | A single string notation is easier to learn and to read. An unescaped line break in a string is an error in JSON, so no JSON text changes its meaning. |
+| Strings: end | at the first unescaped delimiter, as in JSON | A simple rule. A forgotten closing quotation mark is therefore not noticed at the end of the line (section 13). |
+| Strings: line endings | CR and CR LF become LF | The value does not depend on the line endings with which the file is saved. |
+| Strings: tab and line breaks | permitted unescaped; all other control characters, including U+000B and U+000C, must be escaped | Text indented with tabs should not be an error. Vertical tab and form feed are invisible in most editors and would make the value differ from what is seen. |
+| Strings: white space at the end of lines | unescaped white space before a line break is always removed | Invisible characters at the end of a line should not change the value. Before the closing delimiter, white space is visible and is therefore kept. |
+| Strings: indentation | the smallest indentation is removed if the string begins with an empty line | The text can be indented together with the surrounding structure. To keep the indentation, begin the text on the line of the opening delimiter. |
+| Strings: last line | always counts towards the smallest indentation | The position of the closing delimiter makes it possible to determine how much indentation is kept. |
+| Strings: empty lines | do not count towards the smallest indentation | Otherwise the smallest indentation would be zero for every text with paragraphs. |
+| Strings: measure of indentation | number of characters; a tab counts as one; the removed characters must be the same in all lines | No assumption about tab widths. Mixed indentation is reported as an error instead of shifting the text unnoticed. |
+| Strings: what counts as white space | only unescaped spaces and tabs | Other white space characters can belong to the text, for example U+3000 at the start of a paragraph or U+00A0 at the end of a line. |
+| Strings across several lines as a name | permitted | A name is a string like any other. A special rule would make the string forms differ depending on their position. |
+| Line continuation and indentation | the `\` and its line break are removed only when the lines are joined (step 4 in 8.3); before that, the indentation of the following line is removed like that of any other line | A long line can be wrapped and indented together with the surrounding text. White space before the `\` is visible and is kept. Java text blocks follow the same model. |
+| Line continuation: white space after `\` | an error | Otherwise invisible white space at the end of a line would decide whether the line break belongs to the value. |
+| Line continuation: first line | a first line that contains the `\` of a line continuation is not empty; no indentation is removed | The `\` is a character of its line until step 4, like every other escape sequence. A special rule is not needed. |
 | `\u{…}` | no value in the surrogate range | The notation stands for a code point; single surrogates remain reserved for the form `\uXXXX` adopted from JSON. |
 | Non-decimal numbers | exact or an error | With bit masks and addresses every digit matters; silent rounding would be an error that is hard to find. |
 | Prefixes `0x`/`0o`/`0b` | upper and lower case equivalent | Consistent with `e`/`E` in the exponent. Lower case is recommended. |
@@ -1018,6 +1017,14 @@ Informative. Decisions at points where several solutions were possible, with the
 - RFC 4648, "The Base16, Base32, and Base64 Data Encodings".
 
 ## Changes
+
+**Draft 0.5**
+
+- 8: there is only one kind of string, in `"` or in `'`. Every string may extend across several lines; line breaks (LF, CR, CR LF) and tabs may appear unescaped, while all other control characters, including U+000B and U+000C, must still be escaped. The rules for white space at the end of lines and for removing indentation (8.3) apply to every string. Strings with `"""` and `'''` no longer exist; such a notation is an error.
+- 8.2: new escape sequence: a `\` immediately before a line break (line continuation) contributes nothing to the value. White space between `\` and the line break is an error. Section 8.3 defines how a line continuation affects the indentation of the following line.
+- 6.2, 7.2: every string is permitted as a name, including one that extends across several lines.
+- Sections 8.1 and 8.3 are now called "Delimiters and characters" and "Line breaks in strings".
+- 1, 2, 3, 5.1, 5.2, 10, 13 and Appendices A to D are adapted to these changes.
 
 **Draft 0.4**
 

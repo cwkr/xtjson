@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>XTJSON – JSON for files maintained by people</title>
-<meta name="description" content="XTJSON is a syntactic superset of JSON for files that are written and maintained by people: comments, names without quotation marks, line breaks as separators, multi-line strings and more, with the unchanged JSON data model.">
+<meta name="description" content="XTJSON is a syntactic superset of JSON for files that are written and maintained by people: comments, names without quotation marks, line breaks as separators, strings across several lines and more, with the unchanged JSON data model.">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -15,7 +15,7 @@
     <h1>Introducing XTJSON</h1>
     <p class="tagline">A syntactic superset of JSON for files that are written and maintained by people.</p>
     <p class="meta">
-      Specification draft 0.4 · 15 November 2026 ·
+      Specification draft 0.5 · 16 November 2026 ·
       <a href="https://github.com/cwkr/xtjson/blob/main/docs/xtjson-spec-en.md">Specification (English)</a> ·
       <a href="https://github.com/cwkr/xtjson/blob/main/docs/xtjson-spec-de.md">Spezifikation (Deutsch)</a> ·
       <a href="https://github.com/cwkr/xtjson">GitHub</a>
@@ -41,7 +41,7 @@
     <li><strong>Trailing commas</strong> in objects and arrays.</li>
     <li><strong>Optional braces</strong> around the object at the top level.</li>
     <li><strong>Strings in single quotation marks:</strong> <code>'…'</code>.</li>
-    <li><strong>Multi-line strings</strong> with <code>"""</code> or <code>'''</code>, with the indentation removed.</li>
+    <li><strong>Strings across several lines</strong>, with the indentation removed, and line continuation with <code>\</code>.</li>
     <li><strong>More escape sequences:</strong> <code>\'</code>, <code>\v</code>, <code>\0</code>, <code>\xHH</code> and <code>\u{…}</code>.</li>
     <li><strong>Hexadecimal, octal and binary integers:</strong> <code>0xFF</code>, <code>0o755</code>, <code>0b1010</code>.</li>
     <li><strong>Digit grouping</strong> with <code>_</code>: <code>1_000_000</code>.</li>
@@ -82,11 +82,11 @@ limits: {
   banner: &#x27;Welcome to demo-service\x21&#x27;
 }
 
-// multi-line string: the common indentation is not part of the value
-motd: &quot;&quot;&quot;
+// string across several lines: the common indentation is not part of the value
+motd: &quot;
   Welcome.
   Maintenance: Sundays 02:00.
-  &quot;&quot;&quot;
+  &quot;
 
 tags: [
   &#x27;internal&#x27;
@@ -356,25 +356,25 @@ tags: [
 
   <section class="form" id="name">
     <h3>name</h3>
-    <p>A <dfn>name</dfn> is a single-line <a href="#string">string</a> or an <a href="#identifier">identifier</a>. A multi-line string is not permitted as a name. The notation does not matter for the identity of a name: <code>a</code>, <code>"a"</code> and <code>'a'</code> denote the same name. At a name position an identifier is always a name, so <code>{null: null}</code> has the name <code>"null"</code>.</p>
-    <div class="diagram"><svg class="rr" viewBox="0 0 250 72" width="250" height="72" role="img" aria-label="Railroad diagram: name">
+    <p>A <dfn>name</dfn> is a <a href="#string">string</a> or an <a href="#identifier">identifier</a>. The notation does not matter for the identity of a name: <code>a</code>, <code>"a"</code> and <code>'a'</code> denote the same name. At a name position an identifier is always a name, so <code>{null: null}</code> has the name <code>"null"</code>.</p>
+    <div class="diagram"><svg class="rr" viewBox="0 0 192 72" width="192" height="72" role="img" aria-label="Railroad diagram: name">
 <path class="cap" d="M8 12v16m4 -16v16"/>
 <path d="M12 20H30"/>
 <path d="M30 20H50"/>
-<path d="M200 20H220"/>
+<path d="M142 20H162"/>
 <a href="#string">
-<rect class="n" x="50" y="8" width="150" height="24" rx="0"/>
-<text class="n" x="125" y="20">single-line string</text>
+<rect class="n" x="50" y="8" width="63" height="24" rx="0"/>
+<text class="n" x="81.5" y="20">string</text>
 </a>
+<path d="M113 20H142"/>
 <path d="M30 20a10 10 0 0 1 10 10v12a10 10 0 0 0 10 10"/>
-<path d="M200 52a10 10 0 0 0 10 -10v-12a10 10 0 0 1 10 -10"/>
+<path d="M142 52a10 10 0 0 0 10 -10v-12a10 10 0 0 1 10 -10"/>
 <a href="#identifier">
 <rect class="n" x="50" y="40" width="92" height="24" rx="0"/>
 <text class="n" x="96" y="52">identifier</text>
 </a>
-<path d="M142 52H200"/>
-<path d="M220 20H238"/>
-<path class="cap" d="M238 12v16m4 -16v16"/>
+<path d="M162 20H180"/>
+<path class="cap" d="M180 12v16m4 -16v16"/>
 </svg></div>
   </section>
 
@@ -436,8 +436,8 @@ tags: [
 
   <section class="form" id="string">
     <h3>string</h3>
-    <p>A <dfn>string</dfn> is a sequence of zero or more Unicode characters. A single-line string is enclosed in double or in single quotation marks; both forms are equivalent. The delimiter, the backslash and the control characters U+0000 to U+001F must be written as an <a href="#escape">escape</a>, so a single-line string cannot extend across a line break.</p>
-    <div class="diagram"><svg class="rr" viewBox="0 0 634 224" width="634" height="224" role="img" aria-label="Railroad diagram: string">
+    <p>A <dfn>string</dfn> is a sequence of zero or more Unicode characters, enclosed in double or in single quotation marks; both forms are equivalent. A string may extend across several lines: <a href="#line-break">line breaks</a> and tabs may appear in it unescaped. The delimiter, the backslash and all other control characters, including vertical tab and form feed, must be written as an <a href="#escape">escape</a>.</p>
+    <div class="diagram"><svg class="rr" viewBox="0 0 634 320" width="634" height="320" role="img" aria-label="Railroad diagram: string">
 <path class="cap" d="M8 12v16m4 -16v16"/>
 <path d="M12 20H30"/>
 <path d="M30 20H50"/>
@@ -457,167 +457,89 @@ tags: [
 <text class="c" x="317" y="40">any character except &quot; \ and control characters</text>
 <path d="M118 40a10 10 0 0 1 10 10v12a10 10 0 0 0 10 10"/>
 <path d="M496 72a10 10 0 0 0 10 -10v-12a10 10 0 0 1 10 -10"/>
-<a href="#escape">
-<rect class="n" x="138" y="60" width="63" height="24" rx="0"/>
-<text class="n" x="169.5" y="72">escape</text>
+<rect class="c" x="138" y="60" width="42" height="24" rx="4"/>
+<text class="c" x="159" y="72">tab</text>
+<path d="M180 72H496"/>
+<path d="M118 40a10 10 0 0 1 10 10v44a10 10 0 0 0 10 10"/>
+<path d="M496 104a10 10 0 0 0 10 -10v-44a10 10 0 0 1 10 -10"/>
+<a href="#line-break">
+<rect class="n" x="138" y="92" width="92" height="24" rx="0"/>
+<text class="n" x="184" y="104">line break</text>
 </a>
-<path d="M201 72H496"/>
+<path d="M230 104H496"/>
+<path d="M118 40a10 10 0 0 1 10 10v76a10 10 0 0 0 10 10"/>
+<path d="M496 136a10 10 0 0 0 10 -10v-76a10 10 0 0 1 10 -10"/>
+<a href="#escape">
+<rect class="n" x="138" y="124" width="63" height="24" rx="0"/>
+<text class="n" x="169.5" y="136">escape</text>
+</a>
+<path d="M201 136H496"/>
 <path d="M516 40H526"/>
-<path d="M516 40a10 10 0 0 1 10 10v32a10 10 0 0 1 -10 10"/>
-<path d="M118 92a10 10 0 0 1 -10 -10v-32a10 10 0 0 1 10 -10"/>
-<path d="M118 92H317"/>
-<path d="M317 92H516"/>
+<path d="M516 40a10 10 0 0 1 10 10v96a10 10 0 0 1 -10 10"/>
+<path d="M118 156a10 10 0 0 1 -10 -10v-96a10 10 0 0 1 10 -10"/>
+<path d="M118 156H317"/>
+<path d="M317 156H516"/>
 <path d="M546 20H556"/>
 <rect class="t" x="556" y="8" width="28" height="24" rx="12"/>
 <text class="t" x="570" y="20">&quot;</text>
-<path d="M30 20a10 10 0 0 1 10 10v72a10 10 0 0 0 10 10"/>
-<path d="M584 112a10 10 0 0 0 10 -10v-72a10 10 0 0 1 10 -10"/>
-<rect class="t" x="50" y="100" width="28" height="24" rx="12"/>
-<text class="t" x="64" y="112">&#x27;</text>
-<path d="M78 112H88"/>
-<path d="M88 112H108"/>
-<path d="M526 112H546"/>
-<path d="M108 112H526"/>
-<path d="M88 112a10 10 0 0 1 10 10v0a10 10 0 0 0 10 10"/>
-<path d="M526 132a10 10 0 0 0 10 -10v0a10 10 0 0 1 10 -10"/>
-<path d="M108 132H118"/>
-<path d="M118 132H138"/>
-<path d="M496 132H516"/>
-<rect class="c" x="138" y="120" width="358" height="24" rx="4"/>
-<text class="c" x="317" y="132">any character except &#x27; \ and control characters</text>
-<path d="M118 132a10 10 0 0 1 10 10v12a10 10 0 0 0 10 10"/>
-<path d="M496 164a10 10 0 0 0 10 -10v-12a10 10 0 0 1 10 -10"/>
+<path d="M30 20a10 10 0 0 1 10 10v136a10 10 0 0 0 10 10"/>
+<path d="M584 176a10 10 0 0 0 10 -10v-136a10 10 0 0 1 10 -10"/>
+<rect class="t" x="50" y="164" width="28" height="24" rx="12"/>
+<text class="t" x="64" y="176">&#x27;</text>
+<path d="M78 176H88"/>
+<path d="M88 176H108"/>
+<path d="M526 176H546"/>
+<path d="M108 176H526"/>
+<path d="M88 176a10 10 0 0 1 10 10v0a10 10 0 0 0 10 10"/>
+<path d="M526 196a10 10 0 0 0 10 -10v0a10 10 0 0 1 10 -10"/>
+<path d="M108 196H118"/>
+<path d="M118 196H138"/>
+<path d="M496 196H516"/>
+<rect class="c" x="138" y="184" width="358" height="24" rx="4"/>
+<text class="c" x="317" y="196">any character except &#x27; \ and control characters</text>
+<path d="M118 196a10 10 0 0 1 10 10v12a10 10 0 0 0 10 10"/>
+<path d="M496 228a10 10 0 0 0 10 -10v-12a10 10 0 0 1 10 -10"/>
+<rect class="c" x="138" y="216" width="42" height="24" rx="4"/>
+<text class="c" x="159" y="228">tab</text>
+<path d="M180 228H496"/>
+<path d="M118 196a10 10 0 0 1 10 10v44a10 10 0 0 0 10 10"/>
+<path d="M496 260a10 10 0 0 0 10 -10v-44a10 10 0 0 1 10 -10"/>
+<a href="#line-break">
+<rect class="n" x="138" y="248" width="92" height="24" rx="0"/>
+<text class="n" x="184" y="260">line break</text>
+</a>
+<path d="M230 260H496"/>
+<path d="M118 196a10 10 0 0 1 10 10v76a10 10 0 0 0 10 10"/>
+<path d="M496 292a10 10 0 0 0 10 -10v-76a10 10 0 0 1 10 -10"/>
 <a href="#escape">
-<rect class="n" x="138" y="152" width="63" height="24" rx="0"/>
-<text class="n" x="169.5" y="164">escape</text>
+<rect class="n" x="138" y="280" width="63" height="24" rx="0"/>
+<text class="n" x="169.5" y="292">escape</text>
 </a>
-<path d="M201 164H496"/>
-<path d="M516 132H526"/>
-<path d="M516 132a10 10 0 0 1 10 10v32a10 10 0 0 1 -10 10"/>
-<path d="M118 184a10 10 0 0 1 -10 -10v-32a10 10 0 0 1 10 -10"/>
-<path d="M118 184H317"/>
-<path d="M317 184H516"/>
-<path d="M546 112H556"/>
-<rect class="t" x="556" y="100" width="28" height="24" rx="12"/>
-<text class="t" x="570" y="112">&#x27;</text>
-<path d="M30 20a10 10 0 0 1 10 10v164a10 10 0 0 0 10 10"/>
-<path d="M584 204a10 10 0 0 0 10 -10v-164a10 10 0 0 1 10 -10"/>
-<a href="#multi-line-string">
-<rect class="n" x="50" y="192" width="142" height="24" rx="0"/>
-<text class="n" x="121" y="204">multi-line string</text>
-</a>
-<path d="M192 204H584"/>
+<path d="M201 292H496"/>
+<path d="M516 196H526"/>
+<path d="M516 196a10 10 0 0 1 10 10v96a10 10 0 0 1 -10 10"/>
+<path d="M118 312a10 10 0 0 1 -10 -10v-96a10 10 0 0 1 10 -10"/>
+<path d="M118 312H317"/>
+<path d="M317 312H516"/>
+<path d="M546 176H556"/>
+<rect class="t" x="556" y="164" width="28" height="24" rx="12"/>
+<text class="t" x="570" y="176">&#x27;</text>
 <path d="M604 20H622"/>
 <path class="cap" d="M622 12v16m4 -16v16"/>
 </svg></div>
-  </section>
-
-  <section class="form" id="multi-line-string">
-    <h3>multi-line string</h3>
-    <p>A <dfn>multi-line string</dfn> begins and ends with three double or three single quotation marks. Line breaks and tabs may appear in it unescaped. One or two delimiter characters in a row may also appear unescaped, but not immediately before the closing delimiter.</p>
-    <div class="diagram"><svg class="rr" viewBox="0 0 652 320" width="652" height="320" role="img" aria-label="Railroad diagram: multi-line string">
-<path class="cap" d="M8 12v16m4 -16v16"/>
-<path d="M12 20H30"/>
-<path d="M30 20H50"/>
-<path d="M602 20H622"/>
-<rect class="t" x="50" y="8" width="44" height="24" rx="12"/>
-<text class="t" x="72" y="20">&quot;&quot;&quot;</text>
-<path d="M94 20H104"/>
-<path d="M104 20H124"/>
-<path d="M528 20H548"/>
-<path d="M124 20H528"/>
-<path d="M104 20a10 10 0 0 1 10 10v0a10 10 0 0 0 10 10"/>
-<path d="M528 40a10 10 0 0 0 10 -10v0a10 10 0 0 1 10 -10"/>
-<path d="M124 40H134"/>
-<path d="M134 40H154"/>
-<path d="M498 40H518"/>
-<rect class="c" x="154" y="28" width="344" height="24" rx="4"/>
-<text class="c" x="326" y="40">any character except \ and control characters</text>
-<path d="M134 40a10 10 0 0 1 10 10v12a10 10 0 0 0 10 10"/>
-<path d="M498 72a10 10 0 0 0 10 -10v-12a10 10 0 0 1 10 -10"/>
-<a href="#line-break">
-<rect class="n" x="154" y="60" width="92" height="24" rx="0"/>
-<text class="n" x="200" y="72">line break</text>
-</a>
-<path d="M246 72H498"/>
-<path d="M134 40a10 10 0 0 1 10 10v44a10 10 0 0 0 10 10"/>
-<path d="M498 104a10 10 0 0 0 10 -10v-44a10 10 0 0 1 10 -10"/>
-<rect class="c" x="154" y="92" width="42" height="24" rx="4"/>
-<text class="c" x="175" y="104">tab</text>
-<path d="M196 104H498"/>
-<path d="M134 40a10 10 0 0 1 10 10v76a10 10 0 0 0 10 10"/>
-<path d="M498 136a10 10 0 0 0 10 -10v-76a10 10 0 0 1 10 -10"/>
-<a href="#escape">
-<rect class="n" x="154" y="124" width="63" height="24" rx="0"/>
-<text class="n" x="185.5" y="136">escape</text>
-</a>
-<path d="M217 136H498"/>
-<path d="M518 40H528"/>
-<path d="M518 40a10 10 0 0 1 10 10v96a10 10 0 0 1 -10 10"/>
-<path d="M134 156a10 10 0 0 1 -10 -10v-96a10 10 0 0 1 10 -10"/>
-<path d="M134 156H326"/>
-<path d="M326 156H518"/>
-<path d="M548 20H558"/>
-<rect class="t" x="558" y="8" width="44" height="24" rx="12"/>
-<text class="t" x="580" y="20">&quot;&quot;&quot;</text>
-<path d="M30 20a10 10 0 0 1 10 10v136a10 10 0 0 0 10 10"/>
-<path d="M602 176a10 10 0 0 0 10 -10v-136a10 10 0 0 1 10 -10"/>
-<rect class="t" x="50" y="164" width="44" height="24" rx="12"/>
-<text class="t" x="72" y="176">&#x27;&#x27;&#x27;</text>
-<path d="M94 176H104"/>
-<path d="M104 176H124"/>
-<path d="M528 176H548"/>
-<path d="M124 176H528"/>
-<path d="M104 176a10 10 0 0 1 10 10v0a10 10 0 0 0 10 10"/>
-<path d="M528 196a10 10 0 0 0 10 -10v0a10 10 0 0 1 10 -10"/>
-<path d="M124 196H134"/>
-<path d="M134 196H154"/>
-<path d="M498 196H518"/>
-<rect class="c" x="154" y="184" width="344" height="24" rx="4"/>
-<text class="c" x="326" y="196">any character except \ and control characters</text>
-<path d="M134 196a10 10 0 0 1 10 10v12a10 10 0 0 0 10 10"/>
-<path d="M498 228a10 10 0 0 0 10 -10v-12a10 10 0 0 1 10 -10"/>
-<a href="#line-break">
-<rect class="n" x="154" y="216" width="92" height="24" rx="0"/>
-<text class="n" x="200" y="228">line break</text>
-</a>
-<path d="M246 228H498"/>
-<path d="M134 196a10 10 0 0 1 10 10v44a10 10 0 0 0 10 10"/>
-<path d="M498 260a10 10 0 0 0 10 -10v-44a10 10 0 0 1 10 -10"/>
-<rect class="c" x="154" y="248" width="42" height="24" rx="4"/>
-<text class="c" x="175" y="260">tab</text>
-<path d="M196 260H498"/>
-<path d="M134 196a10 10 0 0 1 10 10v76a10 10 0 0 0 10 10"/>
-<path d="M498 292a10 10 0 0 0 10 -10v-76a10 10 0 0 1 10 -10"/>
-<a href="#escape">
-<rect class="n" x="154" y="280" width="63" height="24" rx="0"/>
-<text class="n" x="185.5" y="292">escape</text>
-</a>
-<path d="M217 292H498"/>
-<path d="M518 196H528"/>
-<path d="M518 196a10 10 0 0 1 10 10v96a10 10 0 0 1 -10 10"/>
-<path d="M134 312a10 10 0 0 1 -10 -10v-96a10 10 0 0 1 10 -10"/>
-<path d="M134 312H326"/>
-<path d="M326 312H518"/>
-<path d="M548 176H558"/>
-<rect class="t" x="558" y="164" width="44" height="24" rx="12"/>
-<text class="t" x="580" y="176">&#x27;&#x27;&#x27;</text>
-<path d="M622 20H640"/>
-<path class="cap" d="M640 12v16m4 -16v16"/>
-</svg></div>
-    <p>The value is obtained in four steps:</p>
+    <p>A string without a line break has the same value as in JSON. For a string across several lines, the value is obtained in four steps:</p>
     <ol>
-      <li>The text is split into lines at every unescaped line break.</li>
-      <li>Unescaped spaces and tabs at the end of every line except the last are removed.</li>
+      <li>The text is split into lines at every line break, including the line break of a line continuation (<code>\</code> before a line break).</li>
+      <li>Unescaped spaces and tabs at the end of every line except the last are removed. A line that ends with a line continuation keeps the white space before the <code>\</code>.</li>
       <li>If the string begins with an empty line, that line is dropped and the smallest indentation of all non-empty lines is removed from every line. The last line always counts, so the position of the closing delimiter helps determine how much is removed. The removed characters must be the same in all lines; mixing tabs and spaces there is an error.</li>
-      <li>The lines are joined with a line feed (U+000A), then the escape sequences are resolved.</li>
+      <li>The lines are joined with a line feed (U+000A), then the escape sequences are resolved. A line continuation drops its <code>\</code> together with the line feed, so the indentation of the continued line is removed, but no line break remains.</li>
     </ol>
   </section>
 
   <section class="form" id="escape">
     <h3>escape</h3>
-    <p>XTJSON has all escape sequences of JSON and five more from ECMAScript: <code>\'</code>, <code>\v</code>, <code>\0</code>, <code>\xHH</code> and <code>\u{…}</code>. They apply in all string forms. <code>\u{…}</code> stands for a code point up to 10FFFF outside the surrogate range. Every other sequence that begins with a backslash is an error, including a backslash before a line break.</p>
-    <div class="diagram"><svg class="rr" viewBox="0 0 531 456" width="531" height="456" role="img" aria-label="Railroad diagram: escape">
+    <p>XTJSON has all escape sequences of JSON and six more from ECMAScript: <code>\'</code>, <code>\v</code>, <code>\0</code>, <code>\xHH</code>, <code>\u{…}</code> and the line continuation, a backslash directly before a <a href="#line-break">line break</a>, which yields nothing. They apply in both string forms. <code>\u{…}</code> stands for a code point up to 10FFFF outside the surrogate range. Every other sequence that begins with a backslash is an error, including a backslash before a space or tab.</p>
+    <div class="diagram"><svg class="rr" viewBox="0 0 531 488" width="531" height="488" role="img" aria-label="Railroad diagram: escape">
 <path class="cap" d="M8 12v16m4 -16v16"/>
 <path d="M12 20H30"/>
 <rect class="t" x="30" y="8" width="28" height="24" rx="12"/>
@@ -718,6 +640,14 @@ tags: [
 <path d="M443 436H453"/>
 <rect class="t" x="453" y="424" width="28" height="24" rx="12"/>
 <text class="t" x="467" y="436">}</text>
+<path d="M68 20a10 10 0 0 1 10 10v428a10 10 0 0 0 10 10"/>
+<path d="M481 468a10 10 0 0 0 10 -10v-428a10 10 0 0 1 10 -10"/>
+<a href="#line-break">
+<rect class="n" x="88" y="456" width="92" height="24" rx="0"/>
+<text class="n" x="134" y="468">line break</text>
+</a>
+<text class="l" x="194" y="468">line continuation; yields nothing</text>
+<path d="M414 468H481"/>
 <path d="M501 20H519"/>
 <path class="cap" d="M519 12v16m4 -16v16"/>
 </svg></div>
@@ -1121,7 +1051,7 @@ tags: [
 
   <section class="form" id="line-break">
     <h3>line break</h3>
-    <p>A <dfn>line break</dfn> is a line feed, a carriage return, or the sequence of both, which counts as a single line break. All other white space characters, including U+2028 and U+2029, are not line breaks: they neither separate items nor end a line comment.</p>
+    <p>A <dfn>line break</dfn> is a line feed, a carriage return, or the sequence of both, which counts as a single line break. In a string it becomes a line feed. All other white space characters, including U+2028 and U+2029, are not line breaks: they neither separate items nor end a line comment.</p>
     <div class="diagram"><svg class="rr" viewBox="0 0 271 104" width="271" height="104" role="img" aria-label="Railroad diagram: line break">
 <path class="cap" d="M8 12v16m4 -16v16"/>
 <path d="M12 20H30"/>
@@ -1164,7 +1094,7 @@ tags: [
   <h2>Principles</h2>
   <ul>
     <li><strong>Definitions belong to the parser, not to the document.</strong> A document can define neither named values nor suffixes. Named values can be defined by the application; suffixes are fixed by the specification. A document that uses only the predefined named values is portable: every conforming parser can read it.</li>
-    <li><strong>Errors instead of guessing.</strong> Unknown escape sequences, undefined identifiers, unknown suffixes and mixed indentation are errors and are not silently interpreted.</li>
+    <li><strong>Errors instead of guessing.</strong> Unknown escape sequences, white space after a line continuation, undefined identifiers, unknown suffixes and mixed indentation are errors and are not silently interpreted.</li>
     <li><strong>Never code.</strong> XTJSON is not a subset of a programming language and is never read by evaluating it as program code.</li>
   </ul>
 </section>
@@ -1193,7 +1123,7 @@ named-value    = identifier                  ; true, false, null and
 object         = &quot;{&quot; S [ member-list S ] &quot;}&quot;
 member-list    = member *( item-sep member ) [ S &quot;,&quot; ]
 member         = name S &quot;:&quot; S value
-name           = dq-string / sq-string / identifier
+name           = string / identifier
 identifier     = id-start *id-continue
 id-start       = ALPHA / &quot;_&quot; / &quot;$&quot;
 id-continue    = ALPHA / DIGIT / &quot;_&quot; / &quot;$&quot;
@@ -1223,18 +1153,15 @@ non-star       = %x00-29 / %x2B-10FFFF
 non-star-slash = %x00-29 / %x2B-2E / %x30-10FFFF
 
 ; ---------- Strings ----------
-string         = ml-dq-string / ml-sq-string / dq-string / sq-string
-dq-string      = DQUOTE *( dq-unescaped / escape-seq ) DQUOTE
-sq-string      = SQUOTE *( sq-unescaped / escape-seq ) SQUOTE
-ml-dq-string   = 3DQUOTE *ml-dq-item 3DQUOTE
-ml-sq-string   = 3SQUOTE *ml-sq-item 3SQUOTE
-ml-dq-item     = [ DQUOTE [ DQUOTE ] ] ( dq-unescaped / ml-plain )
-ml-sq-item     = [ SQUOTE [ SQUOTE ] ] ( sq-unescaped / ml-plain )
-ml-plain       = escape-seq / newline / %x09
+string         = dq-string / sq-string
+dq-string      = DQUOTE *( dq-unescaped / str-plain / escape-seq ) DQUOTE
+sq-string      = SQUOTE *( sq-unescaped / str-plain / escape-seq ) SQUOTE
+str-plain      = %x09 / newline              ; HT and line breaks (8.1)
 dq-unescaped   = %x20-21 / %x23-5B / %x5D-10FFFF     ; without &quot; and \
 sq-unescaped   = %x20-26 / %x28-5B / %x5D-10FFFF     ; without &#x27; and \
 escape-seq     = %x5C ( char-escape / null-escape / hex-escape /
-                        unicode-escape / codepoint-escape )
+                        unicode-escape / codepoint-escape / newline )
+                                             ; \ before newline: line continuation
 char-escape    = %x22 / %x27 / %x5C / %x2F /         ; &quot; &#x27; \ /
                  %x62 / %x66 / %x6E / %x72 /         ; b f n r
                  %x74 / %x76                         ; t v
@@ -1271,7 +1198,7 @@ e              = %x65 / %x45                 ; e E</code></pre>
 
 <footer>
   <div class="wrap">
-    <p>XTJSON specification draft 0.4 · <a href="https://github.com/cwkr/xtjson">github.com/cwkr/xtjson</a></p>
+    <p>XTJSON specification draft 0.5 · <a href="https://github.com/cwkr/xtjson">github.com/cwkr/xtjson</a></p>
   </div>
 </footer>
 

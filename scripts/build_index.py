@@ -197,7 +197,6 @@ def underscore():
 
 CHARS_DQ = 'any character except " \\ and control characters'
 CHARS_SQ = "any character except ' \\ and control characters"
-CHARS_ML = 'any character except \\ and control characters'
 
 DIAGRAMS = {
     'document': Choice(N('value'), N('members')),
@@ -208,16 +207,12 @@ DIAGRAMS = {
     'value': Choice(N('object'), N('array'), N('string'), N('number'), N('named value')),
     'named value': Choice(T('true'), T('false'), T('null'),
                           Seq(N('identifier'), Label('defined by the application'))),
-    'name': Choice(N('single-line string', 'string'), N('identifier')),
+    'name': Choice(N('string'), N('identifier')),
     'identifier': Seq(Choice(C('a–z A–Z'), T('_'), T('$')),
                       Many(Choice(C('a–z A–Z'), C('0–9'), T('_'), T('$')))),
     'string': Choice(
-        Seq(T('"'), Many(Choice(C(CHARS_DQ), N('escape'))), T('"')),
-        Seq(T("'"), Many(Choice(C(CHARS_SQ), N('escape'))), T("'")),
-        N('multi-line string')),
-    'multi-line string': Choice(
-        Seq(T('"""'), Many(Choice(C(CHARS_ML), N('line break'), C('tab'), N('escape'))), T('"""')),
-        Seq(T("'''"), Many(Choice(C(CHARS_ML), N('line break'), C('tab'), N('escape'))), T("'''"))),
+        Seq(T('"'), Many(Choice(C(CHARS_DQ), C('tab'), N('line break'), N('escape'))), T('"')),
+        Seq(T("'"), Many(Choice(C(CHARS_SQ), C('tab'), N('line break'), N('escape'))), T("'"))),
     'escape': Seq(T('\\'), Choice(
         Seq(T('"'), Label('quotation mark')),
         Seq(T("'"), Label('apostrophe')),
@@ -232,7 +227,8 @@ DIAGRAMS = {
         Seq(T('0'), Label('null; no digit may follow')),
         Seq(T('x'), C('2 hex digits')),
         Seq(T('u'), C('4 hex digits')),
-        Seq(T('u'), T('{'), C('1 or more hex digits, at most 10FFFF'), T('}')))),
+        Seq(T('u'), T('{'), C('1 or more hex digits, at most 10FFFF'), T('}')),
+        Seq(N('line break'), Label('line continuation; yields nothing')))),
     'number': Seq(Opt(T('-')),
                   Choice(N('decimal'), N('integer')),
                   Opt(N('suffix'))),

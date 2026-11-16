@@ -24,7 +24,7 @@ scripts/
   xtjson_ref.py                   reference parser; checks the examples of one spec version
   compare_versions.py             compares the two language versions
   tests_zeilenumbruch_strings.py  tests: line breaks, strings, names, escapes
-  tests_mehrzeilige_strings.py    tests: value of multi-line strings
+  tests_mehrzeilige_strings.py    tests: value of strings across several lines
   tests_definitionen.py           tests: named values and number suffixes
   build_index.py                  generates docs/index.html
   index_template.html             template for docs/index.html
@@ -111,7 +111,7 @@ Use the terms from section 2 of the specification consistently. The most importa
 | Zeilenumbruch | line break |
 | Trenner | separator |
 | maskiert, unmaskiert | escaped, unescaped |
-| einzeiliger, mehrzeiliger String | single-line, multi-line string |
+| Zeilenfortsetzung | line continuation |
 | Begrenzer | delimiter |
 | Einrückung | indentation |
 | Definition, vordefiniert, eigene Definition | definition, predefined, custom definition |
@@ -144,7 +144,9 @@ An implementation in this repository is a conforming XTJSON parser, generator or
   - Duplicate names: the member that comes last in the document applies (7.2); forbidden in I-JSON mode.
   - Line break: LF, CR or CR LF, with CR LF counting as one. U+2028 and U+2029 are white space, not line breaks, and do not end a line comment.
   - A line break inside a block comment is not a separator.
-  - Multi-line strings: follow the four steps in 8.3 exactly, including removal of unescaped trailing spaces and tabs, removal of indentation only when the string begins with an empty line, the last line always counting, and the error for differing removed characters. Multi-line strings are not permitted as names.
+  - Strings: there is one kind of string, in `"` or `'`, and every string may extend across several lines. Line breaks (LF, CR, CR LF) and tab may appear unescaped; every other control character, including VT and FF, must be escaped. Three quotation marks in a row are not a delimiter but an error. Names may extend across several lines too.
+  - Value of a string: follow the four steps in 8.3 exactly for every string, including removal of unescaped trailing spaces and tabs, removal of indentation only when the string begins with an empty line, the last line always counting, and the error for differing removed characters. CR and CR LF in a string become LF.
+  - Line continuation: `\` directly before a line break (LF, CR or CR LF) yields nothing. Its `\` stays at the end of its line until step 4: white space before it is kept, the indentation of the following line is removed, and a line that contains it is not empty. White space between `\` and the line break is an error.
   - Escapes: only those in the table in 8.2. `\0` must not be followed by a digit, `\u{…}` must not exceed 10FFFF or lie in D800 to DFFF, every other `\` sequence is an error.
   - Numbers: prefixes `0x`, `0o`, `0b` in either case; `_` only singly between two digits; a leading-zero form such as `0755` is an error. Hexadecimal, octal and binary numbers are exact or an error, never rounded.
   - Suffixes: the characters of an identifier, any length, longest match, no white space before them; the first character excludes `_` and, in either case, `a`–`f`, `o` and `x`. A `_` after a digit is digit grouping or an error (`1_0` is 10, `10_k` is an error). Case is significant (`L` exists, `l` does not), and a suffix that is not in the table in 9.5 is an error. Results are exact (`0.1kb` is `102.4`, `100ms` is `0.1`).
@@ -159,7 +161,7 @@ An implementation in this repository is a conforming XTJSON parser, generator or
 
 - **Escape examples in the text.** The specification shows escape sequences as text, for example a backslash, `u` and four hexadecimal digits. Some tools turn such sequences into the character itself when writing a file. After editing, check that they are still present as sequences:
   `grep -c 'u0061\|u00e4\|u00e9\|uD83D\|u00E4\|u000B\|uDEAD' docs/*.md` must report the same count for both versions (currently 6 each).
-- **White space at the end of lines.** In examples with multi-line strings it matters, or is removed by rule. It is made visible in tables with `·` for a space and `⏎` for a line break, never by real spaces at the end of a line. Editors and formatters must not re-wrap the Markdown files or strip white space.
+- **White space at the end of lines.** In examples with strings across several lines it matters, or is removed by rule. It is made visible in tables with `·` for a space and `⏎` for a line break, never by real spaces at the end of a line. Editors and formatters must not re-wrap the Markdown files or strip white space.
 - **Fence tags.** Complete, valid documents go in blocks tagged `xtjson`, JSON equivalents directly after them in `json`, grammar in `abnf`. Invalid examples and fragments are written as inline code or in tables, never in an `xtjson` block.
 - **Examples with custom definitions.** The example in 6.4 assumes definitions (`nil`, `zero`, `unbekannt` / `unknown`). They are listed in `EXAMPLE_DEFS` in `scripts/xtjson_ref.py`. If you add an example with further definitions, add them there and name them in the text.
 - **Translated examples.** Names and texts in examples are translated; structure and numbers are not. `compare_versions.py` checks that the values have the same shape.

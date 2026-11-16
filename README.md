@@ -16,13 +16,13 @@ hosts: [
   "alpha"
   "beta",                   // trailing comma allowed
 ]
-motd: """
+motd: "
   Welcome.
   Have a nice day.
-  """
+  "                         // indentation removed: "Welcome.\nHave a nice day.\n"
 ```
 
-The specification is a draft. The current version is **draft 0.4**; see the
+The specification is a draft. The current version is **draft 0.5**; see the
 change list at the end of the specification.
 
 - Specification in English: [`docs/xtjson-spec-en.md`](docs/xtjson-spec-en.md)
@@ -52,7 +52,7 @@ root:
 python3 scripts/xtjson_ref.py docs/xtjson-spec-en.md     # examples and built-in cases
 python3 scripts/xtjson_ref.py docs/xtjson-spec-de.md
 python3 scripts/tests_zeilenumbruch_strings.py           # line breaks, strings, escapes
-python3 scripts/tests_mehrzeilige_strings.py             # multi-line strings
+python3 scripts/tests_mehrzeilige_strings.py             # strings across several lines
 python3 scripts/tests_definitionen.py                    # named values, number suffixes
 python3 scripts/compare_versions.py docs/xtjson-spec-de.md docs/xtjson-spec-en.md
 python3 scripts/build_index.py --check                   # docs/index.html is up to date

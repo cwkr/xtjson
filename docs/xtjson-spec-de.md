@@ -1,6 +1,6 @@
 # XTJSON
 
-**Spezifikation, Entwurf 0.4** · Stand: 15. November 2026
+**Spezifikation, Entwurf 0.5** · Stand: 16. November 2026
 
 ## Inhalt
 
@@ -39,12 +39,12 @@ Die Erweiterungen gegenüber JSON sind:
 | E3 | Optionale geschweifte Klammern beim Objekt auf oberster Ebene | [6.2](#62-implizites-wurzelobjekt) |
 | E4 | Namen (Keys) ohne Anführungszeichen | [7.2](#72-namen) |
 | E5 | Zeilenumbruch als Trenner anstelle eines Kommas | [7.3](#73-trenner) |
-| E6 | Strings in einfachen Anführungszeichen (`'…'`) | [8.1](#81-einzeilige-strings) |
+| E6 | Strings in einfachen Anführungszeichen (`'…'`) | [8.1](#81-begrenzer-und-zeichen) |
 | E7 | Ganzzahlen in hexadezimaler, oktaler und binärer Schreibweise | [9.2](#92-hexadezimal-oktal-binär) |
 | E8 | `_` zur Gruppierung von Ziffern | [9.3](#93-zifferngruppierung) |
 | E9 | Zusätzliche Escape-Sequenzen: `\v`, `\0`, `\xHH`, `\u{…}` | [8.2](#82-escape-sequenzen) |
 | E10 | Zusätzliche Leerraumzeichen: alle Leerraumzeichen von ECMAScript | [5.1](#51-leerraum) |
-| E11 | Mehrzeilige Strings mit `"""` oder `'''` | [8.3](#83-mehrzeilige-strings) |
+| E11 | Strings über mehrere Zeilen, mit Entfernen der Einrückung, und Zeilenfortsetzung mit `\` | [8.3](#83-zeilenumbrüche-in-strings) |
 | E12 | Benannte Werte: Bezeichner als Wert, vom Parser definierte Aliase für JSON-Werte (`nil`) | [6.4](#64-benannte-werte) |
 | E13 | Zahlen-Suffixe (`10k`, `64mb`, `50pct`) | [9.5](#95-zahlen-suffixe) |
 
@@ -66,6 +66,7 @@ Die Grammatik ist in ABNF [RFC5234] notiert. Die Regeln in den Abschnitten 5–9
 | Leerraumzeichen | eines der Zeichen aus der Tabelle in 5.1 |
 | Zeilenumbruch | U+000A, U+000D oder die Folge U+000D U+000A (5.2) |
 | maskiert, unmaskiert | maskiert: als Escape-Sequenz nach 8.2 geschrieben; unmaskiert: als das Zeichen selbst geschrieben |
+| Zeilenfortsetzung | ein `\` unmittelbar vor einem Zeilenumbruch in einem String; sie trägt nichts zum Wert bei (8.2) |
 | Definition | die Zuordnung eines benannten Werts zu einem JSON-Wert (6.4) |
 | vordefiniert | durch diese Spezifikation festgelegt und nicht änderbar |
 | eigene Definition | eine Definition, die die Anwendung dem Parser mitgibt |
@@ -89,7 +90,7 @@ Dieser Abschnitt ist normativ. Er legt fest, was „voll kompatibel“ zu [RFC82
 - Ein XTJSON-Parser ist kein konformer Prozessor im Sinne von [ECMA-404], weil dieser nicht konforme Eingaben nicht akzeptieren soll. Er ist jedoch ein zulässiger Parser im Sinne von [RFC8259] Abschnitt 9, der Parsern Erweiterungen ausdrücklich gestattet.
 - Wer JSON erzeugt, MUSS strikt die JSON-Grammatik einhalten ([RFC8259] Abschnitt 10). Die Brücke bildet die Abbildung in Abschnitt 10.
 
-Informativ – warum K1 und K2 gelten: Jede Erweiterung belegt ausschließlich Schreibweisen, die in JSON ein Syntaxfehler sind. `/`, `#`, `'` sowie die zusätzlichen Leerraumzeichen (5.1) kommen in JSON außerhalb von Strings nicht vor; die zusätzlichen Escape-Sequenzen sind in JSON ungültige `\`-Folgen; drei Anführungszeichen in Folge können in JSON keinen Wert einleiten; ein Name ohne Anführungszeichen, ein Komma vor einer schließenden Klammer, ein `:` nach dem Wurzelwert, zwei Elemente ohne Komma sowie `0x`, `0o`, `0b` und `_` in Zahlen sind in JSON ungültig; ebenso ein Bezeichner an Wertposition außer `true`, `false` und `null` und ein Suffix direkt nach einer Zahl. Die drei Literale von JSON sind fest vordefiniert und nicht änderbar, und kein Suffix beginnt mit `e` oder `E`, sodass der Exponent einer JSON-Zahl nie als Suffix gelesen wird. Die Zeilenumbruch-Regel (E5) greift nur dort, wo JSON zwingend ein Komma verlangt; überall sonst bleibt ein Zeilenumbruch bedeutungsloser Leerraum.
+Informativ – warum K1 und K2 gelten: Jede Erweiterung belegt ausschließlich Schreibweisen, die in JSON ein Syntaxfehler sind. `/`, `#`, `'` sowie die zusätzlichen Leerraumzeichen (5.1) kommen in JSON außerhalb von Strings nicht vor; die zusätzlichen Escape-Sequenzen sind in JSON ungültige `\`-Folgen; ein unmaskierter Zeilenumbruch oder Tabulator in einem String ist in JSON ungültig; ein Name ohne Anführungszeichen, ein Komma vor einer schließenden Klammer, ein `:` nach dem Wurzelwert, zwei Elemente ohne Komma sowie `0x`, `0o`, `0b` und `_` in Zahlen sind in JSON ungültig; ebenso ein Bezeichner an Wertposition außer `true`, `false` und `null` und ein Suffix direkt nach einer Zahl. Die drei Literale von JSON sind fest vordefiniert und nicht änderbar, und kein Suffix beginnt mit `e` oder `E`, sodass der Exponent einer JSON-Zahl nie als Suffix gelesen wird. Ein String ohne Zeilenumbruch behält seinen JSON-Wert, weil die Regeln aus 8.3 nur Strings verändern, die über mehrere Zeilen reichen. Die Zeilenumbruch-Regel (E5) greift nur dort, wo JSON zwingend ein Komma verlangt; überall sonst bleibt ein Zeilenumbruch bedeutungsloser Leerraum.
 
 ## 4. Kodierung
 
@@ -123,7 +124,7 @@ Leerraumzeichen sind genau die Zeichen der folgenden Tabelle. Das sind die vier 
 
 - U+0020, U+00A0, U+1680, U+2000–U+200A, U+202F, U+205F und U+3000 sind die Zeichen der Unicode-Kategorie Zs (Space_Separator), die ECMAScript seit ES3 als Ganzes zum Leerraum zählt. Die Liste in dieser Spezifikation ist abschließend; sie ändert sich nicht, wenn künftige Unicode-Versionen die Kategorie Zs ändern.
 - Zeilenumbrüche sind nur U+000A und U+000D, einzeln oder als Folge CR LF (5.2). Alle anderen Zeichen der Tabelle sind einfacher Leerraum: Sie trennen keine Elemente (7.3) und beenden keinen Zeilenkommentar. Das gilt abweichend von ECMAScript auch für U+2028 und U+2029, die dort Zeilenenden sind.
-- Innerhalb von Strings ändert sich nichts gegenüber JSON: Die Steuerzeichen U+0009 bis U+000D MÜSSEN maskiert werden; alle übrigen Zeichen der Tabelle dürfen unmaskiert stehen. Ausnahmen gelten in mehrzeiligen Strings (8.3).
+- Innerhalb von Strings dürfen der Tabulator und die Zeilenumbrüche (U+0009, U+000A, U+000D) anders als in JSON unmaskiert stehen (8.1). Der Vertikaltabulator U+000B und der Seitenvorschub U+000C MÜSSEN wie in JSON maskiert werden; alle übrigen Zeichen der Tabelle dürfen unmaskiert stehen.
 - Zeichen, die nicht in der Tabelle stehen, sind kein Leerraum, auch wenn sie unsichtbar sind oder die Unicode-Eigenschaft White_Space tragen (etwa U+0085, U+180E, U+200B). Außerhalb von Strings und Kommentaren sind sie ein Fehler.
 
 Leerraum und Kommentare sind zwischen beliebigen Tokens erlaubt. Innerhalb einer Zahl einschließlich ihres Suffixes und innerhalb eines Bezeichners sind sie ein Fehler (`- 1`, `10 k`, `tr ue`); innerhalb eines Strings sind sie Inhalt.
@@ -132,7 +133,7 @@ Leerraum und Kommentare sind zwischen beliebigen Tokens erlaubt. Innerhalb einer
 
 Ein Zeilenumbruch (`newline`) ist U+000A (LF), U+000D (CR) oder die Folge U+000D U+000A (CR LF). Die Folge zählt als ein einziger Zeilenumbruch. Alle übrigen Leerraumzeichen aus 5.1, auch U+2028 und U+2029, sind **keine** Zeilenumbrüche.
 
-Zeilenumbrüche haben drei Funktionen: Sie beenden einen Zeilenkommentar (5.3), sie können als Trenner zwischen zwei Elementen dienen ([7.3](#73-trenner)), und sie gliedern einen mehrzeiligen String in Zeilen ([8.3](#83-mehrzeilige-strings)). Überall sonst sind sie gewöhnlicher Leerraum. Ein Zeilenumbruch innerhalb eines Blockkommentars ist Teil des Kommentars und hat keine dieser Funktionen.
+Zeilenumbrüche haben drei Funktionen: Sie beenden einen Zeilenkommentar (5.3), sie können als Trenner zwischen zwei Elementen dienen ([7.3](#73-trenner)), und sie gliedern einen String in Zeilen ([8.3](#83-zeilenumbrüche-in-strings)). Überall sonst sind sie gewöhnlicher Leerraum. Ein Zeilenumbruch innerhalb eines Blockkommentars ist Teil des Kommentars und hat keine dieser Funktionen.
 
 ### 5.3 Kommentare
 
@@ -189,7 +190,7 @@ Regeln:
 - Die Kurzform gibt es nur auf oberster Ebene. Verschachtelte Objekte brauchen Klammern.
 - Mischformen sind ungültig: Auf einen geklammerten Wurzelwert darf nichts mehr folgen (`{a: 1} b: 2` ist ein Fehler), und ein implizites Wurzelobjekt wird nicht mit `}` geschlossen.
 
-**Erkennung.** Ein Parser entscheidet nach dem ersten Token: Ist es ein einzeiliger String oder ein Bezeichner und ist das nächste Token ein `:`, liegt ein implizites Wurzelobjekt vor. Andernfalls wird ein einzelner Wert gelesen. Da in JSON auf den Wurzelwert nie ein `:` folgt, wird kein JSON-Text umgedeutet.
+**Erkennung.** Ein Parser entscheidet nach dem ersten Token: Ist es ein String oder ein Bezeichner und ist das nächste Token ein `:`, liegt ein implizites Wurzelobjekt vor. Andernfalls wird ein einzelner Wert gelesen. Da in JSON auf den Wurzelwert nie ein `:` folgt, wird kein JSON-Text umgedeutet.
 
 ### 6.3 Werte
 
@@ -260,13 +261,13 @@ value-list   = value *( item-sep value ) [ S "," ]
 ### 7.2 Namen
 
 ```abnf
-name         = dq-string / sq-string / identifier
+name         = string / identifier
 identifier   = id-start *id-continue
 id-start     = ALPHA / "_" / "$"
 id-continue  = ALPHA / DIGIT / "_" / "$"
 ```
 
-- Ein Name ist ein einzeiliger String (8.1) oder ein Bezeichner. Ein mehrzeiliger String (8.3) ist als Name nicht erlaubt.
+- Ein Name ist ein String (Abschnitt 8) oder ein Bezeichner. Wie jeder andere String darf ein Name über mehrere Zeilen reichen; sein Wert ergibt sich nach 8.3.
 - Ein Bezeichner beginnt mit einem ASCII-Buchstaben, `_` oder `$`; danach sind zusätzlich ASCII-Ziffern erlaubt. Als Name steht er für exakt die geschriebene Zeichenfolge; Escape-Sequenzen gibt es in Bezeichnern nicht.
 - Jeder andere Name MUSS in Anführungszeichen stehen: Namen mit Leerzeichen, Bindestrichen, Punkten oder Nicht-ASCII-Zeichen, Namen, die mit einer Ziffer beginnen, und der leere Name.
 - `true`, `false`, `null` und alle anderen benannten Werte (6.4) sind als Bezeichner an Namensposition zulässig und ergeben dort gewöhnliche Namen (`"true"`, `"nil"`). An Namensposition steht nie ein Wert, daher ist das eindeutig.
@@ -331,29 +332,32 @@ Nach dem letzten Element eines Objekts, eines Arrays oder des impliziten Wurzelo
 
 ## 8. Strings
 
-### 8.1 Einzeilige Strings
+### 8.1 Begrenzer und Zeichen
 
 ```abnf
-string        = ml-dq-string / ml-sq-string / dq-string / sq-string
-dq-string     = DQUOTE *( dq-unescaped / escape-seq ) DQUOTE
-sq-string     = SQUOTE *( sq-unescaped / escape-seq ) SQUOTE
+string        = dq-string / sq-string
+dq-string     = DQUOTE *( dq-unescaped / str-plain / escape-seq ) DQUOTE
+sq-string     = SQUOTE *( sq-unescaped / str-plain / escape-seq ) SQUOTE
+str-plain     = %x09 / newline
 ```
 
-- Ein einzeiliger String steht in doppelten (`"`) oder in einfachen (`'`) Anführungszeichen. Beide Formen sind gleichwertig und an jeder Stelle erlaubt, an der ein String stehen darf, auch als Name.
+- Ein String steht in doppelten (`"`) oder in einfachen (`'`) Anführungszeichen. Beide Formen sind gleichwertig und an jeder Stelle erlaubt, an der ein String stehen darf, auch als Name.
 - Er endet am ersten nicht maskierten Vorkommen des Zeichens, mit dem er begonnen hat.
 - In einem `"`-String darf `'` unmaskiert stehen, in einem `'`-String darf `"` unmaskiert stehen. Der jeweilige Begrenzer MUSS maskiert werden (`\"` bzw. `\'`).
-- Wie in JSON MÜSSEN der umgekehrte Schrägstrich und die Steuerzeichen U+0000 bis U+001F maskiert werden. Ein einzeiliger String kann also nicht über einen Zeilenumbruch hinweg reichen; dafür gibt es mehrzeilige Strings (8.3).
+- Ein String darf über mehrere Zeilen reichen: Zeilenumbrüche nach 5.2 und der Tabulator U+0009 dürfen unmaskiert stehen. Der umgekehrte Schrägstrich und alle anderen Steuerzeichen (U+0000 bis U+0008, U+000B, U+000C, U+000E bis U+001F) MÜSSEN wie in JSON maskiert werden.
 - Alle anderen Zeichen dürfen wie in JSON unmaskiert stehen, auch U+007F, U+2028, U+2029 und die Nicht-ASCII-Leerraumzeichen aus 5.1.
+- Die Zeichenfolgen `//`, `/*` und `#` haben im String keine Sonderbedeutung, und ein Zeilenumbruch im String ist kein Trenner nach 7.3.
+- Der Wert eines Strings ergibt sich nach 8.3. Für einen String ohne Zeilenumbruch ist er wie in JSON die Folge seiner Zeichen, nachdem die Escape-Sequenzen (8.2) aufgelöst sind.
 
 ### 8.2 Escape-Sequenzen
 
 ```abnf
 escape-seq       = %x5C ( char-escape / null-escape / hex-escape /
-                          unicode-escape / codepoint-escape )
+                          unicode-escape / codepoint-escape / newline )
 codepoint-escape = %x75 "{" *"0" ( 1*5HEXDIG / ( "10" 4HEXDIG ) ) "}"
 ```
 
-XTJSON kennt alle Escape-Sequenzen von JSON und zusätzlich fünf weitere aus ECMAScript [ECMA-262]: `\'`, `\v`, `\0`, `\xHH` und `\u{…}`. Alle gelten in allen String-Formen, auch in mehrzeiligen Strings (8.3). Die Spalte „Herkunft“ nennt JSON, wenn die Sequenz schon dort gilt, und sonst die ECMAScript-Ausgabe, mit der sie eingeführt wurde.
+XTJSON kennt alle Escape-Sequenzen von JSON und zusätzlich sechs weitere aus ECMAScript [ECMA-262]: `\'`, `\v`, `\0`, `\xHH`, `\u{…}` und die Zeilenfortsetzung, ein `\` vor einem Zeilenumbruch. Alle gelten in beiden String-Formen. Die Spalte „Herkunft“ nennt JSON, wenn die Sequenz schon dort gilt, und sonst die ECMAScript-Ausgabe, mit der sie eingeführt wurde.
 
 | Sequenz | Ergebnis | Herkunft |
 |---|---|---|
@@ -370,6 +374,7 @@ XTJSON kennt alle Escape-Sequenzen von JSON und zusätzlich fünf weitere aus EC
 | `\xHH` | U+00HH (zwei Hexadezimalziffern) | ES1 (1997) |
 | `\v` | U+000B Vertikaltabulator | ES3 (1999) |
 | `\0` | U+0000 Null | ES3 (1999) |
+| `\` vor einem Zeilenumbruch | nichts (Zeilenfortsetzung) | ES5 (2009) |
 | `\u{…}` | Codepunkt U+0000 bis U+10FFFF (eine oder mehr Hexadezimalziffern) | ES2015 (ES6) |
 
 Regeln:
@@ -377,7 +382,8 @@ Regeln:
 - **`\xHH` und `\uXXXX`** verlangen genau zwei bzw. genau vier Hexadezimalziffern, groß oder klein geschrieben. Die Buchstaben `x` und `u` selbst sind klein. `\xHH` steht für den Codepunkt U+00HH, nicht für ein Byte. Zeichen außerhalb der BMP werden entweder mit `\u{…}` oder wie in JSON als Surrogatpaar aus zwei `\uXXXX`-Sequenzen geschrieben.
 - **`\u{…}`** enthält zwischen den Klammern mindestens eine Hexadezimalziffer, groß oder klein geschrieben; führende Nullen sind erlaubt, `_` und Leerraum nicht. Der Wert DARF NICHT größer als 10FFFF sein. Die Sequenz steht für genau diesen Codepunkt: `\u{1F600}` ist gleichbedeutend mit dem Surrogatpaar `\uD83D\uDE00`, `\u{e4}` mit `\u00E4`. Ein Wert im Surrogatbereich (D800 bis DFFF) ist ein Fehler; ein einzelnes Surrogat lässt sich nur wie in JSON mit `\uXXXX` schreiben.
 - **`\0`** DARF NICHT unmittelbar von einer Dezimalziffer gefolgt sein. `\1` bis `\9` sind Fehler. Oktale Escape-Sequenzen gibt es damit nicht.
-- **Jede andere Folge mit `\` ist ein Fehler.** Das gilt insbesondere für `\` vor einem beliebigen sonstigen Zeichen (`\a`, `\-`, `\N`, `\X41`) und für `\` vor einem Zeilenumbruch (keine Zeilenfortsetzung).
+- **Zeilenfortsetzung.** Ein `\`, auf das unmittelbar ein Zeilenumbruch (LF, CR oder CR LF, siehe 5.2) folgt, trägt nichts zum Wert bei: Weder der umgekehrte Schrägstrich noch der Zeilenumbruch erscheinen darin. Der Zeilenumbruch MUSS unmittelbar auf das `\` folgen; ein Leerzeichen oder Tabulator nach dem `\` ist ein Fehler. Anders als in ECMAScript sind U+2028 und U+2029 auch hier keine Zeilenumbrüche. Wie sich eine Zeilenfortsetzung auf die Einrückung der folgenden Zeile auswirkt, bestimmt 8.3.
+- **Jede andere Folge mit `\` ist ein Fehler.** Das gilt insbesondere für `\` vor einem beliebigen sonstigen Zeichen (`\a`, `\-`, `\N`, `\X41`) und für `\` vor einem Leerzeichen oder Tabulator.
 
 ```xtjson
 [
@@ -393,44 +399,28 @@ Regeln:
 ]
 ```
 
-### 8.3 Mehrzeilige Strings
+### 8.3 Zeilenumbrüche in Strings
 
-```abnf
-ml-dq-string  = 3DQUOTE *ml-dq-item 3DQUOTE
-ml-sq-string  = 3SQUOTE *ml-sq-item 3SQUOTE
-ml-dq-item    = [ DQUOTE [ DQUOTE ] ] ( dq-unescaped / ml-plain )
-ml-sq-item    = [ SQUOTE [ SQUOTE ] ] ( sq-unescaped / ml-plain )
-ml-plain      = escape-seq / newline / %x09
-```
+Ein String, der einen Zeilenumbruch enthält, reicht über mehrere Zeilen. Sein Wert ist dann nicht einfach die Folge seiner Zeichen: Leerraum am Zeilenende wird entfernt, und Einrückung kann entfernt werden. Zeilenfortsetzungen (8.2) verbinden Zeilen ohne Zeilenumbruch.
 
-Ein mehrzeiliger String beginnt und endet mit drei doppelten (`"""`) oder drei einfachen (`'''`) Anführungszeichen. Er ist an jeder Stelle erlaubt, an der ein Wert stehen darf; als Name ist er nicht erlaubt (7.2). Beide Formen sind gleichwertig. Er darf auch in einer einzigen Zeile stehen.
+„Leerraum“ sind in diesem Abschnitt nur unmaskierte Leerzeichen (U+0020) und Tabulatoren (U+0009). Alle anderen Leerraumzeichen aus 5.1 sind hier gewöhnlicher Text. Der Wert eines Strings ergibt sich in vier Schritten:
 
-**Schreibweise**
-
-- **Erkennung.** Beginnt ein String mit drei gleichen Anführungszeichen in Folge, ist er immer ein mehrzeiliger String.
-- **Ende.** Der String endet am ersten Vorkommen von drei gleichen, nicht maskierten Begrenzerzeichen in Folge. Ein oder zwei Begrenzerzeichen in Folge dürfen unmaskiert im Text stehen, jedoch nicht unmittelbar vor dem schließenden Begrenzer; dort werden sie maskiert (`\"` bzw. `\'`). Das jeweils andere Anführungszeichen darf beliebig oft unmaskiert stehen.
-- **Zeilenumbrüche und Tabulator.** Zeilenumbrüche nach 5.2 und U+0009 dürfen unmaskiert im String stehen. Alle anderen Steuerzeichen (U+0000 bis U+001F) MÜSSEN wie in einzeiligen Strings maskiert werden.
-- **Escape-Sequenzen** gelten wie in 8.2. Ein `\` vor einem Zeilenumbruch ist ein Fehler.
-- Die Zeichenfolgen `//`, `/*` und `#` haben im String keine Sonderbedeutung, und ein Zeilenumbruch im String ist kein Trenner nach 7.3.
-
-**Wert**
-
-„Leerraum“ sind in diesem Abschnitt nur unmaskierte Leerzeichen (U+0020) und Tabulatoren (U+0009). Alle anderen Leerraumzeichen aus 5.1 sind hier gewöhnlicher Text. Der Wert eines mehrzeiligen Strings ergibt sich in vier Schritten:
-
-1. **Zeilen bilden.** Der Text zwischen den Begrenzern wird an jedem unmaskierten Zeilenumbruch in Zeilen zerlegt. Die erste Zeile beginnt nach dem öffnenden Begrenzer, die letzte endet vor dem schließenden. Ein Text ohne Zeilenumbruch besteht aus einer einzigen Zeile. Escape-Sequenzen wie `\n` sind keine Zeilenumbrüche in diesem Sinn.
-2. **Leerraum am Zeilenende entfernen.** Aus jeder Zeile außer der letzten wird der unmaskierte Leerraum an ihrem Ende entfernt. Das geschieht immer. Die letzte Zeile bleibt unverändert, weil sie nicht an einem Zeilenende, sondern am schließenden Begrenzer endet.
-3. **Einrückung entfernen.** Dieser Schritt gilt nur, wenn der String mit einer Leerzeile beginnt, das heißt: wenn es mindestens zwei Zeilen gibt und die erste nach Schritt 2 leer ist.
+1. **Zeilen bilden.** Der Text zwischen den Begrenzern wird an jedem Zeilenumbruch nach 5.2 in Zeilen zerlegt, auch am Zeilenumbruch einer Zeilenfortsetzung. Die erste Zeile beginnt nach dem öffnenden Begrenzer, die letzte endet vor dem schließenden. Ein Text ohne Zeilenumbruch besteht aus einer einzigen Zeile. Escape-Sequenzen wie `\n` sind keine Zeilenumbrüche in diesem Sinn. Das `\` einer Zeilenfortsetzung bleibt bis Schritt 4 am Ende seiner Zeile stehen.
+2. **Leerraum am Zeilenende entfernen.** Aus jeder Zeile außer der letzten wird der Leerraum an ihrem Ende entfernt. Das geschieht immer. Eine Zeile, die mit dem `\` einer Zeilenfortsetzung endet, hat keinen Leerraum an ihrem Ende; Leerraum vor dem `\` bleibt erhalten. Die letzte Zeile bleibt unverändert, weil sie nicht an einem Zeilenende, sondern am schließenden Begrenzer endet.
+3. **Einrückung entfernen.** Dieser Schritt gilt nur, wenn der String mit einer Leerzeile beginnt, das heißt: wenn es mindestens zwei Zeilen gibt und die erste nach Schritt 2 leer ist. Eine Zeile, die das `\` einer Zeilenfortsetzung enthält, ist nicht leer.
    1. Die erste Zeile entfällt.
    2. Die Einrückung einer Zeile ist die Folge der Leerraumzeichen an ihrem Anfang; ihre Länge ist die Anzahl dieser Zeichen. Ein Tabulator zählt als ein Zeichen.
    3. Bestimmt wird die kleinste Einrückung aller nicht leeren Zeilen. Die letzte Zeile zählt dabei immer mit, auch wenn sie leer ist oder nur aus Leerraum besteht.
    4. Aus jeder Zeile werden so viele Zeichen am Anfang entfernt, wie die kleinste Einrückung angibt. Leere Zeilen bleiben leer. Die entfernten Zeichen MÜSSEN in allen Zeilen, aus denen Zeichen entfernt werden, dieselben sein; andernfalls ist der String ein Fehler, etwa wenn eine Zeile mit einem Tabulator und eine andere mit Leerzeichen eingerückt ist.
-4. **Zusammensetzen.** Die Zeilen werden mit je einem U+000A verbunden, unabhängig davon, ob der Zeilenumbruch in der Datei als LF, CR oder CR LF geschrieben ist. Danach werden die Escape-Sequenzen aufgelöst.
+4. **Zusammensetzen.** Die Zeilen werden mit je einem U+000A verbunden, unabhängig davon, ob der Zeilenumbruch in der Datei als LF, CR oder CR LF geschrieben ist. Danach werden die Escape-Sequenzen aufgelöst; eine Zeilenfortsetzung entfernt dabei ihr `\` zusammen mit dem folgenden U+000A.
 
 Folgen dieser Regeln:
 
-- Folgt auf den öffnenden Begrenzer bis zum Zeilenumbruch nichts oder nur Leerraum, gehören dieser Leerraum und der Zeilenumbruch nicht zum Wert. Ein Zeilenumbruch vor dem schließenden Begrenzer gehört zum Wert.
+- Ein String ohne Zeilenumbruch wird durch die Schritte 1 bis 3 nicht verändert. Sein Wert ist derselbe wie in JSON.
+- Folgt auf den öffnenden Begrenzer bis zum Zeilenumbruch nichts oder nur Leerraum, gehören dieser Leerraum und der Zeilenumbruch nicht zum Wert. Ein Zeilenumbruch vor dem schließenden Begrenzer gehört zum Wert, außer er ist als Zeilenfortsetzung geschrieben.
 - Die Stellung des schließenden Begrenzers bestimmt mit, wie viel Einrückung entfernt wird: Steht er so weit links wie der Text, verschwindet die gemeinsame Einrückung ganz; steht er weiter links, bleibt der Unterschied erhalten; steht er am Zeilenanfang, wird nichts entfernt; steht er weiter rechts, bleibt der überschüssige Leerraum vor ihm am Ende des Werts stehen.
-- Beginnt der Text in der Zeile des öffnenden Begrenzers, wird keine Einrückung entfernt.
+- Beginnt der Text in der Zeile des öffnenden Begrenzers, wird keine Einrückung entfernt. Das gilt auch, wenn die erste Zeile nur aus dem `\` einer Zeilenfortsetzung besteht.
+- Eine Zeilenfortsetzung verbindet zwei Zeilen. Die Einrückung der folgenden Zeile wird in Schritt 3 wie die jeder anderen Zeile entfernt; Leerraum vor dem `\` bleibt erhalten.
 - Leerraum, der am Zeilenende oder am Zeilenanfang erhalten bleiben soll, wird als Escape-Sequenz geschrieben, etwa `\x20` oder `\t`.
 - Leerzeilen innerhalb des Textes bleiben als Leerzeilen erhalten und beeinflussen die Einrückung nicht.
 
@@ -438,29 +428,36 @@ In der folgenden Tabelle steht `·` für ein Leerzeichen und `⏎` für einen Ze
 
 | Geschrieben | Wert | Erläuterung |
 |---|---|---|
-| `"""⏎··a⏎··b⏎··"""` | `"a\nb\n"` | gemeinsame Einrückung 2 entfernt |
-| `"""⏎····a⏎··"""` | `"  a\n"` | der schließende Begrenzer steht weiter links |
-| `"""⏎··a⏎"""` | `"  a\n"` | der schließende Begrenzer steht am Zeilenanfang |
-| `"""⏎··a⏎····"""` | `"a\n  "` | der schließende Begrenzer steht weiter rechts |
-| `"""⏎··a⏎⏎··b"""` | `"a\n\nb"` | die Leerzeile zählt nicht mit |
-| `"""a··⏎··b"""` | `"a\n  b"` | kein Beginn mit Leerzeile: nur das Zeilenende wird bereinigt |
-| `"""⏎a··⏎b\x20⏎"""` | `"a\nb \n"` | maskierter Leerraum am Zeilenende bleibt |
-| `"""a··"""` | `"a  "` | kein Zeilenende, nichts entfernt |
+| `"⏎··a⏎··b⏎··"` | `"a\nb\n"` | gemeinsame Einrückung 2 entfernt |
+| `"⏎····a⏎··"` | `"  a\n"` | der schließende Begrenzer steht weiter links |
+| `"⏎··a⏎"` | `"  a\n"` | der schließende Begrenzer steht am Zeilenanfang |
+| `"⏎··a⏎····"` | `"a\n  "` | der schließende Begrenzer steht weiter rechts |
+| `"⏎··a⏎⏎··b"` | `"a\n\nb"` | die Leerzeile zählt nicht mit |
+| `"a··⏎··b"` | `"a\n  b"` | kein Beginn mit Leerzeile: nur das Zeilenende wird bereinigt |
+| `"⏎a··⏎b\x20⏎"` | `"a\nb \n"` | maskierter Leerraum am Zeilenende bleibt |
+| `"a··"` | `"a  "` | kein Zeilenende, nichts entfernt |
+| `"⏎··a·\⏎··b⏎··"` | `"a b\n"` | Zeilenfortsetzung: das Leerzeichen vor `\` bleibt, die Einrückung der nächsten Zeile wird entfernt |
+| `"⏎··a\⏎··"` | `"a"` | Zeilenfortsetzung vor dem schließenden Begrenzer: kein Zeilenumbruch am Ende |
+| `"a\⏎··b"` | `"a  b"` | kein Beginn mit Leerzeile: keine Einrückung entfernt |
+| `"\⏎··a"` | `"  a"` | die erste Zeile enthält `\` und ist nicht leer |
 
 ```xtjson
 {
-  sql: '''
-    SELECT "name"
+  sql: "
+    SELECT name
       FROM kunden
      WHERE ort = 'Köln'
-    '''
-  hinweis: """
+    "
+  hinweis: '
       Zwei Zeichen Einrückung bleiben,
       weil der schließende Begrenzer weiter links steht.
-    """
-  direkt: """Der Text beginnt in der Zeile des Begrenzers:
-    hier wird keine Einrückung entfernt."""
-  einzeilig: """auch in einer Zeile erlaubt"""
+    '
+  direkt: "Der Text beginnt in der Zeile des Begrenzers:
+    hier wird keine Einrückung entfernt."
+  lange_zeile: "
+    Eine lange Zeile lässt sich mit \
+    Zeilenfortsetzungen über mehrere Zeilen schreiben.\
+    "
 }
 ```
 
@@ -468,10 +465,10 @@ JSON-Äquivalent:
 
 ```json
 {
-  "sql": "SELECT \"name\"\n  FROM kunden\n WHERE ort = 'Köln'\n",
+  "sql": "SELECT name\n  FROM kunden\n WHERE ort = 'Köln'\n",
   "hinweis": "  Zwei Zeichen Einrückung bleiben,\n  weil der schließende Begrenzer weiter links steht.\n",
   "direkt": "Der Text beginnt in der Zeile des Begrenzers:\n    hier wird keine Einrückung entfernt.",
-  "einzeilig": "auch in einer Zeile erlaubt"
+  "lange_zeile": "Eine lange Zeile lässt sich mit Zeilenfortsetzungen über mehrere Zeilen schreiben."
 }
 ```
 
@@ -631,7 +628,7 @@ Das **JSON-Äquivalent** eines XTJSON-Dokuments entsteht durch folgende Schritte
 2. **Implizites Wurzelobjekt:** Die Member werden in `{` `}` eingeschlossen.
 3. **Trenner:** Zwischen je zwei aufeinanderfolgenden Elementen steht genau ein Komma. Abschließende Kommas entfallen.
 4. **Namen:** Ein Bezeichner an Namensposition wird zum JSON-String mit derselben Zeichenfolge.
-5. **Strings:** Ein `'`-String wird zum `"`-String mit demselben Inhalt; unmaskierte `"` werden zu `\"`. Escape-Sequenzen, die JSON nicht kennt, werden in allen String-Formen ersetzt: `\'` durch `'`, `\v` durch `\u000B`, `\0` durch `\u0000`, `\xHH` durch `\u00HH`, `\u{…}` durch die `\uXXXX`-Sequenz desselben Codepunkts, oberhalb von U+FFFF durch das entsprechende Surrogatpaar. Ein mehrzeiliger String wird zum `"`-String, der den Wert nach 8.3 darstellt; Zeichen, die in einem JSON-String nicht unmaskiert stehen dürfen (`"`, `\` und Steuerzeichen wie Zeilenumbruch und Tabulator), werden dabei maskiert.
+5. **Strings:** Ein `'`-String wird zum `"`-String mit demselben Inhalt; unmaskierte `"` werden zu `\"`. Escape-Sequenzen, die JSON nicht kennt, werden in beiden String-Formen ersetzt: `\'` durch `'`, `\v` durch `\u000B`, `\0` durch `\u0000`, `\xHH` durch `\u00HH`, `\u{…}` durch die `\uXXXX`-Sequenz desselben Codepunkts, oberhalb von U+FFFF durch das entsprechende Surrogatpaar. Ein String mit Zeilenumbruch wird zum `"`-String, der seinen Wert nach 8.3 darstellt; Zeilenfortsetzungen entfallen dabei, und Zeichen, die in einem JSON-String nicht unmaskiert stehen dürfen (`"`, `\` und Steuerzeichen wie Zeilenumbruch und Tabulator), werden maskiert.
 6. **Zahlen:** Aus Dezimalzahlen werden alle `_` entfernt; die Schreibweise bleibt sonst unverändert. Hexadezimale, oktale und binäre Zahlen werden zur dezimalen Ganzzahl desselben Werts, bei vorangestelltem `-` mit führendem Minuszeichen. Eine Zahl mit Suffix wird durch das Ergebnis der Umrechnung ersetzt, geschrieben als JSON-Zahl (9.5).
 7. **Benannte Werte:** `true`, `false` und `null` bleiben unverändert. Jeder andere benannte Wert wird durch den JSON-Wert ersetzt, den ihm seine Definition zuordnet (6.4).
 
@@ -671,13 +668,14 @@ Die Empfehlungen aus [I-JSON] für Protokolle gelten unverändert auch für XTJS
 ## 13. Sicherheitsaspekte
 
 - **Kein `eval`.** XTJSON ist keine Teilmenge von JavaScript oder einer anderen Programmiersprache und DARF NICHT durch Auswertung als Programmcode gelesen werden.
-- **Ressourcengrenzen.** Tief verschachtelte Strukturen, sehr lange Strings oder Zahlen sowie nicht abgeschlossene Blockkommentare und mehrzeilige Strings können Parser überlasten. Parser SOLLTEN Grenzen setzen (Abschnitt 11).
+- **Ressourcengrenzen.** Tief verschachtelte Strukturen, sehr lange Strings oder Zahlen sowie nicht abgeschlossene Blockkommentare und Strings können Parser überlasten. Parser SOLLTEN Grenzen setzen (Abschnitt 11).
 - **Abweichende Interpretation.** Verarbeiten zwei Komponenten dasselbe Dokument unterschiedlich, kann das Prüfungen aushebeln. Das betrifft vor allem doppelte Namen, die andere JSON-Werkzeuge anders behandeln können als in 7.2 festgelegt, und Zahlen außerhalb des exakten Bereichs. Wo ein Dokument sicherheitsrelevante Entscheidungen steuert, wird das I-JSON-Profil EMPFOHLEN.
 - **Definitionen.** Die Bedeutung eines Dokuments mit eigenen benannten Werten hängt von den Definitionen des Parsers ab. Zwei Parser mit unterschiedlichen Definitionen lesen dasselbe Dokument verschieden, oder einer lehnt es ab. Eigene Definitionen sind deshalb Teil der Schnittstelle zwischen Autor und Anwendung und SOLLTEN dokumentiert werden. Die Umrechnungen der Suffixe legt allein diese Spezifikation fest; ein Dokument kann weder Definitionen noch Code mitbringen.
 - **Verwechslung mit JSON.** Ein XTJSON-Dokument, das als JSON ausgegeben wird, führt bei strikten Empfängern zu Fehlern und bei nachlässigen zu uneinheitlichem Verhalten. Deshalb die Abgrenzung in K5.
 - **Kommentare.** Kommentare gehen bei der Abbildung auf JSON verloren und werden von Programmen nicht gesehen. Unsichtbare Zeichen und Zeichen zur Steuerung der Schreibrichtung in Kommentaren und Strings können den angezeigten Text vom verarbeiteten abweichen lassen; Werkzeuge SOLLTEN darauf hinweisen.
 - **U+2028 und U+2029.** Manche Editoren stellen diese Zeichen als Zeilenwechsel dar. In XTJSON beenden sie weder einen Zeilenkommentar noch trennen sie Elemente. Text, der in der Anzeige unter einem Zeilenkommentar steht, kann deshalb noch zum Kommentar gehören und wird dann nicht verarbeitet. Werkzeuge SOLLTEN diese Zeichen außerhalb von Strings sichtbar machen oder davor warnen.
-- **Mehrzeilige Strings.** Leerraum am Zeilenende und gegebenenfalls die Einrückung gehören nicht zum Wert (8.3). Der Wert kann deshalb vom Schriftbild abweichen. Wo jedes Zeichen zählt, etwa bei Schlüsselmaterial oder signierten Texten, wird Leerraum besser als Escape-Sequenz geschrieben.
+- **Strings über mehrere Zeilen.** Leerraum am Zeilenende und gegebenenfalls die Einrückung gehören nicht zum Wert (8.3). Der Wert kann deshalb vom Schriftbild abweichen. Wo jedes Zeichen zählt, etwa bei Schlüsselmaterial oder signierten Texten, wird Leerraum besser als Escape-Sequenz geschrieben.
+- **Fehlendes schließendes Anführungszeichen.** Weil ein String über mehrere Zeilen reichen darf, endet ein String mit vergessenem schließendem Anführungszeichen nicht am Zeilenende: Die folgenden Zeilen gehören bis zum nächsten passenden Anführungszeichen zum String. Der Fehler wird dann weit entfernt von seiner Ursache gemeldet, und in seltenen Fällen bleibt das Dokument mit einem anderen Wert gültig. Werkzeuge SOLLTEN die Ausdehnung von Strings über mehrere Zeilen sichtbar machen.
 
 ---
 
@@ -699,7 +697,7 @@ named-value    = identifier                  ; true, false, null und
 object         = "{" S [ member-list S ] "}"
 member-list    = member *( item-sep member ) [ S "," ]
 member         = name S ":" S value
-name           = dq-string / sq-string / identifier
+name           = string / identifier
 identifier     = id-start *id-continue
 id-start       = ALPHA / "_" / "$"
 id-continue    = ALPHA / DIGIT / "_" / "$"
@@ -729,18 +727,15 @@ non-star       = %x00-29 / %x2B-10FFFF
 non-star-slash = %x00-29 / %x2B-2E / %x30-10FFFF
 
 ; ---------- Strings ----------
-string         = ml-dq-string / ml-sq-string / dq-string / sq-string
-dq-string      = DQUOTE *( dq-unescaped / escape-seq ) DQUOTE
-sq-string      = SQUOTE *( sq-unescaped / escape-seq ) SQUOTE
-ml-dq-string   = 3DQUOTE *ml-dq-item 3DQUOTE
-ml-sq-string   = 3SQUOTE *ml-sq-item 3SQUOTE
-ml-dq-item     = [ DQUOTE [ DQUOTE ] ] ( dq-unescaped / ml-plain )
-ml-sq-item     = [ SQUOTE [ SQUOTE ] ] ( sq-unescaped / ml-plain )
-ml-plain       = escape-seq / newline / %x09
+string         = dq-string / sq-string
+dq-string      = DQUOTE *( dq-unescaped / str-plain / escape-seq ) DQUOTE
+sq-string      = SQUOTE *( sq-unescaped / str-plain / escape-seq ) SQUOTE
+str-plain      = %x09 / newline              ; HT und Zeilenumbrüche (8.1)
 dq-unescaped   = %x20-21 / %x23-5B / %x5D-10FFFF     ; ohne " und \
 sq-unescaped   = %x20-26 / %x28-5B / %x5D-10FFFF     ; ohne ' und \
 escape-seq     = %x5C ( char-escape / null-escape / hex-escape /
-                        unicode-escape / codepoint-escape )
+                        unicode-escape / codepoint-escape / newline )
+                                             ; \ vor newline: Zeilenfortsetzung
 char-escape    = %x22 / %x27 / %x5C / %x2F /         ; " ' \ /
                  %x62 / %x66 / %x6E / %x72 /         ; b f n r
                  %x74 / %x76                         ; t v
@@ -781,8 +776,9 @@ Hinweise zur Zerlegung in Tokens (informativ):
 - Ob ein `named-value` definiert ist, entscheidet nicht die Grammatik, sondern die Menge der Definitionen (6.4).
 - Ein Zeilenkommentar reicht stets bis zum nächsten Zeilenumbruch: `eol` verlangt nach ihm ein `newline`, und `non-eol` schließt nur U+000A und U+000D aus. Nur am Dokumentende darf der Zeilenumbruch fehlen.
 - Die Folge CR LF ist immer ein einziger `newline`, nie zwei.
-- Für mehrzeilige Strings beschreibt die Grammatik nur die Schreibweise. Ihr Wert ergibt sich aus den Schritten in 8.3.
-- Ein Parser kommt mit zwei Zeichen Vorausschau (für `"""` und `'''`) und der Information „seit dem letzten Token kam außerhalb eines Blockkommentars ein Zeilenumbruch vor“ aus. Nur am Dokumentanfang wird ein Token weiter vorausgeschaut (6.2).
+- Für Strings beschreibt die Grammatik nur die Schreibweise. Ihr Wert ergibt sich aus den Schritten in 8.3.
+- Drei Anführungszeichen in Folge (`"""` oder `'''`) begrenzen keinen String: Sie sind ein leerer String, auf den unmittelbar der Anfang eines weiteren Strings folgt, und damit immer ein Fehler (7.3).
+- Außer dem aktuellen Zeichen braucht ein Parser nur die Information „seit dem letzten Token kam außerhalb eines Blockkommentars ein Zeilenumbruch vor“. Nur am Dokumentanfang wird ein Token weiter vorausgeschaut (6.2).
 
 ## Anhang B – Beispiele
 
@@ -816,11 +812,11 @@ limits: {
   banner: 'Willkommen bei demo-service\x21'
 }
 
-// mehrzeiliger String: die gemeinsame Einrückung gehört nicht zum Wert
-motd: """
+// String über mehrere Zeilen: die gemeinsame Einrückung gehört nicht zum Wert
+motd: "
   Willkommen.
   Wartung: sonntags 02:00 Uhr.
-  """
+  "
 
 tags: [
   'intern'
@@ -887,23 +883,22 @@ In den Tabellen steht `⏎` für einen Zeilenumbruch. Die Tabellen gelten für e
 | `{größe: 1}` | Nicht-ASCII-Zeichen im Bezeichner |
 | `{a.b: 1}` | `.` ist im Bezeichner nicht erlaubt |
 | `{max-age: 1}` | `-` ist im Bezeichner nicht erlaubt |
-| `{"""a""": 1}` | mehrzeiliger String als Name |
 
 **Strings**
 
 | Text | Grund |
 |---|---|
 | `'It's'` | `'` im `'`-String nicht maskiert |
-| `"a` ⏎ `b"` | Zeilenumbruch im einzeiligen String |
-| `"a\` ⏎ `b"` | keine Zeilenfortsetzung |
+| `"a` VT `b"` | U+000B nicht maskiert |
+| `"a\` SPACE ⏎ `b"` | Leerraum zwischen `\` und Zeilenumbruch |
 | `"\a"`, `"\N"`, `"\-"` | unbekannte Escape-Sequenz |
 | `"\1"` und `"\01"` | Ziffer nach `\` bzw. nach `\0` |
 | `"\x4"` und `"\u12"` | zu wenige Hexadezimalziffern |
 | `"\u{110000}"`, `"\u{D800}"` | Codepunkt größer als U+10FFFF bzw. im Surrogatbereich |
 | `"\u{}"`, `"\u{1_F600}"`, `"\u{ 41 }"`, `"\U{41}"` | keine Ziffer, `_` oder Leerraum in den Klammern, großes `U` |
-| `"""abc` | mehrzeiliger String nicht abgeschlossen |
-| `"""a""""` | Anführungszeichen unmittelbar vor dem schließenden Begrenzer nicht maskiert |
-| `"""⏎` TAB `a⏎··b⏎·"""` | die entfernte Einrückung ist nicht in allen Zeilen gleich |
+| `"abc` | String nicht abgeschlossen |
+| `"""a"""` | drei Anführungszeichen begrenzen keinen String: ein leerer String, gefolgt von weiteren Strings ohne Trenner |
+| `"⏎` TAB `a⏎··b⏎·"` | die entfernte Einrückung ist nicht in allen Zeilen gleich |
 
 **Leerraum, Zeilenumbrüche und Kommentare**
 
@@ -944,7 +939,8 @@ Die folgenden, aus anderen JSON-Dialekten bekannten Erweiterungen gehören **nic
 - Objekte und Arrays als benannte Werte
 - Definitionen innerhalb des Dokuments: Ein Dokument kann keine benannten Werte und keine Suffixe festlegen
 - eigene Suffixe der Anwendung; Suffixe mit anderen Zeichen als denen eines Bezeichners (`50%`) oder mit Leerraum vor dem Suffix; Suffixe, die etwas anderes als eine Zahl ergeben
-- Zeilenfortsetzung mit `\`, Heredocs und Roh-Strings ohne Escape-Sequenzen
+- Strings mit drei Anführungszeichen als Begrenzer (`"""…"""`, `'''…'''`), Heredocs und Roh-Strings ohne Escape-Sequenzen
+- eine Zeilenfortsetzung mit Leerraum zwischen `\` und Zeilenumbruch
 - `\` vor beliebigen Zeichen (`\a` für `a`) und oktale Escape-Sequenzen (`\1`, `\012`)
 - `+` als Vorzeichen, `.5`, `5.` sowie `Infinity` und `NaN` als Zahlen
 - Nachkommateil oder Exponent bei hexadezimalen, oktalen und binären Zahlen
@@ -966,23 +962,26 @@ Informativ. Festlegungen an Stellen, an denen mehrere Lösungen möglich waren, 
 | Doppelte Namen | das letzte Member gilt; im I-JSON-Profil verboten | Ein festes Verhalten verhindert, dass zwei Parser dasselbe Dokument verschieden lesen. Ein generelles Verbot würde gültige JSON-Texte ausschließen und K1 verletzen. |
 | Zeichen in Bezeichnern | ASCII-Buchstaben, Ziffern, `_`, `$` | Braucht keine Unicode-Tabellen und vermeidet verwechselbare Zeichen. Namen wie `max-age` stehen in Anführungszeichen. |
 | `true`/`false`/`null` als Name | erlaubt | An Namensposition eindeutig; vermeidet eine Sonderregel. |
-| Zeilenumbruch | LF, CR oder CR LF; CR LF zählt als einer | Eine einzige, überall gleiche Definition für Trenner, Zeilenkommentare und mehrzeilige Strings, unabhängig von den Zeilenenden der Datei. |
+| Zeilenumbruch | LF, CR oder CR LF; CR LF zählt als einer | Eine einzige, überall gleiche Definition für Trenner, Zeilenkommentare und Strings, unabhängig von den Zeilenenden der Datei. |
 | Zusätzlicher Leerraum | alle Leerraum- und Zeilenendezeichen von ECMAScript 2026; Trenner ist nur der Zeilenumbruch nach 5.2 | So hängt die Struktur eines Dokuments nicht von Zeichen ab, die Editoren uneinheitlich oder gar nicht darstellen. Anders als in ECMAScript sind U+2028 und U+2029 deshalb keine Zeilenenden. |
 | Kategorie Zs | als feste Liste aufgeführt | Parser brauchen keine Unicode-Tabellen, und die Grammatik ändert sich nicht mit neuen Unicode-Versionen. ECMAScript verweist dagegen auf die jeweils aktuelle Kategorie. |
 | U+FEFF | überall Leerraum, nicht nur am Dokumentanfang | Folgt aus der Übernahme der ECMAScript-Leerraumzeichen. Eine Sonderregel für das BOM am Dokumentanfang ist damit nicht nötig. |
 | Zeilenumbruch im Blockkommentar | zählt nicht als Trenner | Ein Blockkommentar verhält sich überall wie ein Leerzeichen und ändert nie die Struktur. Die Trennerregel ist damit vollständig in ABNF ausdrückbar. |
-| Zusätzliche Escape-Sequenzen | nur `\'`, `\v`, `\0`, `\xHH` und `\u{…}` | Zeilenfortsetzung und `\` vor beliebigen Zeichen gibt es nicht: Einzeilige Strings bleiben einzeilig, und ein Tippfehler wie `\N` statt `\n` wird als Fehler gemeldet, statt stillschweigend `N` zu ergeben. |
-| Mehrzeilige Strings: Escape-Sequenzen | in `"""` und `'''` gleichermaßen wirksam | Beide Formen bleiben gleichwertig, wie bei einzeiligen Strings. |
-| Mehrzeilige Strings: Ende | am ersten `"""` bzw. `'''` | Einfache Regel; ein Anführungszeichen direkt vor dem Ende wird maskiert. |
-| Mehrzeilige Strings: Zeilenenden | CR und CR LF werden zu LF | Der Wert hängt nicht davon ab, mit welchen Zeilenenden die Datei gespeichert ist. |
-| Mehrzeilige Strings: Tabulator | unmaskiert erlaubt | Mit Tabulatoren eingerückter Text soll kein Fehler sein. |
-| Mehrzeilige Strings: Leerraum am Zeilenende | unmaskierter Leerraum vor einem Zeilenumbruch wird immer entfernt | Unsichtbare Zeichen am Zeilenende sollen den Wert nicht verändern. Vor dem schließenden Begrenzer ist Leerraum sichtbar und bleibt deshalb erhalten. |
-| Mehrzeilige Strings: Einrückung | die kleinste Einrückung wird entfernt, wenn der String mit einer Leerzeile beginnt | Der Text kann mit der umgebenden Struktur eingerückt werden. Wer die Einrückung behalten will, beginnt den Text in der Zeile des öffnenden Begrenzers. |
-| Mehrzeilige Strings: letzte Zeile | zählt bei der kleinsten Einrückung immer mit | Über die Stellung des schließenden Begrenzers lässt sich festlegen, wie viel Einrückung erhalten bleibt. |
-| Mehrzeilige Strings: Leerzeilen | zählen bei der kleinsten Einrückung nicht mit | Sonst wäre die kleinste Einrückung bei jedem Text mit Absätzen null. |
-| Mehrzeilige Strings: Maß der Einrückung | Anzahl der Zeichen; ein Tabulator zählt als eines; die entfernten Zeichen müssen in allen Zeilen gleich sein | Keine Annahme über Tabulatorbreiten. Gemischte Einrückung wird als Fehler gemeldet, statt den Text unbemerkt zu verschieben. |
-| Mehrzeilige Strings: als Name | nicht erlaubt | Ein Name über mehrere Zeilen ist fast immer ein Versehen. |
-| Mehrzeilige Strings: was als Leerraum gilt | nur unmaskierte Leerzeichen und Tabulatoren | Andere Leerraumzeichen können zum Text gehören, etwa U+3000 am Absatzanfang oder U+00A0 am Zeilenende. |
+| Zusätzliche Escape-Sequenzen | nur `\'`, `\v`, `\0`, `\xHH`, `\u{…}` und die Zeilenfortsetzung | `\` vor beliebigen Zeichen gibt es nicht: Ein Tippfehler wie `\N` statt `\n` wird als Fehler gemeldet, statt stillschweigend `N` zu ergeben. |
+| Strings über mehrere Zeilen | in beiden String-Formen erlaubt; keine eigene Schreibweise wie `"""` | Eine einzige String-Schreibweise ist leichter zu lernen und zu lesen. Ein unmaskierter Zeilenumbruch in einem String ist in JSON ein Fehler, daher ändert kein JSON-Text seine Bedeutung. |
+| Strings: Ende | am ersten nicht maskierten Begrenzer, wie in JSON | Einfache Regel. Ein vergessenes schließendes Anführungszeichen fällt deshalb nicht am Zeilenende auf (Abschnitt 13). |
+| Strings: Zeilenenden | CR und CR LF werden zu LF | Der Wert hängt nicht davon ab, mit welchen Zeilenenden die Datei gespeichert ist. |
+| Strings: Tabulator und Zeilenumbrüche | unmaskiert erlaubt; alle anderen Steuerzeichen, auch U+000B und U+000C, müssen maskiert werden | Mit Tabulatoren eingerückter Text soll kein Fehler sein. Vertikaltabulator und Seitenvorschub sind in den meisten Editoren unsichtbar und ließen den Wert vom Schriftbild abweichen. |
+| Strings: Leerraum am Zeilenende | unmaskierter Leerraum vor einem Zeilenumbruch wird immer entfernt | Unsichtbare Zeichen am Zeilenende sollen den Wert nicht verändern. Vor dem schließenden Begrenzer ist Leerraum sichtbar und bleibt deshalb erhalten. |
+| Strings: Einrückung | die kleinste Einrückung wird entfernt, wenn der String mit einer Leerzeile beginnt | Der Text kann mit der umgebenden Struktur eingerückt werden. Wer die Einrückung behalten will, beginnt den Text in der Zeile des öffnenden Begrenzers. |
+| Strings: letzte Zeile | zählt bei der kleinsten Einrückung immer mit | Über die Stellung des schließenden Begrenzers lässt sich festlegen, wie viel Einrückung erhalten bleibt. |
+| Strings: Leerzeilen | zählen bei der kleinsten Einrückung nicht mit | Sonst wäre die kleinste Einrückung bei jedem Text mit Absätzen null. |
+| Strings: Maß der Einrückung | Anzahl der Zeichen; ein Tabulator zählt als eines; die entfernten Zeichen müssen in allen Zeilen gleich sein | Keine Annahme über Tabulatorbreiten. Gemischte Einrückung wird als Fehler gemeldet, statt den Text unbemerkt zu verschieben. |
+| Strings: was als Leerraum gilt | nur unmaskierte Leerzeichen und Tabulatoren | Andere Leerraumzeichen können zum Text gehören, etwa U+3000 am Absatzanfang oder U+00A0 am Zeilenende. |
+| Strings über mehrere Zeilen als Name | erlaubt | Ein Name ist ein String wie jeder andere. Eine Sonderregel würde die String-Formen je nach Position unterscheiden. |
+| Zeilenfortsetzung und Einrückung | das `\` und sein Zeilenumbruch werden erst beim Zusammensetzen entfernt (Schritt 4 in 8.3); vorher wird die Einrückung der folgenden Zeile wie die jeder anderen Zeile entfernt | Eine lange Zeile lässt sich umbrechen und mit dem umgebenden Text einrücken. Leerraum vor dem `\` ist sichtbar und bleibt erhalten. Java-Textblöcke folgen demselben Modell. |
+| Zeilenfortsetzung: Leerraum nach `\` | Fehler | Sonst entschiede unsichtbarer Leerraum am Zeilenende darüber, ob der Zeilenumbruch zum Wert gehört. |
+| Zeilenfortsetzung: erste Zeile | eine erste Zeile, die das `\` einer Zeilenfortsetzung enthält, ist nicht leer; es wird keine Einrückung entfernt | Das `\` ist bis Schritt 4 ein Zeichen seiner Zeile, wie jede andere Escape-Sequenz. Eine Sonderregel ist nicht nötig. |
 | `\u{…}` | kein Wert im Surrogatbereich | Die Schreibweise steht für einen Codepunkt; einzelne Surrogate bleiben der aus JSON übernommenen Form `\uXXXX` vorbehalten. |
 | Nicht dezimale Zahlen | exakt oder Fehler | Bei Bitmasken und Adressen zählt jede Stelle; stilles Runden wäre ein schwer zu findender Fehler. |
 | Präfixe `0x`/`0o`/`0b` | Groß- und Kleinschreibung gleichwertig | Einheitlich mit `e`/`E` im Exponenten. Kleinschreibung wird empfohlen. |
@@ -1018,6 +1017,14 @@ Informativ. Festlegungen an Stellen, an denen mehrere Lösungen möglich waren, 
 - RFC 4648, „The Base16, Base32, and Base64 Data Encodings“.
 
 ## Änderungen
+
+**Entwurf 0.5**
+
+- 8: Es gibt nur noch eine Art von String, in `"` oder in `'`. Jeder String darf über mehrere Zeilen reichen; Zeilenumbrüche (LF, CR, CR LF) und Tabulatoren dürfen unmaskiert stehen, alle anderen Steuerzeichen, auch U+000B und U+000C, müssen weiterhin maskiert werden. Die Regeln zum Leerraum am Zeilenende und zum Entfernen der Einrückung (8.3) gelten für jeden String. Strings mit `"""` und `'''` gibt es nicht mehr; eine solche Schreibweise ist ein Fehler.
+- 8.2: Neue Escape-Sequenz: Ein `\` unmittelbar vor einem Zeilenumbruch (Zeilenfortsetzung) trägt nichts zum Wert bei. Leerraum zwischen `\` und Zeilenumbruch ist ein Fehler. Abschnitt 8.3 legt fest, wie sich eine Zeilenfortsetzung auf die Einrückung der folgenden Zeile auswirkt.
+- 6.2, 7.2: Jeder String ist als Name erlaubt, auch einer, der über mehrere Zeilen reicht.
+- Die Abschnitte 8.1 und 8.3 heißen jetzt „Begrenzer und Zeichen“ und „Zeilenumbrüche in Strings“.
+- 1, 2, 3, 5.1, 5.2, 10, 13 und die Anhänge A bis D sind an diese Änderungen angepasst.
 
 **Entwurf 0.4**
 

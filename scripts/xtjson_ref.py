@@ -1,4 +1,4 @@
-"""Referenz-Parser fuer XTJSON (Entwurf 0.4) + Pruefung der Beispiele der Spezifikation."""
+"""Referenz-Parser fuer XTJSON (Entwurf 0.5) + Pruefung der Beispiele der Spezifikation."""
 import json
 import re
 import sys
@@ -63,23 +63,35 @@ def apply_suffix(text, value, suf):
         return int(r) if r == r.to_integral_value() else float(r)
 
 
-def ml_value(out, rawidx, nlidx):
-    """Wert eines mehrzeiligen Strings nach 8.3 (Schritte 1 bis 4)."""
-    lines = [[]]
+def string_value(out, rawidx, nlidx, contidx):
+    """Wert eines Strings nach 8.3 (Schritte 1 bis 4).
+
+    out: Zeichen nach Aufloesung der Escape-Sequenzen; rawidx: Positionen
+    unmaskierter Zeichen; nlidx: Positionen der Zeilenumbrueche; contidx: die
+    davon, die zu einer Zeilenfortsetzung gehoeren. Das '\\' einer
+    Zeilenfortsetzung steht als Merkmal der Zeile (cont), nicht in out.
+    """
+    lines, cont = [[]], []
     for k, ch in enumerate(out):                       # 1. Zeilen bilden
         if k in nlidx:
+            cont.append(k in contidx)
             lines.append([])
         else:
             lines[-1].append((ch, k in rawidx))
+    cont.append(False)                                 # die letzte Zeile endet am Begrenzer
 
     def ws(t):
         return t[1] and t[0] in ' \t'
 
-    for ln in lines[:-1]:                              # 2. Leerraum am Zeilenende
-        while ln and ws(ln[-1]):
+    for i, ln in enumerate(lines[:-1]):                # 2. Leerraum am Zeilenende
+        while not cont[i] and ln and ws(ln[-1]):       # vor '\' bleibt er erhalten
             ln.pop()
-    if len(lines) > 1 and not lines[0]:                # 3. Einrueckung
-        lines = lines[1:]
+
+    def empty(i):
+        return not lines[i] and not cont[i]            # eine Zeile mit '\' ist nicht leer
+
+    if len(lines) > 1 and empty(0):                    # 3. Einrueckung
+        lines, cont = lines[1:], cont[1:]
 
         def indent(ln):
             k = 0
@@ -87,12 +99,17 @@ def ml_value(out, rawidx, nlidx):
                 k += 1
             return k
 
-        m = min(indent(ln) for i, ln in enumerate(lines) if ln or i == len(lines) - 1)
-        used = [ln for i, ln in enumerate(lines) if ln or i == len(lines) - 1]
+        used = [ln for i, ln in enumerate(lines) if not empty(i) or i == len(lines) - 1]
+        m = min(indent(ln) for ln in used)
         if len({tuple(ln[:m]) for ln in used}) > 1:
             raise XTJSONError('Einrueckung nicht in allen Zeilen gleich')
         lines = [ln[m:] for ln in lines]
-    return '\n'.join(''.join(ch for ch, _ in ln) for ln in lines)   # 4. Zusammensetzen
+    res = []                                           # 4. Zusammensetzen
+    for i, ln in enumerate(lines):
+        res.append(''.join(ch for ch, _ in ln))
+        if i < len(lines) - 1 and not cont[i]:         # Zeilenfortsetzung: kein U+000A
+            res.append('\n')
+    return ''.join(res)
 
 
 def tokenize(s):
@@ -117,22 +134,20 @@ def tokenize(s):
             nl = False
             i += 1
         elif c in '"\'':
-            ml = s.startswith(c * 3, i)
-            q = c * 3 if ml else c
-            j, out = i + len(q), []
-            rawidx, nlidx = set(), set()
+            j, out = i + 1, []
+            rawidx, nlidx, contidx = set(), set(), set()
             while True:
                 if j >= n:
                     raise XTJSONError('String nicht abgeschlossen')
                 d = s[j]
-                if s.startswith(q, j):
+                if d == c:
                     break
-                if ml and d in '\n\r':
+                if d in '\n\r':
                     nlidx.add(len(out))
                     out.append('\n')
                     j += 2 if s.startswith('\r\n', j) else 1
                     continue
-                if ml and d == '\t':
+                if d == '\t':
                     rawidx.add(len(out))
                     out.append(d)
                     j += 1
@@ -141,7 +156,12 @@ def tokenize(s):
                     raise XTJSONError('Steuerzeichen im String')
                 if d == '\\':
                     e = s[j + 1] if j + 1 < n else ''
-                    if e in ESC:
+                    if e and e in '\n\r':                 # Zeilenfortsetzung (8.2)
+                        contidx.add(len(out))
+                        nlidx.add(len(out))
+                        out.append('\n')
+                        j += 3 if s.startswith('\r\n', j + 1) else 2
+                    elif e in ESC:
                         out.append(ESC[e])
                         j += 2
                     elif e == 'u' and s[j + 2:j + 3] == '{':
@@ -168,10 +188,10 @@ def tokenize(s):
                     out.append(d)
                     j += 1
             # Surrogatpaare zusammenfuehren
-            val = (ml_value(out, rawidx, nlidx) if ml else ''.join(out)).encode('utf-16', 'surrogatepass').decode('utf-16', 'surrogatepass')
-            toks.append(('mstr' if ml else 'str', val, nl))
+            val = string_value(out, rawidx, nlidx, contidx).encode('utf-16', 'surrogatepass').decode('utf-16', 'surrogatepass')
+            toks.append(('str', val, nl))
             nl = False
-            i = j + len(q)
+            i = j + 1
         elif c == '-' or c.isdigit() and c.isascii():
             m = NUM.match(s, i)
             if not m:
@@ -244,7 +264,7 @@ class Parser:
             return obj
         if k == '[':
             return self.items()
-        if k in ('str', 'mstr', 'num'):
+        if k in ('str', 'num'):
             return v
         if k == 'id':
             if v in FIXED_VALUES:
@@ -337,15 +357,17 @@ def main(spec_path):
         '{a: 1} b: 2', 'a: 1 }', '[abc]', '{2fa: true}', '{größe: 1}', '{a.b: 1}',
         "'It's'", '/* offen', '0755', '0x', '0x_FF',
         '1__000', '1_', '1_.5', '0b102', '0o78', '0x1.8', '+1', '.5', '5.', 'NaN',
-        'Infinity', '"a\nb"', "'a\nb'", '{a: 1,, b: 2}', 'a: 1,,', '[1, 2', '{a: 1',
+        'Infinity', '{a: 1,, b: 2}', 'a: 1,,', '[1, 2', '{a: 1',
         '[1_]', '{max-age: 1}', '"\\1"', '"\\01"', '"\\x4"', '"\\xZZ"', '"\\u12"',
         '"\\\t"', '"a\x0bb"', '[1\x0b2]', '[1\x0c2]', '"a\\', '0XG', '0B2', '0O8',
         '"\\9"', 'a: 1\x0bb: 2', '[1\u20282]', '[1\u20292]', '[1\xa02]', '{a: 1 /* x\n */ b: 2}', '[1 /* \n */ 2]',
         '[1 // /* \n */ 2]', 'a: 1 /*\n*/ b: 2', '[1, // /* \n */ 2]', "[1,\u200b2]", "[1,\u00852]", "[1,\u180e2]", "[1\u30002]", "[1\ufeff2]", "a: 1\u2003b: 2",
         '"\\u{110000}"', '"\\u{}"', '"\\u{1_F600}"', '"\\u{ 41 }"', '"\\U{41}"', '"\\u{41"', '"\\u{G}"', '"\\u{0000110000}"', '[_1]', '-', '--1', '0x1E+3', '[0xg]', '50%', '10q', '10kbs', '10_k', '10MS', '1_s', '{a 1}', '{"a" "b"}',
         '{a: 1 /* x */ b: 2}', 'a:', ': 1', '1: 2', '[1] [2]', '1 2', '{} {}',
-        '"a\\\nb"', '"a\\\r\nb"', '"a\\\rb"', "'a\\\n  b'", '"\\ x"', '"\\a"', '"\\N"', '"\\-"',
-        '"\\X41"', '"\\ "', 'a: "x\\\ny"\nb: 2', '"\\e"', '"\\U0041"', "'\\.'",
+        '"\\ x"', '"\\a"', '"\\N"', '"\\-"',
+        '"\\X41"', '"\\ "', '"\\e"', '"\\U0041"', "'\\.'",
+        '"""a"""', "'''a'''", '""""""', '{"""a""": 1}', '"a\\ \nb"', '"a\\\t\nb"', '"a\\ \r\nb"',
+        '"a\x0cb"', '"a\\\u2028b"', '"abc', "'a\nb", '"\n\ta\n  b\n "',
     ]
     for t in invalid:
         try:
@@ -387,6 +409,9 @@ def main(spec_path):
         ('5min', 300), ('100ms', 0.1), ('50pct', 0.5), ('12px', 12), ('100L', 100), ('10n', 10),
         ('30s', 30), ('2h', 7200), ('1_0', 10),
         ('[[1,2\n3],{a:[{}]}]', [[1, 2, 3], {'a': [{}]}]),
+        ('"a\nb"', 'a\nb'), ("'a\nb'", 'a\nb'), ('"a\\\nb"', 'ab'), ('"a\\\r\nb"', 'ab'),
+        ('"a\\\rb"', 'ab'), ("'a\\\n  b'", 'a  b'), ('a: "x\\\ny"\nb: 2', {'a': 'xy', 'b': 2}),
+        ('"a\tb"', 'a\tb'), ('"a\\\\\nb"', 'a\\\nb'),
     ]
     for t, exp in valid:
         try:
