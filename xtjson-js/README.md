@@ -5,15 +5,16 @@ JSON for files that are written and maintained by people, such as
 configuration files. See the specification in
 [`docs/xtjson-spec-en.md`](../docs/xtjson-spec-en.md) (draft 0.4).
 
-- A single ES module in plain JavaScript, with TypeScript declarations.
+- ES modules in plain JavaScript, with TypeScript declarations. Importing
+  them has no side effects.
 - No dependencies. Runs in current browsers, Node.js (18 or later), Bun and Deno.
-- The API follows the global `JSON` object: `XTJSON.parse()` and
-  `XTJSON.stringify()`.
+- `parse()` and `stringify()` work like the functions of the global `JSON`
+  object; `Parser` and `Generator` keep validated options for many calls.
 
 ```js
-import XTJSON from '@cwkr/xtjson';
+import { parse, stringify } from '@cwkr/xtjson';
 
-const config = XTJSON.parse(`
+const config = parse(`
 # Service configuration
 name: 'demo-service'
 port: 8080            // a line break replaces the comma
@@ -24,7 +25,7 @@ motd: """
 `);
 // { name: 'demo-service', port: 8080, cache: 67108864, motd: 'Welcome.\n' }
 
-XTJSON.stringify(config, 2);
+stringify(config, 2);
 // name: "demo-service"
 // port: 8080
 // cache: 64mb
@@ -35,7 +36,7 @@ XTJSON.stringify(config, 2);
 
 ## API
 
-### `XTJSON.parse(text, reviver?, options?)`
+### `parse(text, reviver?, options?)`
 
 Parses an XTJSON document and returns its value.
 
@@ -47,9 +48,9 @@ Parses an XTJSON document and returns its value.
   [Options](#options).
 
 ```js
-XTJSON.parse(text, options);              // options only
-XTJSON.parse(text, reviver, options);     // both
-XTJSON.parse(text, null, options);        // also options only
+parse(text, options);              // options only
+parse(text, reviver, options);     // both
+parse(text, null, options);        // also options only
 ```
 
 Every JSON text gives the same value as with `JSON.parse`, with two
@@ -62,7 +63,7 @@ If a name occurs more than once in an object, the member that comes last in
 the document applies, as with `JSON.parse`. In I-JSON mode it is an error
 instead.
 
-### `XTJSON.stringify(value, replacer?, space?, options?)`
+### `stringify(value, replacer?, space?, options?)`
 
 Writes a value as an XTJSON document. `value`, `replacer` (a function or an
 array of names) and `space` work as in `JSON.stringify`: `toJSON` methods are
@@ -73,10 +74,10 @@ than `maxDepth` throw a `TypeError`. Unlike `JSON.stringify`, BigInt values
 can be written: they get the suffix `n` and read back as BigInt.
 
 ```js
-XTJSON.stringify(value, options);                    // options only
-XTJSON.stringify(value, 2, options);                 // space and options
-XTJSON.stringify(value, replacer, 2, options);       // all
-XTJSON.stringify(value, null, 2);                    // as with JSON.stringify
+stringify(value, options);                    // options only
+stringify(value, 2, options);                 // space and options
+stringify(value, replacer, 2, options);       // all
+stringify(value, null, 2);                    // as with JSON.stringify
 ```
 
 The output differs from `JSON.stringify` in these points:
@@ -135,16 +136,16 @@ Without options, only the predefined named values `true`, `false` and `null`
 are active. An application can define further named values:
 
 ```js
-import XTJSON, { Options } from '@cwkr/xtjson';
+import { parse, stringify, Options } from '@cwkr/xtjson';
 
 const options = new Options({
   namedValues: { nil: null, unknown: 'not specified' },
 });
 
-XTJSON.parse('ratio: 50pct\nowner: unknown\nboss: nil', options);
+parse('ratio: 50pct\nowner: unknown\nboss: nil', options);
 // { ratio: 0.5, owner: 'not specified', boss: null }
 
-XTJSON.stringify({ owner: 'not specified', boss: null }, options);
+stringify({ owner: 'not specified', boss: null }, options);
 // 'owner:unknown,boss:nil'
 ```
 
@@ -176,8 +177,9 @@ by 100), `px`, `L` and `n`. `s`, `px`, `L` and `n` leave the value
 unchanged; `n` in addition yields a BigInt, see [Numbers](#numbers).
 
 `Options` validates the options once. Create it once and reuse it for
-`parse` and `stringify`. A plain object with the same properties can be
-passed as well, but it is validated again on every call.
+`parse` and `stringify`, or create a [`Parser` or `Generator`](#parser-and-generator)
+with it. A plain object with the same properties can be passed as well, but
+`parse` and `stringify` validate it again on every call.
 
 ### Telling the arguments apart
 
@@ -198,8 +200,8 @@ throw a `TypeError`.
 ### I-JSON mode
 
 ```js
-XTJSON.parse(text, { ijson: true });
-XTJSON.stringify(value, 2, { ijson: true });
+parse(text, { ijson: true });
+stringify(value, 2, { ijson: true });
 ```
 
 With `ijson: true` the parser rejects documents that violate one of the two
@@ -231,10 +233,39 @@ including texts with duplicate names.
   array as a named value, an unknown option), invalid arguments, and
   values that `stringify` cannot write.
 
-### Named exports
+### Parser and generator
 
-`parse`, `stringify`, `Options` and `ParserError` are also available as
-named exports.
+```js
+import { Parser, Generator, Options } from '@cwkr/xtjson';
+
+const options = new Options({ namedValues: { nil: null } });
+const parser = new Parser(options);
+const generator = new Generator(options);
+
+parser.parse('owner: nil');                       // { owner: null }
+parser.parse(text, reviver);
+generator.stringify({ owner: null });             // 'owner:nil'
+generator.stringify(value, replacer, 2);
+```
+
+- `new Parser(options?)` and `new Generator(options?)` take an `Options`
+  instance or a plain object with the same properties and validate it once.
+  An instance can be reused for any number of calls.
+- `parser.parse(text, reviver?)` and
+  `generator.stringify(value, replacer?, space?)` work like `parse` and
+  `stringify` with these options. The arguments are positional: a reviver
+  must be a function, a replacer a function or an array, `space` a number or
+  a string; `null` and `undefined` mean none. Anything else is a `TypeError`.
+- The configuration and the state of a call are private. A call that starts
+  while the same instance is still busy, for example from a `toJSON` method
+  or a replacer, is carried out by a separate instance with the same options.
+
+`parse` and `stringify` use such an instance internally.
+
+### Exports
+
+The package has only named exports: `parse`, `stringify`, `Parser`,
+`Generator`, `Options` and `ParserError`. There is no default export.
 
 ## Numbers
 
@@ -252,7 +283,7 @@ named exports.
   numbers, as the specification gives the suffix `n` no effect on the value.
   The exponent of such a number may be at most 10000, so that a short text
   cannot demand a huge BigInt. A reviver receives the BigInt; note that
-  `JSON.stringify` cannot write it, `XTJSON.stringify` can.
+  `JSON.stringify` cannot write it, `stringify` can.
 
 ## Not yet implemented
 
@@ -260,6 +291,26 @@ named exports.
   SHOULD).
 
 ## Development
+
+The source consists of four modules:
+
+| File | Contents |
+|---|---|
+| `xtjson.js` | entry point of the package; only re-exports |
+| `parser.js` | `Parser`, `ParserError`, `parse` |
+| `generator.js` | `Generator`, `stringify` |
+| `shared.js` | `Options`, the character tables, the I-JSON check for strings and the assignment of optional arguments; used by parser and generator |
+
+Rules for the modules:
+
+- No side effects on import: at the top level there are only declarations,
+  literals and re-exports. Tables such as the character flags and the suffix
+  table are private static fields, built on first use.
+- State is kept in private fields and methods (`#name`).
+- Character codes (`LF`, `DQUOTE`, ...) are declared in each module that
+  uses them instead of being imported. V8 folds module-local constants but
+  reads imported bindings at run time, which makes the parser several
+  percent slower.
 
 ```sh
 npm test
@@ -282,9 +333,9 @@ dependencies to install. The tests also run with `bun test` and
   Of the rejected definitions in `tests_definitionen.py` only those that can
   be written as JSON are exported; the others (`NaN`, sets, other objects)
   are written again in `corpus.test.js`.
-- `test/parse.test.js` tests the API of `parse`, the I-JSON mode, error
-  messages and positions, numbers and limits.
-- `test/stringify.test.js` tests `stringify`: the call forms, the behaviour
+- `test/parse.test.js` tests the API of `parse` and `Parser`, the I-JSON
+  mode, error messages and positions, numbers and limits.
+- `test/stringify.test.js` tests `stringify` and `Generator`: the call forms, the behaviour
   of `JSON.stringify`, the output format, named values, multi-line strings,
   and a round trip of random values through `stringify` and `parse`.
 

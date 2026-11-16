@@ -1,6 +1,6 @@
 {
   "name": "@cwkr/xtjson",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "XTJSON parser and generator: a superset of JSON for files maintained by people, with an API like JSON",
   "keywords": [
     "xtjson",
@@ -41,6 +41,9 @@
   },
   "files": [
     "xtjson.js",
+    "parser.js",
+    "generator.js",
+    "shared.js",
     "xtjson.d.ts"
   ],
   "sideEffects": false,

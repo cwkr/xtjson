@@ -1,11 +1,12 @@
 /**
- * XTJSON parser and generator for JavaScript, modelled on the global `JSON`
- * object.
+ * XTJSON parser and generator for JavaScript. `parse` and `stringify` work
+ * like the functions of the global `JSON` object; `Parser` and `Generator`
+ * keep validated options for many calls.
  *
  * @example
- * import XTJSON from '@cwkr/xtjson';
- * const config = XTJSON.parse('name: "demo"\nport: 8080');
- * const text = XTJSON.stringify(config, 2);
+ * import { parse, stringify } from '@cwkr/xtjson';
+ * const config = parse('name: "demo"\nport: 8080');
+ * const text = stringify(config, 2);
  */
 
 /** A JSON value: the data model of XTJSON. */
@@ -164,11 +165,45 @@ export function stringify(value: any, space: string | number, options?: Options 
 /** Writes a value with options, without indentation. */
 export function stringify(value: any, options: Options | OptionsInit): string;
 
-export interface XTJSON {
-  parse: typeof parse;
-  stringify: typeof stringify;
-  readonly [Symbol.toStringTag]: 'XTJSON';
+/**
+ * Parser with fixed options. The options are validated once; the instance
+ * can be reused for many documents. Its state is private.
+ *
+ * @example
+ * const parser = new Parser({ namedValues: { nil: null } });
+ * const value = parser.parse('owner: nil');
+ */
+export class Parser {
+  /** @throws {TypeError} if the options are invalid */
+  constructor(options?: Options | OptionsInit | null);
+  /**
+   * Parses an XTJSON document, see `parse`.
+   * @throws {ParserError} if the text is not a valid XTJSON document
+   * @throws {TypeError} if the reviver is not a function
+   */
+  parse(text: string, reviver?: Reviver | null): any;
 }
 
-declare const XTJSON: XTJSON;
-export default XTJSON;
+/**
+ * Generator with fixed options. The options are validated once; the
+ * instance can be reused for many values. Its state is private.
+ *
+ * @example
+ * const generator = new Generator({ writeNumberSuffixes: true });
+ * const text = generator.stringify({ cache: 67108864 }, null, 2);
+ */
+export class Generator {
+  /** @throws {TypeError} if the options are invalid */
+  constructor(options?: Options | OptionsInit | null);
+  /**
+   * Writes a value as an XTJSON document, see `stringify`.
+   * @returns the document, or `undefined` for `undefined`, functions and symbols
+   * @throws {TypeError} for circular references, nesting deeper than
+   *   `maxDepth`, invalid arguments and strings not permitted in I-JSON mode
+   */
+  stringify(
+    value: any,
+    replacer?: Replacer | (string | number)[] | null,
+    space?: string | number | null,
+  ): string;
+}

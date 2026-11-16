@@ -1,14 +1,15 @@
-// Unit tests for the API and behaviour of XTJSON.parse beyond the shared corpus.
+// Unit tests for the API and behaviour of parse and Parser beyond the shared corpus.
 
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import XTJSON, { parse, Options, ParserError } from '../xtjson.js';
+import * as xtjson from '../xtjson.js';
+import { parse, Parser, Options, ParserError } from '../xtjson.js';
 
 /** Asserts a ParserError and returns it. */
 function error(text, defs) {
   try {
-    XTJSON.parse(text, null, defs);
+    parse(text, null, defs);
   } catch (e) {
     assert.ok(e instanceof ParserError, `expected ParserError, got ${e}`);
     return e;
@@ -17,16 +18,32 @@ function error(text, defs) {
 }
 
 describe('API', () => {
-  test('default export is like JSON', () => {
-    assert.equal(Object.prototype.toString.call(XTJSON), '[object XTJSON]');
-    assert.ok(Object.isFrozen(XTJSON));
-    assert.equal(XTJSON.parse, parse);
-    assert.deepEqual(Object.keys(XTJSON), []);
+  test('named exports only, no default export', () => {
+    assert.deepEqual(Object.keys(xtjson).sort(), ['Generator', 'Options', 'Parser', 'ParserError', 'parse', 'stringify']);
+    assert.equal('default' in xtjson, false);
+  });
+
+  test('Parser keeps its options and hides its state', () => {
+    const parser = new Parser({ namedValues: { nil: null } });
+    assert.deepEqual(parser.parse('a: nil'), { a: null });
+    assert.deepEqual(parser.parse('[1, 2]'), [1, 2]);
+    assert.deepEqual(Object.keys(parser), []);
+    assert.deepEqual(Object.getOwnPropertyNames(Parser.prototype).sort(), ['constructor', 'parse']);
+    assert.throws(() => new Parser().parse('nil'), /Undefined named value 'nil'/);
+  });
+
+  test('Parser can be reused after an error and called from a reviver', () => {
+    const parser = new Parser();
+    assert.throws(() => parser.parse('[1 2]'), ParserError);
+    assert.deepEqual(parser.parse('a: 1'), { a: 1 });
+    const value = parser.parse('a: "b: 2"\nc: 3', (key, v) => (key === 'a' ? parser.parse(v) : v));
+    assert.deepEqual(value, { a: { b: 2 }, c: 3 });
+    assert.throws(() => parser.parse('1', {}), /the reviver must be a function/);
   });
 
   test('text is converted to a string, like JSON.parse', () => {
-    assert.equal(XTJSON.parse(42), 42);
-    assert.equal(XTJSON.parse({ toString: () => 'a: 1' }).a, 1);
+    assert.equal(parse(42), 42);
+    assert.equal(parse({ toString: () => 'a: 1' }).a, 1);
   });
 
   test('ParserError is a SyntaxError', () => {
@@ -36,13 +53,13 @@ describe('API', () => {
   });
 
   test('parsed objects are plain objects', () => {
-    const v = XTJSON.parse('a: {b: [1]}');
+    const v = parse('a: {b: [1]}');
     assert.equal(Object.getPrototypeOf(v), Object.prototype);
     assert.ok(Array.isArray(v.a.b));
   });
 
   test('"__proto__" is an ordinary name', () => {
-    const v = XTJSON.parse('{"__proto__": {"x": 1}, __proto__: {"y": 2}}');
+    const v = parse('{"__proto__": {"x": 1}, __proto__: {"y": 2}}');
     assert.equal(Object.getPrototypeOf(v), Object.prototype);
     assert.deepEqual(Object.keys(v), ['__proto__']);
     assert.deepEqual(v.__proto__, { y: 2 }); // own property, last member applies
@@ -50,14 +67,14 @@ describe('API', () => {
   });
 
   test('duplicate names: the last member applies (7.2)', () => {
-    assert.deepEqual(XTJSON.parse('a: 1\nb: 2\na: 3'), { a: 3, b: 2 });
+    assert.deepEqual(parse('a: 1\nb: 2\na: 3'), { a: 3, b: 2 });
   });
 });
 
 describe('reviver', () => {
   test('is called like in JSON.parse', () => {
     const calls = [];
-    const v = XTJSON.parse('a: [1, 2]\nb: {c: 3}', function (key, value) {
+    const v = parse('a: [1, 2]\nb: {c: 3}', function (key, value) {
       calls.push([key, this === undefined ? undefined : Array.isArray(this) ? 'array' : 'object']);
       return typeof value === 'number' ? value * 10 : value;
     });
@@ -69,23 +86,23 @@ describe('reviver', () => {
   test('gives the same result as JSON.parse for JSON texts', () => {
     const text = '{"a":[1,{"b":2}],"c":"x","d":null}';
     const reviver = (key, value) => (key === 'b' ? undefined : value);
-    assert.deepEqual(XTJSON.parse(text, reviver), JSON.parse(text, reviver));
+    assert.deepEqual(parse(text, reviver), JSON.parse(text, reviver));
   });
 
   test('undefined removes members and leaves holes in arrays', () => {
-    const v = XTJSON.parse('[1, 2, 3]', (k, x) => (x === 2 ? undefined : x));
+    const v = parse('[1, 2, 3]', (k, x) => (x === 2 ? undefined : x));
     assert.equal(v.length, 3);
     assert.ok(!(1 in v));
   });
 
   test('null and undefined mean no reviver', () => {
-    assert.deepEqual(XTJSON.parse('[1]', null), [1]);
-    assert.deepEqual(XTJSON.parse('[1]', undefined), [1]);
+    assert.deepEqual(parse('[1]', null), [1]);
+    assert.deepEqual(parse('[1]', undefined), [1]);
   });
 
   test('other primitive values as second argument are a TypeError', () => {
     for (const arg of ['not a function', 1, true, 1n, Symbol('s')]) {
-      assert.throws(() => XTJSON.parse('[1]', arg), (e) => e instanceof TypeError && !(e instanceof ParserError));
+      assert.throws(() => parse('[1]', arg), (e) => e instanceof TypeError && !(e instanceof ParserError));
     }
   });
 });
@@ -98,29 +115,29 @@ describe('call forms', () => {
   const double = (k, v) => (typeof v === 'number' ? v * 2 : v);
 
   test('options as second argument: instance or plain object', () => {
-    assert.deepEqual(XTJSON.parse(text, defs), expected);
-    assert.deepEqual(XTJSON.parse(text, init), expected);
-    assert.deepEqual(XTJSON.parse('[1, 1k]', {}), [1, 1000]);
+    assert.deepEqual(parse(text, defs), expected);
+    assert.deepEqual(parse(text, init), expected);
+    assert.deepEqual(parse('[1, 1k]', {}), [1, 1000]);
   });
 
   test('options as third argument after a reviver or null', () => {
-    assert.deepEqual(XTJSON.parse(text, null, defs), expected);
-    assert.deepEqual(XTJSON.parse(text, undefined, init), expected);
-    assert.deepEqual(XTJSON.parse(text, double, defs), [null, 1, 2]);
+    assert.deepEqual(parse(text, null, defs), expected);
+    assert.deepEqual(parse(text, undefined, init), expected);
+    assert.deepEqual(parse(text, double, defs), [null, 1, 2]);
   });
 
   test('options given twice are a TypeError', () => {
-    assert.throws(() => XTJSON.parse(text, defs, defs), /given twice/);
-    assert.throws(() => XTJSON.parse(text, init, {}), /given twice/);
-    assert.deepEqual(XTJSON.parse(text, defs, null), expected);
-    assert.deepEqual(XTJSON.parse(text, defs, undefined), expected);
+    assert.throws(() => parse(text, defs, defs), /given twice/);
+    assert.throws(() => parse(text, init, {}), /given twice/);
+    assert.deepEqual(parse(text, defs, null), expected);
+    assert.deepEqual(parse(text, defs, undefined), expected);
   });
 
   test('invalid arguments are a TypeError', () => {
-    assert.throws(() => XTJSON.parse(text, { namedValues: { true: 1 } }), TypeError);
-    assert.throws(() => XTJSON.parse(text, []), /unexpected argument of type object/);
-    assert.throws(() => XTJSON.parse(text, null, 'x'), /unexpected argument of type string/);
-    assert.throws(() => XTJSON.parse(text, defs, () => 1), /the reviver is in the wrong position/);
+    assert.throws(() => parse(text, { namedValues: { true: 1 } }), TypeError);
+    assert.throws(() => parse(text, []), /unexpected argument of type object/);
+    assert.throws(() => parse(text, null, 'x'), /unexpected argument of type string/);
+    assert.throws(() => parse(text, defs, () => 1), /the reviver is in the wrong position/);
   });
 });
 
@@ -130,9 +147,9 @@ describe('options: named values', () => {
   test('accepts a plain object, a Map or an iterable of pairs', () => {
     const text = '[nil, zero, yes, name, half, 50pct]';
     const expected = [null, 0, true, 'demo', 0.5, 0.5];
-    assert.deepEqual(XTJSON.parse(text, null, init), expected);
-    assert.deepEqual(XTJSON.parse(text, null, { namedValues: new Map(Object.entries(init.namedValues)) }), expected);
-    assert.deepEqual(XTJSON.parse(text, null, { namedValues: Object.entries(init.namedValues) }), expected);
+    assert.deepEqual(parse(text, null, init), expected);
+    assert.deepEqual(parse(text, null, { namedValues: new Map(Object.entries(init.namedValues)) }), expected);
+    assert.deepEqual(parse(text, null, { namedValues: Object.entries(init.namedValues) }), expected);
   });
 
   test('Options keeps the order of the named values', () => {
@@ -147,21 +164,21 @@ describe('options: named values', () => {
     const defs = new Options({ namedValues: source });
     source.a = 2;
     source.other = 1;
-    assert.equal(XTJSON.parse('a', null, defs), 1);
+    assert.equal(parse('a', null, defs), 1);
     assert.ok(Object.isFrozen(defs));
     defs.namedValues.set('other', 1); // a copy; does not change defs
-    assert.throws(() => XTJSON.parse('other', null, defs), ParserError);
+    assert.throws(() => parse('other', null, defs), ParserError);
   });
 
   test('an Options instance can be used as init', () => {
     const copy = new Options(new Options({ ...init, ijson: true }));
-    assert.deepEqual(XTJSON.parse('[name, 1pct]', null, copy), ['demo', 0.01]);
+    assert.deepEqual(parse('[name, 1pct]', null, copy), ['demo', 0.01]);
     assert.equal(copy.ijson, true);
   });
 
   test('without definitions only the predefined ones are active', () => {
     assert.match(error('nil').message, /Undefined named value 'nil'/);
-    assert.equal(XTJSON.parse('10k'), 10000);
+    assert.equal(parse('10k'), 10000);
   });
 
   test('objects and arrays are not permitted as named values (6.4)', () => {
@@ -173,9 +190,9 @@ describe('options: named values', () => {
 
   test('unknown options are a TypeError', () => {
     assert.throws(() => new Options({ suffixes: { q: Math.abs } }), /Unknown XTJSON option "suffixes"\./);
-    assert.throws(() => XTJSON.parse('1', { ijosn: true }),
+    assert.throws(() => parse('1', { ijosn: true }),
       /Unknown XTJSON option "ijosn"\. The options are "namedValues", "ijson", "maxDepth", "writeNumberSuffixes" and "writeSingleQuotes"/);
-    assert.deepEqual(XTJSON.parse('1', { namedValues: undefined, ijson: undefined, maxDepth: undefined }), 1);
+    assert.deepEqual(parse('1', { namedValues: undefined, ijson: undefined, maxDepth: undefined }), 1);
   });
 
   test('invalid options throw TypeError', () => {
@@ -192,7 +209,7 @@ describe('options: named values', () => {
     ];
     for (const [defs, pattern] of cases) {
       assert.throws(() => new Options(defs), (e) => e instanceof TypeError && pattern.test(e.message));
-      assert.throws(() => XTJSON.parse('1', null, defs), TypeError);
+      assert.throws(() => parse('1', null, defs), TypeError);
     }
   });
 });
@@ -204,7 +221,7 @@ describe('I-JSON mode', () => {
     assert.equal(new Options().ijson, false);
     assert.equal(ijson.ijson, true);
     assert.equal(new Options(ijson).ijson, true);
-    assert.deepEqual(XTJSON.parse('{"a": 1, "a": 2}'), { a: 2 });
+    assert.deepEqual(parse('{"a": 1, "a": 2}'), { a: 2 });
   });
 
   test('"ijson" must be a boolean', () => {
@@ -224,7 +241,7 @@ describe('I-JSON mode', () => {
   });
 
   test('the same name in different objects is permitted', () => {
-    assert.deepEqual(XTJSON.parse('a: {a: {a: 1}}\nb: [{a: 1}, {a: 2}]', ijson),
+    assert.deepEqual(parse('a: {a: {a: 1}}\nb: [{a: 1}, {a: 2}]', ijson),
       { a: { a: { a: 1 } }, b: [{ a: 1 }, { a: 2 }] });
   });
 
@@ -233,7 +250,7 @@ describe('I-JSON mode', () => {
       String.raw`{"\uD800": 1}`, String.raw`'''x\uDC00'''`, String.raw`a: "\uD83Dx"`]) {
       assert.match(error(text, ijson).message, /unpaired surrogate U\+D[89A-F][0-9A-F]{2}, which is not permitted in I-JSON mode/, text);
     }
-    assert.equal(XTJSON.parse(String.raw`"😀\u{1F600}"`, ijson), '\u{1F600}\u{1F600}');
+    assert.equal(parse(String.raw`"😀\u{1F600}"`, ijson), '\u{1F600}\u{1F600}');
   });
 
   test('noncharacters in strings and names are an error', () => {
@@ -245,7 +262,7 @@ describe('I-JSON mode', () => {
     // written directly, not as an escape sequence
     assert.match(error('"' + String.fromCharCode(0xffff) + '"', ijson).message, /noncharacter U\+FFFF/);
     // the neighbours are permitted
-    assert.equal(XTJSON.parse(String.raw`"﷏ﷰ�\u{1FFFD}\u{10000}"`, ijson).length, 7);
+    assert.equal(parse(String.raw`"﷏ﷰ�\u{1FFFD}\u{10000}"`, ijson).length, 7);
   });
 
   test('values of named values count as well', () => {
@@ -253,24 +270,24 @@ describe('I-JSON mode', () => {
       ijson: true,
       namedValues: { bad: 'ok' + String.fromCharCode(0xffff), lone: '\uD800', good: 'b' },
     });
-    assert.deepEqual(XTJSON.parse('[good]', defs), ['b']);
+    assert.deepEqual(parse('[good]', defs), ['b']);
     const e = error('x: 1\ny: [good, bad]', defs);
     assert.match(e.message, /The value of the named value 'bad' contains the noncharacter U\+FFFF/);
     assert.deepEqual([e.line, e.column], [2, 11]);
     assert.match(error('lone', defs).message, /unpaired surrogate U\+D800/);
     // outside the I-JSON mode the same definitions are fine
-    assert.equal(XTJSON.parse('lone', { namedValues: { lone: '\uD800' } }), '\uD800');
+    assert.equal(parse('lone', { namedValues: { lone: '\uD800' } }), '\uD800');
   });
 
   test('large numbers are not rejected (only a SHOULD in section 12)', () => {
-    assert.equal(XTJSON.parse('0xFFFF_FFFF_FFFF_F800', ijson), 2 ** 64 - 2048);
+    assert.equal(parse('0xFFFF_FFFF_FFFF_F800', ijson), 2 ** 64 - 2048);
   });
 });
 
 describe('numbers', () => {
   test('decimal numbers like JSON', () => {
     for (const text of ['0', '-0', '1.5', '-2.5e-3', '1E5', '123456789012345678901234567890', '5e-324']) {
-      assert.ok(Object.is(XTJSON.parse(text), JSON.parse(text)), text);
+      assert.ok(Object.is(parse(text), JSON.parse(text)), text);
     }
   });
 
@@ -288,10 +305,10 @@ describe('numbers', () => {
       texts.push((seed % 3 === 0 ? '-' : '') + (digits.slice(0, point) || '0').replace(/^0+(?=\d)/, '') + '.' + (digits.slice(point) || '0'));
     }
     for (const text of texts) {
-      assert.ok(Object.is(XTJSON.parse(text), JSON.parse(text)), text);
-      assert.ok(Object.is(XTJSON.parse(`[${text}]`)[0], JSON.parse(text)), text);
+      assert.ok(Object.is(parse(text), JSON.parse(text)), text);
+      assert.ok(Object.is(parse(`[${text}]`)[0], JSON.parse(text)), text);
       // 9.5: the quotient is rounded once, like the decimal with a shifted point.
-      if (!text.includes('e')) assert.ok(Object.is(XTJSON.parse(text + 'ms'), Number(text + 'e-3')), text + 'ms');
+      if (!text.includes('e')) assert.ok(Object.is(parse(text + 'ms'), Number(text + 'e-3')), text + 'ms');
     }
   });
 
@@ -302,30 +319,30 @@ describe('numbers', () => {
   });
 
   test('hexadecimal, octal and binary numbers are exact or an error (9.4)', () => {
-    assert.equal(XTJSON.parse('0x1F_FFFF_FFFF_FFFF'), 2 ** 53 - 1);
-    assert.equal(XTJSON.parse('0x20_0000_0000_0000'), 2 ** 53);
-    assert.equal(XTJSON.parse('0xFFFF_FFFF_FFFF_F800'), 2 ** 64 - 2048);
-    assert.equal(XTJSON.parse('0b' + '1'.repeat(53)), 2 ** 53 - 1);
-    assert.equal(XTJSON.parse('0x' + '0'.repeat(100) + 'ff'), 255);
+    assert.equal(parse('0x1F_FFFF_FFFF_FFFF'), 2 ** 53 - 1);
+    assert.equal(parse('0x20_0000_0000_0000'), 2 ** 53);
+    assert.equal(parse('0xFFFF_FFFF_FFFF_F800'), 2 ** 64 - 2048);
+    assert.equal(parse('0b' + '1'.repeat(53)), 2 ** 53 - 1);
+    assert.equal(parse('0x' + '0'.repeat(100) + 'ff'), 255);
     assert.match(error('0x20_0000_0000_0001').message, /cannot be represented exactly/);
     assert.match(error('0o' + '7'.repeat(30)).message, /octal number cannot be represented exactly/);
     assert.match(error('0x1' + '0'.repeat(300)).message, /cannot be represented exactly/);
-    assert.ok(Object.is(XTJSON.parse('-0x0'), -0));
+    assert.ok(Object.is(parse('-0x0'), -0));
   });
 
   test('suffixes give the exact product or quotient (9.5)', () => {
-    assert.equal(XTJSON.parse('100ms'), 0.1);
-    assert.equal(XTJSON.parse('0.3ms'), 0.0003);
-    assert.equal(XTJSON.parse('7pct'), 0.07);
-    assert.equal(XTJSON.parse('0.07pct'), 0.0007);
-    assert.equal(XTJSON.parse('1.1min'), 66);
-    assert.equal(XTJSON.parse('0.1h'), 360);
-    assert.equal(XTJSON.parse('0x10ms'), 0.016);
-    assert.equal(XTJSON.parse('9007199254740993ms'), 9007199254740.993);
-    assert.equal(XTJSON.parse('0.1px'), 0.1);
-    assert.ok(Object.is(XTJSON.parse('-0ms'), -0));
-    assert.ok(Object.is(XTJSON.parse('-0.0pct'), -0));
-    assert.ok(Object.is(XTJSON.parse('-0x0h'), -0));
+    assert.equal(parse('100ms'), 0.1);
+    assert.equal(parse('0.3ms'), 0.0003);
+    assert.equal(parse('7pct'), 0.07);
+    assert.equal(parse('0.07pct'), 0.0007);
+    assert.equal(parse('1.1min'), 66);
+    assert.equal(parse('0.1h'), 360);
+    assert.equal(parse('0x10ms'), 0.016);
+    assert.equal(parse('9007199254740993ms'), 9007199254740.993);
+    assert.equal(parse('0.1px'), 0.1);
+    assert.ok(Object.is(parse('-0ms'), -0));
+    assert.ok(Object.is(parse('-0.0pct'), -0));
+    assert.ok(Object.is(parse('-0x0h'), -0));
   });
 
   test('the result of a suffix must be in range', () => {
@@ -333,9 +350,9 @@ describe('numbers', () => {
     assert.match(error('1e305h').message, /out of range/);
     assert.match(error('1e400px').message, /out of range/);
     // only the result counts (9.4)
-    assert.equal(XTJSON.parse('4.4e308pct'), 4.4e306);
-    assert.equal(XTJSON.parse('-1e310ms'), -1e307);
-    assert.equal(XTJSON.parse('1e-400k'), 0);
+    assert.equal(parse('4.4e308pct'), 4.4e306);
+    assert.equal(parse('-1e310ms'), -1e307);
+    assert.equal(parse('1e-400k'), 0);
   });
 
   test('all suffixes of the table in 9.5', () => {
@@ -345,7 +362,7 @@ describe('numbers', () => {
       ms: 0.002, s: 2, min: 120, h: 7200, pct: 0.02, px: 2, L: 2, n: 2n,
     };
     for (const [suffix, expected] of Object.entries(table)) {
-      assert.equal(XTJSON.parse('2' + suffix), expected, suffix);
+      assert.equal(parse('2' + suffix), expected, suffix);
     }
   });
 
@@ -356,43 +373,43 @@ describe('numbers', () => {
       ['0b101n', 5n], ['0x1_0000_0000_0000_0001n', 18446744073709551617n],
       ['1e3n', 1000n], ['120e-1n', 12n], ['0e-5n', 0n], ['1e30n', 10n ** 30n],
     ];
-    for (const [text, expected] of cases) assert.equal(XTJSON.parse(text), expected, text);
-    assert.deepEqual(XTJSON.parse('a: 1n, b: [2n, 3]'), { a: 1n, b: [2n, 3] });
+    for (const [text, expected] of cases) assert.equal(parse(text), expected, text);
+    assert.deepEqual(parse('a: 1n, b: [2n, 3]'), { a: 1n, b: [2n, 3] });
     // the reviver receives the BigInt
-    assert.equal(XTJSON.parse('[5n]', (k, v) => (typeof v === 'bigint' ? Number(v) * 2 : v))[0], 10);
+    assert.equal(parse('[5n]', (k, v) => (typeof v === 'bigint' ? Number(v) * 2 : v))[0], 10);
   });
 
   test('numbers with a fraction part or a non-integer value stay numbers with the suffix n', () => {
     for (const [text, expected] of [['1.5n', 1.5], ['1.0n', 1], ['12e-1n', 1.2], ['1e-3n', 0.001], ['1.5L', 1.5], ['100L', 100]]) {
-      const value = XTJSON.parse(text);
+      const value = parse(text);
       assert.equal(typeof value, 'number', text);
       assert.equal(value, expected, text);
     }
   });
 
   test('the exponent of a BigInt is limited', () => {
-    assert.equal(String(XTJSON.parse('1e10000n')).length, 10001);
+    assert.equal(String(parse('1e10000n')).length, 10001);
     assert.match(error('a: 1e10001n').message, /exponent of a BigInt number \(suffix n\) exceeds the limit of 10000 \(line 1, column 4\)/);
-    assert.equal(XTJSON.parse('0e99999n'), 0n);
+    assert.equal(parse('0e99999n'), 0n);
   });
 
   test('predefined factors give the exact product (9.5)', () => {
-    assert.equal(XTJSON.parse('0.1kb'), 102.4);
-    assert.equal(XTJSON.parse('0.3k'), 300);
-    assert.equal(XTJSON.parse('1.1mb'), 1153433.6);
-    assert.equal(XTJSON.parse('1e-3k'), 1);
-    assert.equal(XTJSON.parse('9007199254740993k'), 9007199254740993000);
-    assert.equal(XTJSON.parse('-0.000_001K'), -0.001);
-    assert.equal(XTJSON.parse('0x1F_FFFF_FFFF_FFFFkb'), (2 ** 53 - 1) * 1024);
-    assert.equal(XTJSON.parse('1e-99999999999k'), 0);
+    assert.equal(parse('0.1kb'), 102.4);
+    assert.equal(parse('0.3k'), 300);
+    assert.equal(parse('1.1mb'), 1153433.6);
+    assert.equal(parse('1e-3k'), 1);
+    assert.equal(parse('9007199254740993k'), 9007199254740993000);
+    assert.equal(parse('-0.000_001K'), -0.001);
+    assert.equal(parse('0x1F_FFFF_FFFF_FFFFkb'), (2 ** 53 - 1) * 1024);
+    assert.equal(parse('1e-99999999999k'), 0);
   });
 });
 
 describe('strings', () => {
   test('escape sequences', () => {
-    assert.equal(XTJSON.parse(String.raw`"\u{1F600}\uD83D\uDE00\x41\v\0\'\""`), '\u{1F600}\u{1F600}A\v\0\'"');
-    assert.equal(XTJSON.parse(String.raw`"\uDEAD"`), '\uDEAD'); // like JSON
-    assert.equal(XTJSON.parse(String.raw`"\u{0000000000041}"`), 'A');
+    assert.equal(parse(String.raw`"\u{1F600}\uD83D\uDE00\x41\v\0\'\""`), '\u{1F600}\u{1F600}A\v\0\'"');
+    assert.equal(parse(String.raw`"\uDEAD"`), '\uDEAD'); // like JSON
+    assert.equal(parse(String.raw`"\u{0000000000041}"`), 'A');
   });
 
   test('unpaired surrogates in the text are an error (section 4)', () => {
@@ -403,20 +420,20 @@ describe('strings', () => {
 
   test('multi-line string as a value of a member', () => {
     const text = 'sql: """\n    SELECT 1\n      FROM t\n    """\nn: 1';
-    assert.deepEqual(XTJSON.parse(text), { sql: 'SELECT 1\n  FROM t\n', n: 1 });
+    assert.deepEqual(parse(text), { sql: 'SELECT 1\n  FROM t\n', n: 1 });
   });
 
   test('long strings with and without escapes', () => {
     const plain = 'x'.repeat(100000);
-    assert.equal(XTJSON.parse(`"${plain}"`), plain);
-    assert.equal(XTJSON.parse(`'${plain}\\n${plain}'`), `${plain}\n${plain}`);
+    assert.equal(parse(`"${plain}"`), plain);
+    assert.equal(parse(`'${plain}\\n${plain}'`), `${plain}\n${plain}`);
   });
 });
 
 describe('limits', () => {
   test('nesting up to 1000 levels', () => {
     const ok = '['.repeat(1000) + ']'.repeat(1000);
-    assert.equal(XTJSON.parse(ok).length, 1);
+    assert.equal(parse(ok).length, 1);
     const e = error('['.repeat(1001) + ']'.repeat(1001));
     assert.match(e.message, /Nesting depth exceeds the limit of 1000/);
     assert.match(error('a: ' + '{a: '.repeat(1001)).message, /Nesting depth/);
@@ -424,7 +441,7 @@ describe('limits', () => {
 
   test('the implicit root object is a level as well', () => {
     const nested = (n) => '['.repeat(n) + ']'.repeat(n);
-    assert.deepEqual(XTJSON.parse('a: ' + nested(999)).a.length, 1);
+    assert.deepEqual(parse('a: ' + nested(999)).a.length, 1);
     const e = error('a: ' + nested(1000));
     assert.match(e.message, /Nesting depth exceeds the limit of 1000 \(option maxDepth\)/);
     assert.deepEqual([e.line, e.column], [1, 1003]);
@@ -432,12 +449,12 @@ describe('limits', () => {
 
   test('maxDepth changes the limit', () => {
     const nested = (n) => '['.repeat(n) + ']'.repeat(n);
-    assert.equal(XTJSON.parse(nested(2), { maxDepth: 2 }).length, 1);
+    assert.equal(parse(nested(2), { maxDepth: 2 }).length, 1);
     assert.match(error(nested(3), { maxDepth: 2 }).message, /limit of 2 \(option maxDepth\)/);
-    assert.equal(XTJSON.parse('1', { maxDepth: 1 }), 1);
-    assert.deepEqual(XTJSON.parse('a: 1', { maxDepth: 1 }), { a: 1 });
+    assert.equal(parse('1', { maxDepth: 1 }), 1);
+    assert.deepEqual(parse('a: 1', { maxDepth: 1 }), { a: 1 });
     assert.match(error('a: []', { maxDepth: 1 }).message, /limit of 1/);
-    assert.equal(XTJSON.parse(nested(1500), { maxDepth: 2000 }).length, 1);
+    assert.equal(parse(nested(1500), { maxDepth: 2000 }).length, 1);
     assert.equal(new Options().maxDepth, 1000);
     assert.equal(new Options({ maxDepth: 5 }).maxDepth, 5);
     assert.equal(new Options(new Options({ maxDepth: 5 })).maxDepth, 5);

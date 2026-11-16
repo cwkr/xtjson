@@ -1,16 +1,16 @@
-// Unit tests for XTJSON.stringify.
+// Unit tests for stringify and Generator.
 
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import XTJSON, { stringify, Options } from '../xtjson.js';
+import { parse, stringify, Generator, Options } from '../xtjson.js';
 
 const ch = (...codes) => String.fromCharCode(...codes);
 const LS = ch(0x2028);
 
-/** XTJSON.stringify must read back as the value JSON.stringify gives. */
+/** stringify must read back as the value JSON.stringify gives. */
 function assertRoundTrip(value, args = [], options = undefined) {
-  const text = XTJSON.stringify(value, ...args);
+  const text = stringify(value, ...args);
   const json = JSON.stringify(value, ...args.filter((a) => !(a instanceof Options) && !isPlainOptions(a)));
   if (json === undefined) {
     assert.equal(text, undefined);
@@ -18,7 +18,7 @@ function assertRoundTrip(value, args = [], options = undefined) {
   }
   let back;
   try {
-    back = XTJSON.parse(text, options);
+    back = parse(text, options);
   } catch (error) {
     assert.fail(`output does not parse: ${JSON.stringify(text)}\n${error.message}`);
   }
@@ -30,54 +30,83 @@ function isPlainOptions(a) {
 }
 
 describe('API', () => {
-  test('stringify is a method of XTJSON and a named export', () => {
-    assert.equal(XTJSON.stringify, stringify);
-    assert.deepEqual(Object.keys(XTJSON), []);
+  test('Generator keeps its options and hides its state', () => {
+    const generator = new Generator({ writeNumberSuffixes: true });
+    assert.equal(generator.stringify({ a: 2048 }), 'a:2kb');
+    assert.equal(generator.stringify([60], null, 2), '[\n  1min\n]');
+    assert.equal(generator.stringify([1]), '[1]');
+    assert.deepEqual(Object.keys(generator), []);
+    assert.deepEqual(Object.getOwnPropertyNames(Generator.prototype).sort(), ['constructor', 'stringify']);
+  });
+
+  test('Generator can be called again from toJSON and a replacer', () => {
+    const generator = new Generator();
+    const inner = { toJSON: () => generator.stringify({ x: [1, 2] }, null, 2) };
+    assert.equal(generator.stringify({ a: inner, b: [3] }), 'a:"x: [\\n  1\\n  2\\n]",b:[3]');
+    const replacer = (key, value) => (key === 'c' ? generator.stringify(value) : value);
+    assert.equal(generator.stringify({ c: { d: 1 }, e: [2] }, replacer, 1), 'c: "d:1"\ne: [\n 2\n]');
+  });
+
+  test('Generator can be reused after an error', () => {
+    const generator = new Generator();
+    const cyclic = [];
+    cyclic.push(cyclic);
+    assert.throws(() => generator.stringify(cyclic), /circular reference/);
+    assert.equal(generator.stringify([1, [2]]), '[1,[2]]');
+    assert.equal(generator.stringify({ a: 1 }, ['a'], 2), 'a: 1');
+    assert.equal(generator.stringify({ a: 1, b: 2 }), 'a:1,b:2');
+  });
+
+  test('Generator rejects invalid arguments', () => {
+    const generator = new Generator();
+    assert.throws(() => generator.stringify(1, 2), /the replacer must be a function or an array/);
+    assert.throws(() => generator.stringify(1, null, {}), /space must be a number or a string/);
+    assert.throws(() => new Generator({ ijosn: true }), /Unknown XTJSON option "ijosn"/);
   });
 
   test('call forms are told apart by type', () => {
     const value = { a: null, list: [1, 2] };
     const options = new Options({ namedValues: { nil: null } });
     const upper = (k, v) => (typeof v === 'number' ? v * 10 : v);
-    assert.equal(XTJSON.stringify(value), 'a:null,list:[1,2]');
-    assert.equal(XTJSON.stringify(value, options), 'a:nil,list:[1,2]');
-    assert.equal(XTJSON.stringify(value, { namedValues: { nil: null } }), 'a:nil,list:[1,2]');
-    assert.equal(XTJSON.stringify(value, 1, options), 'a: nil\nlist: [\n 1\n 2\n]');
-    assert.equal(XTJSON.stringify(value, '\t', options), 'a: nil\nlist: [\n\t1\n\t2\n]');
-    assert.equal(XTJSON.stringify(value, null, 1, options), 'a: nil\nlist: [\n 1\n 2\n]');
-    assert.equal(XTJSON.stringify(value, upper, options), 'a:nil,list:[10,20]');
-    assert.equal(XTJSON.stringify(value, upper, 1), 'a: null\nlist: [\n 10\n 20\n]');
-    assert.equal(XTJSON.stringify(value, ['list'], undefined, options), 'list:[1,2]');
-    assert.equal(XTJSON.stringify(value, undefined, null, null), 'a:null,list:[1,2]');
+    assert.equal(stringify(value), 'a:null,list:[1,2]');
+    assert.equal(stringify(value, options), 'a:nil,list:[1,2]');
+    assert.equal(stringify(value, { namedValues: { nil: null } }), 'a:nil,list:[1,2]');
+    assert.equal(stringify(value, 1, options), 'a: nil\nlist: [\n 1\n 2\n]');
+    assert.equal(stringify(value, '\t', options), 'a: nil\nlist: [\n\t1\n\t2\n]');
+    assert.equal(stringify(value, null, 1, options), 'a: nil\nlist: [\n 1\n 2\n]');
+    assert.equal(stringify(value, upper, options), 'a:nil,list:[10,20]');
+    assert.equal(stringify(value, upper, 1), 'a: null\nlist: [\n 10\n 20\n]');
+    assert.equal(stringify(value, ['list'], undefined, options), 'list:[1,2]');
+    assert.equal(stringify(value, undefined, null, null), 'a:null,list:[1,2]');
   });
 
   test('invalid arguments are a TypeError', () => {
     const options = { namedValues: {} };
-    assert.throws(() => XTJSON.stringify(1, options, 2), /the space is in the wrong position/);
-    assert.throws(() => XTJSON.stringify(1, 2, 4), /the space is given twice/);
-    assert.throws(() => XTJSON.stringify(1, options, options), /the options is given twice/);
-    assert.throws(() => XTJSON.stringify(1, 2, () => 1), /the replacer is in the wrong position/);
-    assert.throws(() => XTJSON.stringify(1, true), /unexpected argument of type boolean/);
-    assert.throws(() => XTJSON.stringify(1, null, 2, 'x'), /unexpected argument of type string|the space is given twice/);
-    assert.throws(() => XTJSON.stringify(1, { namedValues: { true: 1 } }), /predefined/);
+    assert.throws(() => stringify(1, options, 2), /the space is in the wrong position/);
+    assert.throws(() => stringify(1, 2, 4), /the space is given twice/);
+    assert.throws(() => stringify(1, options, options), /the options is given twice/);
+    assert.throws(() => stringify(1, 2, () => 1), /the replacer is in the wrong position/);
+    assert.throws(() => stringify(1, true), /unexpected argument of type boolean/);
+    assert.throws(() => stringify(1, null, 2, 'x'), /unexpected argument of type string|the space is given twice/);
+    assert.throws(() => stringify(1, { namedValues: { true: 1 } }), /predefined/);
   });
 
   test('space: numbers and strings as in JSON.stringify', () => {
     const value = [1];
-    assert.equal(XTJSON.stringify(value, 0), '[1]');
-    assert.equal(XTJSON.stringify(value, -3), '[1]');
-    assert.equal(XTJSON.stringify(value, 2.9), '[\n  1\n]');
-    assert.equal(XTJSON.stringify(value, 20), `[\n${' '.repeat(10)}1\n]`);
-    assert.equal(XTJSON.stringify(value, ' '.repeat(12)), `[\n${' '.repeat(10)}1\n]`);
-    assert.equal(XTJSON.stringify(value, ''), '[1]');
-    assert.equal(XTJSON.stringify(value, new Number(1)), '[\n 1\n]');
-    assert.equal(XTJSON.stringify(value, new String('\t')), '[\n\t1\n]');
-    assert.equal(XTJSON.stringify(value, ' \t'), '[\n \t1\n]');
+    assert.equal(stringify(value, 0), '[1]');
+    assert.equal(stringify(value, -3), '[1]');
+    assert.equal(stringify(value, 2.9), '[\n  1\n]');
+    assert.equal(stringify(value, 20), `[\n${' '.repeat(10)}1\n]`);
+    assert.equal(stringify(value, ' '.repeat(12)), `[\n${' '.repeat(10)}1\n]`);
+    assert.equal(stringify(value, ''), '[1]');
+    assert.equal(stringify(value, new Number(1)), '[\n 1\n]');
+    assert.equal(stringify(value, new String('\t')), '[\n\t1\n]');
+    assert.equal(stringify(value, ' \t'), '[\n \t1\n]');
   });
 
   test('space with characters other than space and tab is a TypeError', () => {
     for (const space of ['--', '  x', ch(0xa0), '\n']) {
-      assert.throws(() => XTJSON.stringify([1], space), /"space" may only contain spaces and tabs/);
+      assert.throws(() => stringify([1], space), /"space" may only contain spaces and tabs/);
     }
   });
 });
@@ -85,12 +114,12 @@ describe('API', () => {
 describe('like JSON.stringify', () => {
   test('values that cannot be written', () => {
     for (const value of [undefined, () => 1, Symbol('s')]) {
-      assert.equal(XTJSON.stringify(value), undefined);
+      assert.equal(stringify(value), undefined);
     }
-    assert.equal(XTJSON.stringify({ a: undefined, b: () => 1, c: Symbol('s'), d: 1 }), 'd:1');
-    assert.equal(XTJSON.stringify([undefined, () => 1, Symbol('s')]), '[null,null,null]');
-    assert.equal(XTJSON.stringify([NaN, Infinity, -Infinity]), '[null,null,null]');
-    assert.equal(XTJSON.stringify(-0), '0');
+    assert.equal(stringify({ a: undefined, b: () => 1, c: Symbol('s'), d: 1 }), 'd:1');
+    assert.equal(stringify([undefined, () => 1, Symbol('s')]), '[null,null,null]');
+    assert.equal(stringify([NaN, Infinity, -Infinity]), '[null,null,null]');
+    assert.equal(stringify(-0), '0');
   });
 
   test('toJSON, wrapper objects and dates', () => {
@@ -100,7 +129,7 @@ describe('like JSON.stringify', () => {
       custom: { toJSON: (key) => `key ${key}` },
       wrapped: [new Number(5), new String('s'), new Boolean(false), Object(10n) && 1],
     };
-    assert.equal(XTJSON.stringify(value),
+    assert.equal(stringify(value),
       'date:"2026-11-15T00:00:00.000Z",custom:"key custom",wrapped:[5,"s",false,1]');
     assertRoundTrip(value);
   });
@@ -114,58 +143,58 @@ describe('like JSON.stringify', () => {
     const jsonCalls = [];
     const xtCalls = [];
     JSON.stringify(value, record(jsonCalls));
-    assert.equal(XTJSON.stringify(value, record(xtCalls)), 'a:[1,{b:2}],c:"x"');
+    assert.equal(stringify(value, record(xtCalls)), 'a:[1,{b:2}],c:"x"');
     assert.deepEqual(xtCalls, jsonCalls);
   });
 
   test('replacer array', () => {
     const value = { a: 1, b: { a: 2, c: 3 }, 1: 'one', c: 4 };
-    assert.equal(XTJSON.stringify(value, ['a', 'b', 1, 'a', {}, new String('c')]), 'a:1,b:{a:2,c:3},"1":"one",c:4');
+    assert.equal(stringify(value, ['a', 'b', 1, 'a', {}, new String('c')]), 'a:1,b:{a:2,c:3},"1":"one",c:4');
     assertRoundTrip(value, [['b', 'a']]);
   });
 
   test('circular references are a TypeError', () => {
     const a = { b: {} };
     a.b.a = a;
-    assert.throws(() => XTJSON.stringify(a), /circular reference/);
+    assert.throws(() => stringify(a), /circular reference/);
     const list = [];
     list.push(list);
-    assert.throws(() => XTJSON.stringify(list), /circular reference/);
+    assert.throws(() => stringify(list), /circular reference/);
     // the same object twice is not circular
     const shared = { x: 1 };
-    assert.equal(XTJSON.stringify([shared, shared]), '[{x:1},{x:1}]');
+    assert.equal(stringify([shared, shared]), '[{x:1},{x:1}]');
   });
 
   test('nesting deeper than maxDepth is a TypeError', () => {
     const nested = (n) => JSON.parse('['.repeat(n) + ']'.repeat(n));
-    assert.equal(XTJSON.stringify(nested(1000)).length, 2000);
-    assert.throws(() => XTJSON.stringify(nested(1001)), /nested deeper than the limit of 1000 \(option maxDepth\)/);
-    assert.equal(XTJSON.stringify(nested(2), { maxDepth: 2 }), '[[]]');
-    assert.throws(() => XTJSON.stringify(nested(3), { maxDepth: 2 }), /limit of 2/);
+    assert.equal(stringify(nested(1000)).length, 2000);
+    assert.throws(() => stringify(nested(1001)), /nested deeper than the limit of 1000 \(option maxDepth\)/);
+    assert.equal(stringify(nested(2), { maxDepth: 2 }), '[[]]');
+    assert.throws(() => stringify(nested(3), { maxDepth: 2 }), /limit of 2/);
     // the root object counts as a level, as when parsing
-    assert.equal(XTJSON.stringify({ a: 1 }, { maxDepth: 1 }), 'a:1');
-    assert.throws(() => XTJSON.stringify({ a: [] }, { maxDepth: 1 }), /limit of 1/);
+    assert.equal(stringify({ a: 1 }, { maxDepth: 1 }), 'a:1');
+    assert.throws(() => stringify({ a: [] }, { maxDepth: 1 }), /limit of 1/);
   });
 
   test('JSON.rawJSON', { skip: typeof JSON.rawJSON !== 'function' && 'JSON.rawJSON not available' }, () => {
-    assert.equal(XTJSON.stringify({ big: JSON.rawJSON('12345678901234567890') }), 'big:12345678901234567890');
+    assert.equal(stringify({ big: JSON.rawJSON('12345678901234567890') }), 'big:12345678901234567890');
   });
 });
 
 describe('output format', () => {
   test('the object at the top level is written without braces', () => {
-    assert.equal(XTJSON.stringify({ a: 1, b: { c: 2 } }), 'a:1,b:{c:2}');
-    assert.equal(XTJSON.stringify({ a: 1, b: { c: 2 } }, 2), 'a: 1\nb: {\n  c: 2\n}');
-    assert.equal(XTJSON.stringify({}), '{}');
-    assert.equal(XTJSON.stringify({}, 2), '{}');
-    assert.equal(XTJSON.stringify({ a: undefined }), '{}');
-    assert.equal(XTJSON.stringify([{ a: 1 }]), '[{a:1}]');
-    assert.equal(XTJSON.stringify({ toJSON: () => ({ x: 1 }) }), 'x:1');
+    assert.equal(stringify({ a: 1, b: { c: 2 } }), 'a:1,b:{c:2}');
+    assert.equal(stringify({ a: 1, b: { c: 2 } }, 2), 'a: 1\nb: {\n  c: 2\n}');
+    assert.equal(stringify({}), '{}');
+    assert.equal(stringify({}, 2), '{}');
+    assert.equal(stringify({ a: undefined }), '{}');
+    assert.equal(stringify([{ a: 1 }]), '[{a:1}]');
+    assert.equal(stringify({ toJSON: () => ({ x: 1 }) }), 'x:1');
   });
 
   test('with space: items on their own lines without commas', () => {
     const value = { name: 'demo', list: [1, [2, 3], {}, []], obj: { a: { b: true } } };
-    assert.equal(XTJSON.stringify(value, 2), [
+    assert.equal(stringify(value, 2), [
       'name: "demo"',
       'list: [',
       '  1',
@@ -186,16 +215,16 @@ describe('output format', () => {
 
   test('names: identifiers without quotation marks, others with "', () => {
     const value = { a: 1, $x: 2, _: 3, a1: 4, true: 5, '1a': 6, 'a-b': 7, 'a b': 8, '': 9, 'ä': 10, 'q"': 11 };
-    assert.equal(XTJSON.stringify(value),
+    assert.equal(stringify(value),
       'a:1,$x:2,_:3,a1:4,true:5,"1a":6,"a-b":7,"a b":8,"":9,"' + ch(0xe4) + '":10,"q\\"":11');
     assertRoundTrip(value);
   });
 
   test('strings are written with " and the escapes of JSON', () => {
-    assert.equal(XTJSON.stringify(["it's", 'say "hi"', 'a\\b', 'tab\there', 'nl\nx', ch(0, 0x1f, 0x7f)]),
+    assert.equal(stringify(["it's", 'say "hi"', 'a\\b', 'tab\there', 'nl\nx', ch(0, 0x1f, 0x7f)]),
       '["it\'s","say \\"hi\\"","a\\\\b","tab\\there","nl\\nx","\\u0000\\u001f' + ch(0x7f) + '"]');
-    assert.equal(XTJSON.stringify(ch(0xd800)), '"\\ud800"');
-    assert.equal(XTJSON.stringify('a' + LS + 'b' + ch(0x2029)), '"a\\u2028b\\u2029"');
+    assert.equal(stringify(ch(0xd800)), '"\\ud800"');
+    assert.equal(stringify('a' + LS + 'b' + ch(0x2029)), '"a\\u2028b\\u2029"');
   });
 
   test('numbers: grouping with _ from 10000', () => {
@@ -207,14 +236,14 @@ describe('output format', () => {
       [123456789012345680000, '123_456_789_012_345_680_000'],
     ];
     for (const [n, text] of cases) {
-      assert.equal(XTJSON.stringify(n), text, String(n));
-      assert.equal(XTJSON.parse(text), n, text);
+      assert.equal(stringify(n), text, String(n));
+      assert.equal(parse(text), n, text);
     }
   });
 
   test('numbers: no suffixes by default', () => {
-    assert.equal(XTJSON.stringify([1000, 2048, 1048576, 60, 3600, 0.5, 0.001]), '[1000,2048,1_048_576,60,3600,0.5,0.001]');
-    assert.equal(XTJSON.stringify([1000], { writeNumberSuffixes: false }), '[1000]');
+    assert.equal(stringify([1000, 2048, 1048576, 60, 3600, 0.5, 0.001]), '[1000,2048,1_048_576,60,3600,0.5,0.001]');
+    assert.equal(stringify([1000], { writeNumberSuffixes: false }), '[1000]');
   });
 
   test('numbers: with writeNumberSuffixes, integers get mb, kb, k, h or min, in this order', () => {
@@ -228,8 +257,8 @@ describe('output format', () => {
       [1e21, '953_674_316_406_250mb'], [2 ** 53, '8_589_934_592mb'],
     ];
     for (const [n, text] of cases) {
-      assert.equal(XTJSON.stringify(n, { writeNumberSuffixes: true }), text, String(n));
-      assert.equal(XTJSON.parse(text), n, text);
+      assert.equal(stringify(n, { writeNumberSuffixes: true }), text, String(n));
+      assert.equal(parse(text), n, text);
     }
   });
 
@@ -241,26 +270,26 @@ describe('output format', () => {
       [1.5, '1.5'], [1.1, '1.1'], [-2.5, '-2.5'],
     ];
     for (const [n, text] of cases) {
-      assert.equal(XTJSON.stringify(n, { writeNumberSuffixes: true }), text, String(n));
-      assert.equal(XTJSON.parse(text), n, text);
+      assert.equal(stringify(n, { writeNumberSuffixes: true }), text, String(n));
+      assert.equal(parse(text), n, text);
     }
-    assert.equal(XTJSON.stringify(-0, { writeNumberSuffixes: true }), '0');
+    assert.equal(stringify(-0, { writeNumberSuffixes: true }), '0');
   });
 
   test('suffixes that leave the value unchanged are not used', () => {
-    assert.equal(XTJSON.stringify([12, 30, 100], { writeNumberSuffixes: true }), '[12,30,100]');
+    assert.equal(stringify([12, 30, 100], { writeNumberSuffixes: true }), '[12,30,100]');
   });
 
   test('BigInt values are written with the suffix n and read back as BigInt', () => {
     const value = { a: 1n, b: -5n, c: 0n, d: 12345n, e: 2n ** 70n, f: [7n, 7] };
-    const text = XTJSON.stringify(value);
+    const text = stringify(value);
     assert.equal(text, 'a:1n,b:-5n,c:0n,d:12_345n,e:1_180_591_620_717_411_303_424n,f:[7n,7]');
-    assert.deepEqual(XTJSON.parse(text), value);
+    assert.deepEqual(parse(text), value);
     // also without writeNumberSuffixes and with it
-    assert.equal(XTJSON.stringify(1000n, { writeNumberSuffixes: true }), '1000n');
-    assert.equal(XTJSON.stringify(Object(3n)), '3n');
+    assert.equal(stringify(1000n, { writeNumberSuffixes: true }), '1000n');
+    assert.equal(stringify(Object(3n)), '3n');
     // toJSON and the replacer come first, as in JSON.stringify
-    assert.equal(XTJSON.stringify({ n: 1n }, (k, v) => (typeof v === 'bigint' ? String(v) : v)), 'n:"1"');
+    assert.equal(stringify({ n: 1n }, (k, v) => (typeof v === 'bigint' ? String(v) : v)), 'n:"1"');
   });
 });
 
@@ -270,29 +299,29 @@ describe('named values', () => {
       namedValues: { nil: null, yes: true, no: false, zero: 0, unknown: 'not specified' },
     });
     const value = { a: null, b: true, c: false, d: 0, e: -0, f: 'not specified', g: [1], h: { a: 1 }, nil: 'x' };
-    const text = XTJSON.stringify(value, options);
+    const text = stringify(value, options);
     assert.equal(text, 'a:nil,b:yes,c:no,d:zero,e:zero,f:unknown,g:[1],h:{a:1},nil:"x"');
-    assert.deepEqual(XTJSON.parse(text, options), { ...value, e: 0 });
+    assert.deepEqual(parse(text, options), { ...value, e: 0 });
   });
 
   test('the named value defined last wins; predefined ones only if none matches', () => {
     const options = new Options({ namedValues: [['nil', null], ['none', null], ['one', 1], ['uno', 1]] });
-    assert.equal(XTJSON.stringify([null, 1, true], options), '[none,uno,true]');
-    assert.equal(XTJSON.stringify([null], { namedValues: { nil: null } }), '[nil]');
-    assert.equal(XTJSON.stringify([null]), '[null]');
+    assert.equal(stringify([null, 1, true], options), '[none,uno,true]');
+    assert.equal(stringify([null], { namedValues: { nil: null } }), '[nil]');
+    assert.equal(stringify([null]), '[null]');
   });
 
   test('values that JSON writes as null use the named value for null', () => {
     const options = { namedValues: { nil: null } };
-    assert.equal(XTJSON.stringify([NaN, undefined, () => 1], options), '[nil,nil,nil]');
+    assert.equal(stringify([NaN, undefined, () => 1], options), '[nil,nil,nil]');
   });
 
   test('named values for numbers come before suffixes', () => {
-    assert.equal(XTJSON.stringify([1000, 2000], { namedValues: { thousand: 1000 }, writeNumberSuffixes: true }), '[thousand,2k]');
+    assert.equal(stringify([1000, 2000], { namedValues: { thousand: 1000 }, writeNumberSuffixes: true }), '[thousand,2k]');
   });
 
   test('a string that equals a named value is not a multi-line string', () => {
-    assert.equal(XTJSON.stringify(['a\nb'], 2, { namedValues: { ab: 'a\nb' } }), '[\n  ab\n]');
+    assert.equal(stringify(['a\nb'], 2, { namedValues: { ab: 'a\nb' } }), '[\n  ab\n]');
   });
 });
 
@@ -300,7 +329,7 @@ describe('multi-line strings', () => {
   // The member `s` one level deep, without the enclosing object:
   // 's: """' at indentation 2 (removed here), the text at indentation 4.
   const ml = (value) => {
-    const text = XTJSON.stringify({ o: { s: value } }, 2);
+    const text = stringify({ o: { s: value } }, 2);
     assert.ok(text.startsWith('o: {\n  ') && text.endsWith('\n}'));
     return text.slice('o: {\n  '.length, -'\n}'.length);
   };
@@ -310,12 +339,12 @@ describe('multi-line strings', () => {
     assert.equal(ml('a\nb\n'), 's: """\n    a\n    b\n    """');
     assert.equal(ml('a\n\nb'), 's: """\n    a\n\n    b"""');
     assert.equal(ml('\n'), 's: """\n\n    """');
-    assert.equal(XTJSON.stringify({ s: 'a\nb' }), 's:"a\\nb"');
-    assert.equal(XTJSON.stringify('a\nb', '\t'), '"""\n\ta\n\tb"""');
+    assert.equal(stringify({ s: 'a\nb' }), 's:"a\\nb"');
+    assert.equal(stringify('a\nb', '\t'), '"""\n\ta\n\tb"""');
   });
 
   test('nested indentation follows the structure', () => {
-    assert.equal(XTJSON.stringify({ x: { list: ['a\nb'] } }, 2),
+    assert.equal(stringify({ x: { list: ['a\nb'] } }, 2),
       'x: {\n  list: [\n    """\n      a\n      b"""\n  ]\n}');
   });
 
@@ -352,9 +381,9 @@ describe('multi-line strings', () => {
     ];
     for (const value of values) {
       for (const space of [1, 2, '\t', ' \t']) {
-        const text = XTJSON.stringify({ s: value, list: [value] }, space);
-        assert.deepEqual(XTJSON.parse(text), { s: value, list: [value] }, JSON.stringify(text));
-        assert.equal(XTJSON.parse(XTJSON.stringify(value, space)), value);
+        const text = stringify({ s: value, list: [value] }, space);
+        assert.deepEqual(parse(text), { s: value, list: [value] }, JSON.stringify(text));
+        assert.equal(parse(stringify(value, space)), value);
       }
     }
   });
@@ -364,16 +393,16 @@ describe('I-JSON mode', () => {
   const ijson = { ijson: true };
 
   test('unpaired surrogates and noncharacters are a TypeError', () => {
-    assert.throws(() => XTJSON.stringify(ch(0xdead), ijson), /unpaired surrogate U\+DEAD/);
-    assert.throws(() => XTJSON.stringify({ a: ['x' + ch(0xffff)] }, ijson), /noncharacter U\+FFFF/);
-    assert.throws(() => XTJSON.stringify({ [ch(0xfdd0)]: 1 }, ijson), /the name .* noncharacter U\+FDD0/);
-    assert.throws(() => XTJSON.stringify({ a: ch(0xd83f, 0xdfff) }, 2, ijson), /noncharacter U\+1FFFF/);
+    assert.throws(() => stringify(ch(0xdead), ijson), /unpaired surrogate U\+DEAD/);
+    assert.throws(() => stringify({ a: ['x' + ch(0xffff)] }, ijson), /noncharacter U\+FFFF/);
+    assert.throws(() => stringify({ [ch(0xfdd0)]: 1 }, ijson), /the name .* noncharacter U\+FDD0/);
+    assert.throws(() => stringify({ a: ch(0xd83f, 0xdfff) }, 2, ijson), /noncharacter U\+1FFFF/);
   });
 
   test('valid strings are written unchanged', () => {
     const value = { s: ch(0xd83d, 0xde00), t: 'a\nb' };
-    assert.equal(XTJSON.stringify(value, ijson), XTJSON.stringify(value));
-    assert.equal(XTJSON.stringify(ch(0xdead)), '"\\udead"');
+    assert.equal(stringify(value, ijson), stringify(value));
+    assert.equal(stringify(ch(0xdead)), '"\\udead"');
   });
 });
 
@@ -382,29 +411,29 @@ describe('single quotation marks', () => {
 
   test("strings and quoted names are written in ', with ' escaped and \" unescaped", () => {
     const value = { a: "it's", b: 'say "hi"', 'my key': 1, "it's": 2, c: 'back\\slash', d: 'tab\tnl\nx' };
-    const text = XTJSON.stringify(value, sq);
+    const text = stringify(value, sq);
     assert.equal(text, String.raw`a:'it\'s',b:'say "hi"','my key':1,'it\'s':2,c:'back\\slash',d:'tab\tnl\nx'`);
-    assert.deepEqual(XTJSON.parse(text), value);
+    assert.deepEqual(parse(text), value);
   });
 
   test("escape sequences other than \\\" are kept", () => {
     const value = [ch(0, 0x1f), 'a' + LS + 'b', '\\"'];
-    const text = XTJSON.stringify(value, sq);
+    const text = stringify(value, sq);
     assert.equal(text, String.raw`['\u0000\u001f','a\u2028b','\\"']`);
-    assert.deepEqual(XTJSON.parse(text), value);
+    assert.deepEqual(parse(text), value);
   });
 
   test("multi-line strings are written in '''", () => {
     const value = { s: "line 1\nit's '''quoted'''\nend'" };
-    const text = XTJSON.stringify(value, 2, sq);
+    const text = stringify(value, 2, sq);
     assert.equal(text, "s: '''\n  line 1\n  it's ''\\'quoted''\\'\n  end\\''''");
-    assert.deepEqual(XTJSON.parse(text), value);
+    assert.deepEqual(parse(text), value);
     // double quotation marks need no escaping inside '''
-    assert.equal(XTJSON.stringify(['"""\n"'], 2, sq), "[\n  '''\n    \"\"\"\n    \"'''\n]");
+    assert.equal(stringify(['"""\n"'], 2, sq), "[\n  '''\n    \"\"\"\n    \"'''\n]");
   });
 
   test('is off by default and can be read back', () => {
-    assert.equal(XTJSON.stringify(["'"]), `["'"]`);
+    assert.equal(stringify(["'"]), `["'"]`);
     assert.equal(new Options().writeSingleQuotes, false);
     assert.equal(new Options(sq).writeSingleQuotes, true);
     assert.equal(new Options({ writeNumberSuffixes: true }).writeNumberSuffixes, true);
@@ -469,7 +498,7 @@ describe('round trip', () => {
     return obj;
   }
 
-  test('XTJSON.parse(XTJSON.stringify(v)) equals JSON.parse(JSON.stringify(v))', () => {
+  test('parse(stringify(v)) equals JSON.parse(JSON.stringify(v))', () => {
     const rnd = random(12345);
     const namedValues = [['nil', null], ['one', 1], ['empty', ''], ['nl', '\n'], ['kilo', 1000], ['yes', true]];
     const variants = [
@@ -496,7 +525,7 @@ describe('round trip', () => {
       if (rnd() < 0.5) n = -n;
       const value = { n, list: [n, Number(n)] };
       for (const options of [{}, { writeNumberSuffixes: true, writeSingleQuotes: true }]) {
-        assert.deepEqual(XTJSON.parse(XTJSON.stringify(value, 2, options)), value);
+        assert.deepEqual(parse(stringify(value, 2, options)), value);
       }
     }
   });

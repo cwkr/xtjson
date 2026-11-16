@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-import XTJSON, { ParserError } from '../xtjson.js';
+import { parse, ParserError } from '../xtjson.js';
 
 const corpus = JSON.parse(readFileSync(new URL('./corpus.json', import.meta.url), 'utf8'));
 
@@ -47,7 +47,7 @@ function asNumbers(value) {
 function assertValid(text, expected, defs) {
   let actual;
   try {
-    actual = XTJSON.parse(text, null, defs);
+    actual = parse(text, null, defs);
   } catch (error) {
     assert.fail(`should be valid: ${show(text)} (${error.message})`);
   }
@@ -55,7 +55,7 @@ function assertValid(text, expected, defs) {
 }
 
 function assertInvalid(text, defs) {
-  assert.throws(() => XTJSON.parse(text, null, defs), ParserError, `should be invalid: ${show(text)}`);
+  assert.throws(() => parse(text, null, defs), ParserError, `should be invalid: ${show(text)}`);
 }
 
 const groups = [
@@ -75,14 +75,14 @@ for (const [file, key] of groups) {
 
 test('xtjson_ref.py: JSON texts give the same value as JSON.parse', () => {
   for (const text of corpus.ref_json_samples) {
-    assert.deepEqual(XTJSON.parse(text), JSON.parse(text), show(text));
+    assert.deepEqual(parse(text), JSON.parse(text), show(text));
   }
 });
 
 test('xtjson_ref.py: duplicate names are rejected only in I-JSON mode', () => {
   for (const text of ['{a: 1, "a": 2}', "a: 1\n'\\u0061': 2"]) {
-    assert.deepEqual(XTJSON.parse(text), { a: 2 });
-    assert.throws(() => XTJSON.parse(text, { ijson: true }), /Duplicate name "a"/);
+    assert.deepEqual(parse(text), { a: 2 });
+    assert.throws(() => parse(text, { ijson: true }), /Duplicate name "a"/);
   }
 });
 
@@ -92,7 +92,7 @@ test('I-JSON mode: valid texts give the same value or an I-JSON error', () => {
   for (const [text, expected] of all) {
     let actual;
     try {
-      actual = XTJSON.parse(text, { ijson: true });
+      actual = parse(text, { ijson: true });
     } catch (error) {
       assert.match(error.message, /I-JSON mode/, show(text));
       rejected++;
@@ -119,14 +119,14 @@ test('tests_definitionen.py: invalid definitions are a TypeError, not a ParserEr
   ];
   assert.ok(bad.length > 10);
   for (const defs of bad) {
-    assert.throws(() => XTJSON.parse('1', null, defs), (error) => {
+    assert.throws(() => parse('1', null, defs), (error) => {
       return error instanceof TypeError && !(error instanceof ParserError);
     }, JSON.stringify(defs.namedValues));
   }
 });
 
 test('tests_definitionen.py: custom suffixes are not accepted', () => {
-  assert.throws(() => XTJSON.parse('1', null, { suffixes: { q: Math.abs } }), TypeError);
+  assert.throws(() => parse('1', null, { suffixes: { q: Math.abs } }), TypeError);
 });
 
 // Examples of the specification (as in xtjson_ref.py): every block tagged
@@ -140,7 +140,7 @@ for (const lang of ['de', 'en']) {
     blocks.forEach(([tag, body], i) => {
       if (tag !== 'xtjson') return;
       count++;
-      const value = XTJSON.parse(body, null, EXAMPLE_DEFS);
+      const value = parse(body, null, EXAMPLE_DEFS);
       if (blocks[i + 1]?.[0] === 'json') {
         assert.deepEqual(value, JSON.parse(blocks[i + 1][1]), `example ${count}`);
       }

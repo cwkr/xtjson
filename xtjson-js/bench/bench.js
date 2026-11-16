@@ -1,5 +1,5 @@
 /**
- * Benchmark for XTJSON.parse and XTJSON.stringify.
+ * Benchmark for parse and stringify.
  *
  * Runs unchanged with Node.js, Deno and Bun:
  *
@@ -13,7 +13,7 @@
  * measured on the same data as a point of reference.
  */
 
-import XTJSON, { Options } from '../xtjson.js';
+import { parse, stringify, Options } from '../xtjson.js';
 
 const args = globalThis.Deno ? globalThis.Deno.args : globalThis.process.argv.slice(2);
 const asJSON = args.includes('--json');
@@ -147,9 +147,9 @@ function numberText() {
 const mixed = mixedData();
 const mixedCompact = JSON.stringify(mixed);
 const mixedIndented = JSON.stringify(mixed, null, 2);
-const mixedXT = XTJSON.stringify(mixed, 2);
+const mixedXT = stringify(mixed, 2);
 const config = configText(200);
-const configData = XTJSON.parse(config);
+const configData = parse(config);
 const plainStrings = stringArray(['plain ascii text without escapes', 'another fairly long string value, as in prose'], 4000);
 const escapedStrings = stringArray(['line\nbreak and\ttab', 'quote " and backslash \\', 'emoji 😀 and \u00e4\u00f6\u00fc'], 4000);
 const plainStringsText = JSON.stringify(plainStrings);
@@ -160,27 +160,27 @@ const suffixOptions = new Options({ writeNumberSuffixes: true, writeSingleQuotes
 
 /** [name, size of the document in characters, function] */
 const CASES = [
-  ['parse  JSON compact', mixedCompact.length, () => XTJSON.parse(mixedCompact)],
+  ['parse  JSON compact', mixedCompact.length, () => parse(mixedCompact)],
   ['parse  JSON compact (JSON.parse)', mixedCompact.length, () => JSON.parse(mixedCompact)],
-  ['parse  JSON indented', mixedIndented.length, () => XTJSON.parse(mixedIndented)],
+  ['parse  JSON indented', mixedIndented.length, () => parse(mixedIndented)],
   ['parse  JSON indented (JSON.parse)', mixedIndented.length, () => JSON.parse(mixedIndented)],
-  ['parse  XTJSON generated', mixedXT.length, () => XTJSON.parse(mixedXT)],
-  ['parse  XTJSON config', config.length, () => XTJSON.parse(config)],
-  ['parse  XTJSON config, I-JSON + named values', config.length, () => XTJSON.parse(config, options)],
-  ['parse  small document', SMALL.length, () => XTJSON.parse(SMALL)],
-  ['parse  plain strings', plainStringsText.length, () => XTJSON.parse(plainStringsText)],
-  ['parse  escaped strings', escapedStringsText.length, () => XTJSON.parse(escapedStringsText)],
-  ['parse  numbers', numbers.length, () => XTJSON.parse(numbers)],
-  ['parse  with reviver', mixedCompact.length, () => XTJSON.parse(mixedCompact, (key, value) => value)],
-  ['stringify  compact', mixedCompact.length, () => XTJSON.stringify(mixed)],
+  ['parse  XTJSON generated', mixedXT.length, () => parse(mixedXT)],
+  ['parse  XTJSON config', config.length, () => parse(config)],
+  ['parse  XTJSON config, I-JSON + named values', config.length, () => parse(config, options)],
+  ['parse  small document', SMALL.length, () => parse(SMALL)],
+  ['parse  plain strings', plainStringsText.length, () => parse(plainStringsText)],
+  ['parse  escaped strings', escapedStringsText.length, () => parse(escapedStringsText)],
+  ['parse  numbers', numbers.length, () => parse(numbers)],
+  ['parse  with reviver', mixedCompact.length, () => parse(mixedCompact, (key, value) => value)],
+  ['stringify  compact', mixedCompact.length, () => stringify(mixed)],
   ['stringify  compact (JSON.stringify)', mixedCompact.length, () => JSON.stringify(mixed)],
-  ['stringify  indented', mixedXT.length, () => XTJSON.stringify(mixed, 2)],
+  ['stringify  indented', mixedXT.length, () => stringify(mixed, 2)],
   ['stringify  indented (JSON.stringify)', mixedIndented.length, () => JSON.stringify(mixed, null, 2)],
-  ['stringify  config indented', config.length, () => XTJSON.stringify(configData, 2)],
-  ['stringify  config, suffixes + single quotes', config.length, () => XTJSON.stringify(configData, 2, suffixOptions)],
-  ['stringify  plain strings', plainStringsText.length, () => XTJSON.stringify(plainStrings)],
-  ['stringify  escaped strings', escapedStringsText.length, () => XTJSON.stringify(escapedStrings, 2)],
-  ['stringify  small document', SMALL.length, () => XTJSON.stringify({ name: 'demo-service', port: 8080, debug: false, hosts: ['a', 'b'] }, 2)],
+  ['stringify  config indented', config.length, () => stringify(configData, 2)],
+  ['stringify  config, suffixes + single quotes', config.length, () => stringify(configData, 2, suffixOptions)],
+  ['stringify  plain strings', plainStringsText.length, () => stringify(plainStrings)],
+  ['stringify  escaped strings', escapedStringsText.length, () => stringify(escapedStrings, 2)],
+  ['stringify  small document', SMALL.length, () => stringify({ name: 'demo-service', port: 8080, debug: false, hosts: ['a', 'b'] }, 2)],
 ];
 
 // ---------------------------------------------------------------------------
