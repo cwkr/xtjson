@@ -19,8 +19,8 @@ describe('foldingRanges', () => {
     assert.deepEqual(foldingRanges(text), [{ start: 0, end: 3 }]);
   });
 
-  test('multi-line strings and block comments', () => {
-    const text = '/* one\n   two */\nmotd: """\n  Welcome. }\n  Bye.\n  """\nx: 1';
+  test('strings across several lines and block comments', () => {
+    const text = '/* one\n   two */\nmotd: "\n  Welcome. }\n  Bye. \\"\n  "\nx: 1';
     assert.deepEqual(foldingRanges(text), [
       { start: 0, end: 1, kind: 'comment' },
       { start: 2, end: 4 },
@@ -43,7 +43,12 @@ describe('foldingRanges', () => {
   test('CR and CR LF are line breaks', () => {
     assert.deepEqual(foldingRanges('a: [\r\n  1\r\n]'), [{ start: 0, end: 1 }]);
     assert.deepEqual(foldingRanges('a: [\r  1\r]'), [{ start: 0, end: 1 }]);
-    assert.deepEqual(foldingRanges('a: """\r\n  x\r\n  """\r\n'), [{ start: 0, end: 1 }]);
+    assert.deepEqual(foldingRanges('a: "\r\n  x\r\n  "\r\n'), [{ start: 0, end: 1 }]);
+    assert.deepEqual(foldingRanges("a: '\r  x\\\r  y\r  '\rb: [\r1\r]"), [{ start: 0, end: 2 }, { start: 4, end: 5 }]);
+  });
+
+  test('brackets in a string across several lines are ignored', () => {
+    assert.deepEqual(foldingRanges('a: [\n  "x\n  ]"\n]'), [{ start: 0, end: 2 }]);
   });
 
   test('U+2028 is not a line break', () => {

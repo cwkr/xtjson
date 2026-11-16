@@ -82,18 +82,28 @@ describe('grammar', () => {
       assert.equal(scopeOf(`a: "${e}"`, e.slice(0, 2)), 'invalid.illegal.unrecognized-string-escape.xtjson', e);
     }
     assert.equal(scopeOf('a: "\\01"', '\\0'), 'invalid.illegal.unrecognized-string-escape.xtjson');
-    assert.equal(scopeOf('a: "x\ty"', '\t'), 'invalid.illegal.unescaped-control-character.xtjson');
+    assert.equal(scopeOf('a: "x\ty"', 'x\ty'), 'string.quoted.double.xtjson');
+    assert.equal(scopeOf('a: "x\vy"', '\v'), 'invalid.illegal.unescaped-control-character.xtjson');
+    assert.equal(scopeOf('a: "x\fy"', '\f'), 'invalid.illegal.unescaped-control-character.xtjson');
   });
 
-  test('a single-line string ends at the line break', () => {
-    assert.equal(scopeOf('a: "open\nb: 1', 'b'), 'support.type.property-name.xtjson');
-  });
-
-  test('multi-line strings', () => {
-    const text = 'motd: """\n  Welcome. "x" ""\n  // no comment: 1\n  """\nnext: 1';
-    assert.equal(scopeOf(text, '  // no comment: 1'), 'string.quoted.triple.double.xtjson');
+  test('strings across several lines', () => {
+    const text = 'motd: "\n  Welcome. \'x\' \\"\n  // no comment: 1\n  "\nnext: 1';
+    assert.equal(scopeOf(text, '  // no comment: 1'), 'string.quoted.double.xtjson');
     assert.equal(scopeOf(text, 'next'), 'support.type.property-name.xtjson');
-    assert.equal(scopeOf("a: '''x\\ty'''", '\\t'), 'constant.character.escape.xtjson');
+    assert.equal(scopeOf("a: '\n  x\\ty\n  '", '\\t'), 'constant.character.escape.xtjson');
+    assert.equal(scopeOf('a: "open\nb: 1', 'b: 1'), 'string.quoted.double.xtjson');
+  });
+
+  test('line continuation', () => {
+    assert.equal(scopeOf('a: "long \\\n  line"', '\\'), 'constant.character.escape.line-continuation.xtjson');
+    assert.equal(scopeOf('a: "long \\ \n  line"', '\\ '), 'invalid.illegal.unrecognized-string-escape.xtjson');
+  });
+
+  test('three quotation marks are marked as invalid', () => {
+    assert.equal(scopeOf('a: """x"""', '"""'), 'invalid.illegal.triple-quote.xtjson');
+    assert.equal(scopeOf("a: '''\n  x\n  '''", "'''"), 'invalid.illegal.triple-quote.xtjson');
+    assert.equal(scopeOf('a: \'say """\'', 'say """'), 'string.quoted.single.xtjson');
   });
 
   test('numbers and suffixes', () => {

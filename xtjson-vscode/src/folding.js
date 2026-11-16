@@ -16,8 +16,8 @@ const REGION_END = /^(?:\/\/|#)\s*#?endregion\b/;
 const CLOSING = { '{': '}', '[': ']' };
 
 /**
- * Computes the folding ranges of a document: objects and arrays, multi-line
- * strings, block comments, runs of line comments, and regions marked with
+ * Computes the folding ranges of a document: objects and arrays, strings
+ * across several lines, block comments, runs of line comments, and regions marked with
  * `// #region` and `// #endregion` (or `#region` and `#endregion`).
  *
  * @param {string} text the document
@@ -102,21 +102,13 @@ export function foldingRanges(text) {
       continue;
     }
 
-    // Strings
+    // Strings: a string may extend across several lines (8.1) and folds up
+    // to the line before its closing quotation mark.
     if (c === '"' || c === "'") {
-      const triple = c.repeat(3);
-      if (text.startsWith(triple, i)) {
-        let j = i + 3;
-        while (j < text.length && !text.startsWith(triple, j)) j += text[j] === '\\' ? 2 : 1;
-        const end = skipTo(Math.min(text.length, j + 3));
-        add(start, end - 1);
-      } else {
-        i++;
-        while (i < text.length && text[i] !== c && text[i] !== '\n' && text[i] !== '\r') {
-          i += text[i] === '\\' && text[i + 1] !== '\n' && text[i + 1] !== '\r' ? 2 : 1;
-        }
-        if (text[i] === c) i++;
-      }
+      let j = i + 1;
+      while (j < text.length && text[j] !== c) j += text[j] === '\\' ? 2 : 1;
+      const end = skipTo(Math.min(text.length, j + 1));
+      add(start, end - 1);
       continue;
     }
 

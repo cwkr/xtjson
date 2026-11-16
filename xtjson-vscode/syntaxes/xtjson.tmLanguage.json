@@ -34,7 +34,7 @@
       ]
     },
     "property-names": {
-      "comment": "A name: an identifier or a single-line string that is followed by ':' on the same line (7.2).",
+      "comment": "A name: an identifier or a string that is followed by ':' on the same line (7.2). A name across several lines is highlighted as a string, because a TextMate grammar cannot look beyond the end of the line.",
       "patterns": [
         {
           "name": "support.type.property-name.xtjson",
@@ -61,25 +61,14 @@
     "strings": {
       "patterns": [
         {
-          "name": "string.quoted.triple.double.xtjson",
-          "begin": "\"\"\"",
-          "end": "\"\"\"",
-          "beginCaptures": { "0": { "name": "punctuation.definition.string.begin.xtjson" } },
-          "endCaptures": { "0": { "name": "punctuation.definition.string.end.xtjson" } },
-          "patterns": [{ "include": "#multi-line-content" }]
-        },
-        {
-          "name": "string.quoted.triple.single.xtjson",
-          "begin": "'''",
-          "end": "'''",
-          "beginCaptures": { "0": { "name": "punctuation.definition.string.begin.xtjson" } },
-          "endCaptures": { "0": { "name": "punctuation.definition.string.end.xtjson" } },
-          "patterns": [{ "include": "#multi-line-content" }]
+          "comment": "Three quotation marks in a row do not delimit a string: they are an empty string directly followed by another string, which is always an error.",
+          "name": "invalid.illegal.triple-quote.xtjson",
+          "match": "\"\"\"|'''"
         },
         {
           "name": "string.quoted.double.xtjson",
           "begin": "\"",
-          "end": "\"|$",
+          "end": "\"",
           "beginCaptures": { "0": { "name": "punctuation.definition.string.begin.xtjson" } },
           "endCaptures": { "0": { "name": "punctuation.definition.string.end.xtjson" } },
           "patterns": [{ "include": "#string-content" }]
@@ -87,7 +76,7 @@
         {
           "name": "string.quoted.single.xtjson",
           "begin": "'",
-          "end": "'|$",
+          "end": "'",
           "beginCaptures": { "0": { "name": "punctuation.definition.string.begin.xtjson" } },
           "endCaptures": { "0": { "name": "punctuation.definition.string.end.xtjson" } },
           "patterns": [{ "include": "#string-content" }]
@@ -95,26 +84,20 @@
       ]
     },
     "string-content": {
-      "comment": "Single-line strings: control characters must be escaped (8.1).",
-      "patterns": [
-        { "include": "#escapes" },
-        { "name": "invalid.illegal.unescaped-control-character.xtjson", "match": "[\\x{00}-\\x{1F}]" }
-      ]
-    },
-    "multi-line-content": {
-      "comment": "Multi-line strings: line breaks and tabs may appear unescaped (8.3).",
+      "comment": "A string may extend across several lines: tab and line breaks may appear unescaped, every other control character must be escaped (8.1).",
       "patterns": [
         { "include": "#escapes" },
         { "name": "invalid.illegal.unescaped-control-character.xtjson", "match": "[\\x{00}-\\x{08}\\x{0B}\\x{0C}\\x{0E}-\\x{1F}]" }
       ]
     },
     "escapes": {
-      "comment": "The escape sequences of the table in 8.2; every other sequence with a backslash is an error.",
+      "comment": "The escape sequences of the table in 8.2, including the line continuation, a backslash at the end of the line; every other sequence with a backslash is an error, also a backslash followed by white space.",
       "patterns": [
         {
           "name": "constant.character.escape.xtjson",
           "match": "\\\\(?:[\"'\\\\/bfnrtv]|0(?![0-9])|x\\h{2}|u\\h{4}|u\\{0*(?![dD][89a-fA-F]\\h{2}\\})(?:\\h{1,5}|10\\h{4})\\})"
         },
+        { "name": "constant.character.escape.line-continuation.xtjson", "match": "\\\\$" },
         { "name": "invalid.illegal.unrecognized-string-escape.xtjson", "match": "\\\\.?" }
       ]
     },

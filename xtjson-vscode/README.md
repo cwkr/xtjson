@@ -5,11 +5,12 @@ of JSON for files maintained by people, in files with the extension
 `.xtjson` or `.xtj`:
 
 - **Syntax highlighting** for comments (`//`, `#`, `/* */`), names with and
-  without quotation marks, single-line and multi-line strings, escape
-  sequences, numbers in all bases with digit grouping, number suffixes, and
+  without quotation marks, strings across several lines, escape
+  sequences including the line continuation, numbers in all bases with digit grouping, number suffixes, and
   named values. Invalid escape sequences, unescaped control characters in
-  strings and malformed numbers (`0755`, `10_k`, `5l`) are marked as errors.
-- **Folding** of objects, arrays, multi-line strings, block comments, runs of
+  strings, three quotation marks in a row and malformed numbers (`0755`,
+  `10_k`, `5l`) are marked as errors.
+- **Folding** of objects, arrays, strings across several lines, block comments, runs of
   line comments, and regions between `// #region` and `// #endregion` (or
   `#region` and `#endregion`).
 - **Formatting** of the whole document (*Format Document*) with the editor's
@@ -19,7 +20,7 @@ of JSON for files maintained by people, in files with the extension
   own, and at most one blank line between items is kept.
 - Comment toggling, bracket matching and auto-closing of brackets and quotes.
 
-Implements the XTJSON specification, draft 0.4
+Implements the XTJSON specification, draft 0.5
 ([`docs/xtjson-spec-en.md`](../docs/xtjson-spec-en.md)).
 
 ## Limits
@@ -27,7 +28,8 @@ Implements the XTJSON specification, draft 0.4
 - Highlighting and folding are lexical. They do not check the structure of
   the document, and an identifier at a value position is highlighted as a
   named value whether or not it is defined: definitions belong to the
-  application that reads the document (section 6.4).
+  application that reads the document (section 6.4). A name that extends
+  across several lines is highlighted as a string.
 - `format` does not validate the document. A valid document keeps its value;
   an invalid one is formatted as far as possible. Formatting a selection is
   not supported.
