@@ -1,7 +1,7 @@
 /**
  * XTJSON parser: `Parser`, `ParserError` and `parse()`.
  *
- * Implements the XTJSON specification, draft 0.4 (docs/xtjson-spec-en.md).
+ * Implements the XTJSON specification, draft 0.5 (docs/xtjson-spec-en.md).
  *
  * Design notes:
  * - Single-pass recursive descent parser working directly on UTF-16 code

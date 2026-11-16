@@ -1,7 +1,7 @@
 /**
  * XTJSON generator: `Generator` and `stringify()`.
  *
- * Implements the XTJSON specification, draft 0.4 (docs/xtjson-spec-en.md).
+ * Implements the XTJSON specification, draft 0.5 (docs/xtjson-spec-en.md).
  *
  * Design notes:
  * - Serialization as in `JSON.stringify` (ECMA-262 SerializeJSONProperty),
@@ -192,7 +192,7 @@ function escapeLineText(text, trailingBlank, quote) {
  * `indent`, with the delimiter `"` or `'` (`quote`). The text begins with an
  * empty line, so that exactly `indent` is removed again when it is read.
  */
-function multiLineString(value, indent, quote) {
+function stringAcrossLines(value, indent, quote) {
   const delimiter = String.fromCharCode(quote);
   const parts = value.split('\n');
   const last = parts.length - 1;
@@ -402,7 +402,7 @@ export class Generator {
       const name = this.#names.get(value);
       if (name !== undefined) return name;
     }
-    if (this.#gap !== '' && value.includes('\n')) return multiLineString(value, indent + this.#gap, this.#quote);
+    if (this.#gap !== '' && value.includes('\n')) return stringAcrossLines(value, indent + this.#gap, this.#quote);
     return this.#quoted(value);
   }
 
@@ -412,7 +412,7 @@ export class Generator {
     return this.#isIdentifier(key) ? key : this.#quoted(key);
   }
 
-  /** A single-line string in the configured quotation marks. */
+  /** A string on one line, in the configured quotation marks. */
   #quoted(value) {
     return this.#quote === SQUOTE ? singleQuoteString(value) : quoteString(value);
   }

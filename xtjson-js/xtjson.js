@@ -1,7 +1,7 @@
 /**
  * XTJSON parser and generator for JavaScript.
  *
- * Implements the XTJSON specification, draft 0.4 (docs/xtjson-spec-en.md).
+ * Implements the XTJSON specification, draft 0.5 (docs/xtjson-spec-en.md).
  *
  *     import { parse, stringify } from '@cwkr/xtjson';
  *     const value = parse(text, reviver, options);
