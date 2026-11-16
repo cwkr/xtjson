@@ -335,10 +335,11 @@ After the last item of an object, an array or the implicit root object there MAY
 ### 8.1 Delimiters and characters
 
 ```abnf
-string        = dq-string / sq-string
-dq-string     = DQUOTE *( dq-unescaped / str-plain / escape-seq ) DQUOTE
-sq-string     = SQUOTE *( sq-unescaped / str-plain / escape-seq ) SQUOTE
-str-plain     = %x09 / newline
+string        = DQUOTE *( unescaped / SQUOTE / escape-seq ) DQUOTE
+              / SQUOTE *( unescaped / DQUOTE / escape-seq ) SQUOTE
+unescaped     = %x09 / newline / %x20-21 / %x23-26 / %x28-5B / %x5D-10FFFF
+                                             ; without " ' \ and without control
+                                             ; characters other than HT and line breaks
 ```
 
 - A string is enclosed in double (`"`) or in single (`'`) quotation marks. Both forms are equivalent and permitted wherever a string may appear, including as a name.
@@ -727,12 +728,11 @@ non-star       = %x00-29 / %x2B-10FFFF
 non-star-slash = %x00-29 / %x2B-2E / %x30-10FFFF
 
 ; ---------- Strings ----------
-string         = dq-string / sq-string
-dq-string      = DQUOTE *( dq-unescaped / str-plain / escape-seq ) DQUOTE
-sq-string      = SQUOTE *( sq-unescaped / str-plain / escape-seq ) SQUOTE
-str-plain      = %x09 / newline              ; HT and line breaks (8.1)
-dq-unescaped   = %x20-21 / %x23-5B / %x5D-10FFFF     ; without " and \
-sq-unescaped   = %x20-26 / %x28-5B / %x5D-10FFFF     ; without ' and \
+string         = DQUOTE *( unescaped / SQUOTE / escape-seq ) DQUOTE
+               / SQUOTE *( unescaped / DQUOTE / escape-seq ) SQUOTE
+unescaped      = %x09 / newline / %x20-21 / %x23-26 / %x28-5B / %x5D-10FFFF
+                                             ; without " ' \ and without control
+                                             ; characters other than HT and line breaks
 escape-seq     = %x5C ( char-escape / null-escape / hex-escape /
                         unicode-escape / codepoint-escape / newline )
                                              ; \ before newline: line continuation

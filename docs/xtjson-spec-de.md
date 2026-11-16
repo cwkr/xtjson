@@ -335,10 +335,11 @@ Nach dem letzten Element eines Objekts, eines Arrays oder des impliziten Wurzelo
 ### 8.1 Begrenzer und Zeichen
 
 ```abnf
-string        = dq-string / sq-string
-dq-string     = DQUOTE *( dq-unescaped / str-plain / escape-seq ) DQUOTE
-sq-string     = SQUOTE *( sq-unescaped / str-plain / escape-seq ) SQUOTE
-str-plain     = %x09 / newline
+string        = DQUOTE *( unescaped / SQUOTE / escape-seq ) DQUOTE
+              / SQUOTE *( unescaped / DQUOTE / escape-seq ) SQUOTE
+unescaped     = %x09 / newline / %x20-21 / %x23-26 / %x28-5B / %x5D-10FFFF
+                                             ; ohne " ' \ und ohne Steuerzeichen
+                                             ; außer HT und Zeilenumbrüchen
 ```
 
 - Ein String steht in doppelten (`"`) oder in einfachen (`'`) Anführungszeichen. Beide Formen sind gleichwertig und an jeder Stelle erlaubt, an der ein String stehen darf, auch als Name.
@@ -727,12 +728,11 @@ non-star       = %x00-29 / %x2B-10FFFF
 non-star-slash = %x00-29 / %x2B-2E / %x30-10FFFF
 
 ; ---------- Strings ----------
-string         = dq-string / sq-string
-dq-string      = DQUOTE *( dq-unescaped / str-plain / escape-seq ) DQUOTE
-sq-string      = SQUOTE *( sq-unescaped / str-plain / escape-seq ) SQUOTE
-str-plain      = %x09 / newline              ; HT und Zeilenumbrüche (8.1)
-dq-unescaped   = %x20-21 / %x23-5B / %x5D-10FFFF     ; ohne " und \
-sq-unescaped   = %x20-26 / %x28-5B / %x5D-10FFFF     ; ohne ' und \
+string         = DQUOTE *( unescaped / SQUOTE / escape-seq ) DQUOTE
+               / SQUOTE *( unescaped / DQUOTE / escape-seq ) SQUOTE
+unescaped      = %x09 / newline / %x20-21 / %x23-26 / %x28-5B / %x5D-10FFFF
+                                             ; ohne " ' \ und ohne Steuerzeichen
+                                             ; außer HT und Zeilenumbrüchen
 escape-seq     = %x5C ( char-escape / null-escape / hex-escape /
                         unicode-escape / codepoint-escape / newline )
                                              ; \ vor newline: Zeilenfortsetzung
