@@ -4,6 +4,11 @@
   "description": "Syntax highlighting, folding and formatting for XTJSON, a superset of JSON for files maintained by people",
   "version": "0.2.0",
   "publisher": "cwkr",
+  "icon": "images/icon.png",
+  "galleryBanner": {
+    "color": "#1c2025",
+    "theme": "dark"
+  },
   "license": "MIT",
   "author": "Christian Winkler",
   "contributors": [

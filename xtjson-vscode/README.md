@@ -15,13 +15,13 @@ of JSON for files maintained by people, in files with the extension
   `#region` and `#endregion`).
 - **Formatting** of the whole document (*Format Document*) with the editor's
   indentation settings. It uses `format` from
-  [`@cwkr/xtjson`](../xtjson-js/README.md): comments and the notation of names
+  [`@cwkr/xtjson`](https://github.com/cwkr/xtjson/tree/main/xtjson-js#readme): comments and the notation of names
   and values are kept, every member and array item is placed on a line of its
   own, and at most one blank line between items is kept.
 - Comment toggling, bracket matching and auto-closing of brackets and quotes.
 
 Implements the XTJSON specification, draft 0.5
-([`docs/xtjson-spec-en.md`](../docs/xtjson-spec-en.md)).
+([`docs/xtjson-spec-en.md`](https://github.com/cwkr/xtjson/blob/main/docs/xtjson-spec-en.md)).
 
 ## Limits
 
@@ -62,4 +62,4 @@ To try the extension, open this directory in VS Code and start
 
 ## License
 
-[MIT](LICENSE)
+[MIT](https://github.com/cwkr/xtjson/blob/main/xtjson-vscode/LICENSE)
