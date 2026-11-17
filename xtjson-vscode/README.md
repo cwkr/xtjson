@@ -7,7 +7,7 @@ of JSON for files maintained by people, in files with the extension
 - **Syntax highlighting** for comments (`//`, `#`, `/* */`), names with and
   without quotation marks, strings across several lines, escape
   sequences including the line continuation, numbers in all bases with digit grouping, number suffixes,
-  named values, and the directives `%define` and `%version`. Invalid escape
+  named values, and the directives `%define`, `%version` and `%strict`. Invalid escape
   sequences, unescaped control characters in strings, three quotation marks
   in a row, malformed numbers (`0755`, `10_k`, `5l`) and unknown directives
   are marked as errors.

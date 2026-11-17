@@ -96,10 +96,23 @@ describe('grammar', () => {
     assert.equal(scopeOf('%define:\n  a\n  = 1\n[a]', '='), 'keyword.operator.assignment.xtjson');
   });
 
+  test('%strict', () => {
+    const text = '%define: yes = true\n%strict: yes\n{}';
+    assert.equal(scopeOf(text, '%strict'), 'keyword.control.directive.xtjson');
+    assert.deepEqual(tokens(text).filter(([t]) => t === 'yes').map(([, s]) => s), [
+      'entity.name.constant.xtjson',
+      'variable.other.constant.xtjson',
+    ]);
+    assert.equal(scopeOf('%strict: true\n[1]', 'true'), 'constant.language.xtjson');
+    assert.equal(scopeOf('%strict: true\n[1]', ':'), 'punctuation.separator.key-value.xtjson');
+  });
+
   test('unknown directives and a lone % are marked as invalid', () => {
     assert.equal(scopeOf('%import: x = "a"', '%import'), 'invalid.illegal.unknown-directive.xtjson');
     assert.equal(scopeOf('%Define: x = 1', '%Define'), 'invalid.illegal.unknown-directive.xtjson');
     assert.equal(scopeOf('%defines: x = 1', '%defines'), 'invalid.illegal.unknown-directive.xtjson');
+    assert.equal(scopeOf('%Strict: true', '%Strict'), 'invalid.illegal.unknown-directive.xtjson');
+    assert.equal(scopeOf('%strictly: true', '%strictly'), 'invalid.illegal.unknown-directive.xtjson');
     assert.equal(scopeOf('% define: x = 1', '%'), 'invalid.illegal.directive.xtjson');
     assert.equal(scopeOf('a: 50%', '%'), 'invalid.illegal.directive.xtjson');
     assert.equal(scopeOf('a: "100%"', '100%'), 'string.quoted.double.xtjson');
@@ -158,6 +171,7 @@ describe('grammar', () => {
       ...corpus.b_valid.map(([text]) => text),
       ...corpus.c_valid.map(([text]) => text),
       ...corpus.d_valid.map(([text]) => text),
+      ...corpus.d_strict_valid.map(([text]) => text),
     ];
     for (const lang of ['de', 'en']) {
       const spec = readFileSync(new URL(`../../docs/xtjson-spec-${lang}.md`, import.meta.url), 'utf8');
