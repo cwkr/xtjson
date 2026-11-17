@@ -26,7 +26,7 @@ scripts/
   tests_zeilenumbruch_strings.py  tests: line breaks, strings, names, escapes
   tests_mehrzeilige_strings.py    tests: value of strings across several lines
   tests_definitionen.py           tests: named values and number suffixes
-  tests_direktiven.py             tests: directives, %define and %version
+  tests_direktiven.py             tests: directives and strict mode
   build_index.py                  generates docs/index.html
   index_template.html             template for docs/index.html
   export_corpus.py                exports the test cases as JSON for implementations
@@ -57,7 +57,7 @@ Each script ends with a result line and exit code 0 on success. The scripts prin
 What they check:
 
 - `xtjson_ref.py <version>` parses every fenced block tagged `xtjson` in the given version. If a block tagged `json` follows immediately, its value must be equal. It also runs built-in valid and invalid cases and plain JSON texts (the superset property).
-- The four `tests_*.py` files contain pairs of text and expected value, and texts that must be rejected. `tests_direktiven.py` also checks the version statements and the limit for the size after replacing named values.
+- The four `tests_*.py` files contain pairs of text and expected value, and texts that must be rejected. `tests_direktiven.py` also checks the version statements, strict mode requested by the application, and the limit for the size after replacing named values.
 - `compare_versions.py` compares the outline, the ABNF blocks (without comments), the shape of the example values, tables, list items and the number of normative key words per section. Item 7 of its output lists code spans that occur in only one version; only translated example words are acceptable there.
 
 The comparison is mechanical. It does not detect differences of meaning in prose. Always read changed sentences against each other in both versions.
@@ -129,7 +129,7 @@ No change may give up these properties:
 
 - **Superset.** Every UTF-8 encoded JSON text is a valid XTJSON document with the same meaning (K1, K2). An extension may only occupy notations that are a syntax error in JSON.
 - **JSON data model.** Every document has a JSON equivalent (section 10). There are no new data types, no expressions, no references.
-- **Predefined and not changeable** are `true`, `false`, `null`, the directives `%define` and `%version`, and all number suffixes. The table in 9.5 is exhaustive: `k`, `K`, `kb`, `Kb`, `kB`, `KB`, `mb`, `Mb`, `mB`, `MB`, `ms`, `s`, `min`, `h`, `pct`, `px`, `L`, `n`.
+- **Predefined and not changeable** are `true`, `false`, `null`, the directives `%define`, `%version` and `%strict`, and all number suffixes. The table in 9.5 is exhaustive: `k`, `K`, `kb`, `Kb`, `kB`, `KB`, `mb`, `Mb`, `mB`, `MB`, `ms`, `s`, `min`, `h`, `pct`, `px`, `L`, `n`.
 - **Definitions belong to the document, not to the parser.** Named values are defined only in the document, with `%define` (any JSON value, including objects and arrays, copied to every position where it is used). The application can define neither named values nor directives nor suffixes; suffixes and directives are defined only by the specification. Every document is therefore portable. Anything undefined is an error.
 - **Errors instead of guessing.** When in doubt, an input is an error and is not silently interpreted (unknown escape sequences, undefined identifiers, mixed indentation).
 - **Narrow rules first.** Where several solutions are possible, choose the narrower one and give the rationale in Appendix D. Loosening later is compatible; restricting is not.
@@ -140,14 +140,15 @@ Do not simply implement proposals that touch one of these principles. Present th
 
 An implementation in this repository is a conforming XTJSON parser, generator or converter in the sense of section 11 of the specification. In particular:
 
-- **No dialects.** Accept exactly what the grammar in Appendix A allows, and reject everything else. Do not add convenience extensions, lenient modes or fallbacks that the specification does not define. Options that restrict (for example an I-JSON mode according to section 12) are fine.
+- **No dialects.** Accept exactly what the grammar in Appendix A allows, and reject everything else. Do not add convenience extensions, lenient modes or fallbacks that the specification does not define. Options that restrict (for example strict mode according to section 12) are fine.
 - **Named values only from the document.** Only `true`, `false`, `null` and the named values defined by `%define` in the document are known. Do not offer an API to define named values.
-- **No custom directives or suffixes.** Know exactly the directives `%define` and `%version` (6.5 to 6.7) and the suffixes in the table in 9.5. Do not offer an API to add, change or remove directives or suffixes.
+- **No custom directives or suffixes.** Know exactly the directives `%define`, `%version` and `%strict` (6.5 to 6.8) and the suffixes in the table in 9.5. Do not offer an API to add, change or remove directives or suffixes.
 - **Version statements.** Make the `%version` statements of a document available to the application (identifier and value, the version of the specification under `xtjson`). Rejecting an unsupported version of the specification is permitted, not required.
+- **Strict mode is required.** Offer strict mode (section 12) to the application, and apply it also when the document contains `%strict: true`. When the application has requested strict mode, `%strict: false` is an error. Strict mode rejects duplicate names, surrogates and noncharacters in names and strings (directly or escaped), and a root value that is not an object or an array. It covers the whole document, including the values of directives before `%strict` and of named values that are not used.
 - **Limit the size after replacing named values** (11, 13), and report an error when the limit is hit; definitions that use one another can grow exponentially.
 - **Behaviour that is easy to get wrong:**
-  - Duplicate names: the member that comes last in the document applies (7.2); forbidden in I-JSON mode, also in values of directives that are not used.
-  - Directives: only at the top level, before the content, `%` directly followed by the name, separated like items (a separator also after the last one), and a document of directives alone is an error. `%define` needs `identifier =`, defines each name once (not `true`, `false`, `null`), and its value sees only earlier definitions. `%version` takes a string or a number without suffix; at most once per identifier, and `%version: v` is the same as `%version: xtjson = v`. Every other directive is an error.
+  - Duplicate names: the member that comes last in the document applies (7.2); forbidden in strict mode, also in values of directives that are not used.
+  - Directives: only at the top level, before the content, `%` directly followed by the name, separated like items (a separator also after the last one), and a document of directives alone is an error. `%define` needs `identifier =`, defines each name once (not `true`, `false`, `null`), and its value sees only earlier definitions. `%version` takes a string or a number, also with a suffix or as a named value whose value is a string or a number; at most once per identifier, and `%version: v` is the same as `%version: xtjson = v`. `%strict` takes `true` or `false`, also as a named value, has no identifier and occurs at most once. Every other directive is an error.
   - Line break: LF, CR or CR LF, with CR LF counting as one. U+2028 and U+2029 are white space, not line breaks, and do not end a line comment.
   - A line break inside a block comment is not a separator.
   - Strings: there is one kind of string, in `"` or `'`, and every string may extend across several lines. Line breaks (LF, CR, CR LF) and tab may appear unescaped; every other control character, including VT and FF, must be escaped. Three quotation marks in a row are not a delimiter but an error. Names may extend across several lines too.
@@ -175,10 +176,10 @@ An implementation in this repository is a conforming XTJSON parser, generator or
 
 ## Reference parser
 
-- Interface: `parse(text, ijson=False, max_expansion=MAX_EXPANSION)` returns the value; `parse_document(...)` with the same parameters returns `(value, versions)`, where `versions` maps the identifiers of the `%version` statements to their values (`xtjson` for the specification). `max_expansion` limits the number of JSON values that replacing named values produces. The suffixes are fixed in `SUFFIXES`.
+- Interface: `parse(text, strict=False, max_expansion=MAX_EXPANSION)` returns the value; `parse_document(...)` with the same parameters returns `(value, versions)`, where `versions` maps the identifiers of the `%version` statements to their values (`xtjson` for the specification). `strict` is strict mode requested by the application. `max_expansion` limits the number of JSON values that replacing named values produces. The suffixes are fixed in `SUFFIXES`.
 - Invalid documents, including a document that hits the limit, raise `XTJSONError`.
 - Known gaps compared with the specification; do not treat them as done:
-  - The I-JSON mode checks only duplicate names, not surrogates, noncharacters or number ranges.
+  - It does not limit the number range, also not in strict mode (section 12 only recommends the range of binary64).
   - Decimal numbers with a fraction part or an exponent become `float` (binary64). Exact arithmetic is used only for integers and for suffixes.
   - It expects text that is already decoded; checking UTF-8 is left to the caller.
   - It records `%version` but never rejects a version (permitted by 6.7).

@@ -201,7 +201,7 @@ CHARS_SQ = "any character except ' \\ and control characters"
 DIAGRAMS = {
     'document': Seq(Opt(Seq(Loop(N('directive'), N('separator')), N('separator'))),
                     Choice(N('value'), N('members'))),
-    'directive': Seq(Choice(T('%define'), T('%version')), T(':'),
+    'directive': Seq(Choice(T('%define'), T('%version'), T('%strict')), T(':'),
                      Opt(Seq(N('identifier'), T('='))), N('value')),
     'object': Seq(T('{'), Opt(N('members')), T('}')),
     'members': Seq(Loop(Seq(N('name'), T(':'), N('value')), N('separator')), Opt(T(','))),

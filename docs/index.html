@@ -47,7 +47,7 @@
     <li><strong>Digit grouping</strong> with <code>_</code>: <code>1_000_000</code>.</li>
     <li><strong>Number suffixes:</strong> <code>10k</code>, <code>64mb</code>, <code>250ms</code>.</li>
     <li><strong>Named values:</strong> identifiers that the document defines as aliases for JSON values, such as <code>nil</code>.</li>
-    <li><strong>Directives</strong> at the start of the document: <code>%define</code> for named values and <code>%version</code> for versions.</li>
+    <li><strong>Directives</strong> at the start of the document: <code>%define</code> for named values, <code>%version</code> for versions and <code>%strict</code> for strict mode.</li>
     <li><strong>More white space characters:</strong> all white space characters of ECMAScript.</li>
   </ul>
 </section>
@@ -60,6 +60,7 @@
       <figcaption>XTJSON</figcaption>
       <pre><code># Service configuration – the root braces are omitted
 %version: &#x27;0.6&#x27;
+%strict: true
 %define: any_host = &quot;0.0.0.0&quot;
 
 name: &#x27;demo-service&#x27;
@@ -176,10 +177,11 @@ tags: [
 
   <section class="form" id="directive">
     <h3>directive</h3>
-    <p>A <dfn>directive</dfn> is a statement at the start of the document. The <code>%</code> and the name of the directive are written without white space between them. Directives are separated like items, and a separator also follows the last one. There are exactly two directives; any other is an error.</p>
+    <p>A <dfn>directive</dfn> is a statement at the start of the document. The <code>%</code> and the name of the directive are written without white space between them. Directives are separated like items, and a separator also follows the last one. There are exactly three directives; any other is an error.</p>
     <p><code>%define: nil = null</code> defines a <a href="#named-value">named value</a>. The value can be any value, including an object or an array, and can use the named values defined before it. A named value can be defined only once, and <code>true</code>, <code>false</code> and <code>null</code> cannot be redefined.</p>
-    <p><code>%version: '0.6'</code> states the version of the specification that the document is written for; a parser may reject a version that it does not support. With an identifier, as in <code>%version: schema = '2026.05.01b'</code>, it states the version of something else, as information for the application. The value is a string or a number without suffix, and each version is stated at most once.</p>
-    <div class="diagram"><svg class="rr" viewBox="0 0 467 72" width="467" height="72" role="img" aria-label="Railroad diagram: directive">
+    <p><code>%version: '0.6'</code> states the version of the specification that the document is written for; a parser may reject a version that it does not support. With an identifier, as in <code>%version: schema = '2026.05.01b'</code>, it states the version of something else, as information for the application. The value is a string or a number, also with a suffix or as a named value, for example <code>%version: windows = 2k</code>; each version is stated at most once.</p>
+    <p><code>%strict: true</code> makes the parser read the document in <a href="#strict-mode">strict mode</a>. The value is <code>true</code> or <code>false</code>, also as a named value, and <code>%strict</code> occurs at most once. If the application has requested strict mode, <code>%strict: false</code> is an error.</p>
+    <div class="diagram"><svg class="rr" viewBox="0 0 467 104" width="467" height="104" role="img" aria-label="Railroad diagram: directive">
 <path class="cap" d="M8 12v16m4 -16v16"/>
 <path d="M12 20H30"/>
 <path d="M30 20H50"/>
@@ -191,6 +193,11 @@ tags: [
 <path d="M133 52a10 10 0 0 0 10 -10v-12a10 10 0 0 1 10 -10"/>
 <rect class="t" x="50" y="40" width="83" height="24" rx="12"/>
 <text class="t" x="91.5" y="52">%version</text>
+<path d="M30 20a10 10 0 0 1 10 10v44a10 10 0 0 0 10 10"/>
+<path d="M133 84a10 10 0 0 0 10 -10v-44a10 10 0 0 1 10 -10"/>
+<rect class="t" x="50" y="72" width="75" height="24" rx="12"/>
+<text class="t" x="87.5" y="84">%strict</text>
+<path d="M125 84H133"/>
 <path d="M153 20H163"/>
 <rect class="t" x="163" y="8" width="28" height="24" rx="12"/>
 <text class="t" x="177" y="20">:</text>
@@ -1161,6 +1168,11 @@ tags: [
   <p>A document that uses at least one of the extensions is not a JSON text. It must not be labelled with the media type <code>application/json</code> or sent to recipients that expect JSON.</p>
 </section>
 
+<section id="strict-mode">
+  <h2>Strict mode</h2>
+  <p>In <dfn>strict mode</dfn> a parser also rejects documents with duplicate names, with surrogates or Unicode noncharacters in names and strings, or with a root value that is not an object or an array. Strict mode applies if the application requests it or if the document contains <code>%strict: true</code>, and it covers the values of all directives as well. Every conforming parser offers it. The JSON equivalent of a document that is valid in strict mode, and whose numbers stay within the range of IEEE 754 binary64, is an <a href="https://www.rfc-editor.org/rfc/rfc7493">I-JSON</a> message.</p>
+</section>
+
 <section id="principles">
   <h2>Principles</h2>
   <ul>
@@ -1188,7 +1200,7 @@ root-members   = member-list                 ; implicit root object
 ; ---------- Directives ----------
 directives     = directive *( item-sep directive )
 directive      = &quot;%&quot; identifier S &quot;:&quot; S [ identifier S &quot;=&quot; S ] value
-                                             ; only %define and %version (6.5)
+                                             ; only %define, %version and %strict (6.5)
 
 ; ---------- Values ----------
 value          = object / array / string / number / named-value

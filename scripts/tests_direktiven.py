@@ -1,4 +1,5 @@
-"""Zusatztests: Direktiven (6.5), %define (6.6) und %version (6.7)."""
+"""Zusatztests: Direktiven (6.5), %define (6.6), %version (6.7), %strict (6.8)
+und Strict-Modus (12)."""
 import os
 import sys
 
@@ -60,6 +61,31 @@ VALID = [
     ('%version: 1_000\n{}', {}),
     ("%version: ''\n{}", {}),
     ('%version: "a\nb"\n{}', {}),
+    # %version: Zahlen mit Suffix und benannte Werte mit String oder Zahl
+    ('%version: windows = 2k\n{}', {}),
+    ('%version: 1.5pct\n{}', {}),
+    ('%version: 0x10L\n{}', {}),
+    ('%define: v = 1\n%version: v\n{}', {}),
+    ("%define: v = '1.4.0'\n%version: app = v\nversion: v", {'version': '1.4.0'}),
+    ('%define: n = 2k\n%version: s = n\n[n]', [2000]),
+    # %strict (6.8): true oder false, auch als benannter Wert, an beliebiger Stelle
+    ('%strict: true\n{}', {}),
+    ('%strict:true,[1]', [1]),
+    ('%strict: false\n"x"', 'x'),
+    ('%strict: false, 1', 1),
+    ('%define: yes = true, %strict: yes\n[1]', [1]),
+    ('%define: no = false\n%strict: no\n1', 1),
+    ('%strict: true\na: 1', {'a': 1}),
+    ('%strict: true\n%define: a = [1]\na', [1]),
+    ('%strict: true\n%version: 1\n{}', {}),
+    ('%define: strict = 1\n%strict: true\n[strict]', [1]),
+    ('%strict: /* k */ true // k\n{}', {}),
+    ('%strict: true\n{"\\uD83D\\uDE00": "\\u{1F600}"}', {'\U0001F600': '\U0001F600'}),
+    ('%strict: true\n[{a: 1}, {a: 2}, {b: {a: 3}}]', [{'a': 1}, {'a': 2}, {'b': {'a': 3}}]),
+    ('%define: a = {x: 1}\n%strict: true\n{a: a, b: a}', {'a': {'x': 1}, 'b': {'x': 1}}),
+    # ohne %strict: true gelten die Verbote des Strict-Modus nicht
+    ('%define: d = {a: 1, a: 2}\n%strict: false\n[d]', [{'a': 2}]),
+    ('%strict: false\n["\\uDEAD"]', ['\udead']),
     # Beispiele aus der Aufgabenstellung
     ("%version: 0.6\n%version:schema='2026.05.01b'\n%define:nil=null\n# Hyper media ref\n"
      "%define:self = {\n  href: 'http://api.example.org/people/1234'\n}\n\nid: 1234\nname: 'Bob'\n"
@@ -96,10 +122,29 @@ INVALID = [
     # %version
     '%version: 1\n%version: 2\n{}', "%version: xtjson = 1\n%version: '1'\n{}",
     '%version: 1\n%version: xtjson = 1\n{}', '%version: s = 1\n%version: s = 1\n{}',
-    '%version: {}\n{}', '%version: null\n{}', '%version: false\n{}', '%define: v = 1\n%version: v\n{}',
-    '%version: nil\n{}', '%version: 1k\n{}', '%version: 0x10L\n{}', '%version: 1.5pct\n{}',
+    '%version: {}\n{}', '%version: null\n{}', '%version: false\n{}', '%version: nil\n{}', '%version: 1q\n{}',
+    '%define: n = null\n%version: n\n{}', '%define: v = [1]\n%version: v\n{}', '%define: t = true\n%version: t\n{}',
+    '%define: o = {}\n%version: s = o\n{}', '%version: v\n%define: v = 1\n{}',
     '%version: s = [1]\n{}', '%version: s = {}\n{}', '%version: "1" = 1\n{}', '%version\n{}',
     '%version: 1 2\n{}', '%version:\n{}', '%version: a = \n{}',
+    # %strict: Form und Wert
+    '%strict: 1\n{}', "%strict: 'true'\n{}", '%strict: null\n{}', '%strict: [true]\n{}', '%strict: {}\n{}',
+    '%strict: s = true\n{}', '%strict: xtjson = true\n{}', '%strict: True\n{}', '%strict: yes\n{}',
+    '%define: z = 0\n%strict: z\n{}', '%define: e = ""\n%strict: e\n{}', '%strict\n{}', '%strict:\n{}',
+    '%strict: true', '%Strict: true\n{}', '% strict: true\n{}', '%strict: yes\n%define: yes = true\n{}',
+    # %strict hoechstens einmal
+    '%strict: true\n%strict: true\n{}', '%strict: true\n%strict: false\n{}', '%strict: false, %strict: false, {}',
+    # Verstoesse gegen den Strict-Modus (12) mit %strict: true
+    '%strict: true\n"x"', '%strict: true\n1', '%strict: true\nnull', '%strict: true\ntrue', '%strict: true\n10k',
+    '%define: a = 1\n%strict: true\na', '%define: yes = true\n%define: s = "x"\n%strict: yes\ns',
+    '%strict: true\n{a: 1, a: 2}', "%strict: true\na: 1\n'a': 2", '%strict: true\n{a: {"\\u0061": 1, a: 2}}',
+    '%strict: true\n[{a: 1, "a": 2}]', '%define: d = {a: 1, a: 2}\n%strict: true\n{}',
+    '%define: d = {a: 1, a: 2}\n%define: yes = true\n%strict: yes\n{}', '%strict: true\n%define: d = [{x: 1, x: 1}]\n{}',
+    '%strict: true\n["\\uDEAD"]', '%strict: true\n["\\uD83D"]', '%strict: true\n["\\uDE00\\uD83D"]',
+    '%strict: true\n["\\uFFFF"]', '%strict: true\n["\\uFFFE"]', '%strict: true\n["\\u{FDD0}"]', '%strict: true\n["\\uFDEF"]',
+    '%strict: true\n["\\u{10FFFE}"]', '%strict: true\n["\\u{1FFFF}"]', '%strict: true\n{"\\uD800": 1}', "%strict: true\n'\\uFFFF': 1",
+    '%strict: true\n["\uFFFF"]', '%strict: true\n["\uFDD0"]',
+    '%define: s = "\\uDC00"\n%strict: true\n{}', '%version: "\\uFFFE"\n%strict: true\n{}',
     # '=' gibt es nur in Direktiven
     'a = 1', '[1 = 2]', '{a = 1}', 'a: = 1', '=',
     # Grenze fuer die Groesse nach dem Ersetzen benannter Werte (11, 13)
@@ -114,6 +159,34 @@ VERSIONS = [
     ("%version: '0.6', %version: schema = '2026.05.01b'\n{}", {'xtjson': '0.6', 'schema': '2026.05.01b'}),
     ('%version: a = 1\n%version: b = 2\n%define: c = 3\n[c]', {'a': 1, 'b': 2}),
     ('%version: v = 0x10\n{}', {'v': 16}),
+    ('%version: windows = 2k\n{}', {'windows': 2000}),
+    ('%version: 100ms\n{}', {'xtjson': 0.1}),
+    ("%define: v = '1.4.0'\n%version: app = v\n{}", {'app': '1.4.0'}),
+    ('%define: v = 6\n%version: v\n%version: w = v\n{}', {'xtjson': 6, 'w': 6}),
+    ('%strict: true\n%version: 1\n{}', {'xtjson': 1}),
+]
+
+# Strict-Modus der Anwendung (12): (Text, erwarteter Wert)
+STRICT_VALID = [
+    ('{}', {}),
+    ('[]', []),
+    ('a: 1', {'a': 1}),
+    ('[1, "\\uD83D\\uDE00", "\\u{10FFFD}", "\\uFFFD"]', [1, '\U0001F600', '\U0010FFFD', '\ufffd']),
+    ('{"a": 1, "b": {"a": 2}}', {'a': 1, 'b': {'a': 2}}),
+    ('%strict: true\n[1]', [1]),
+    ('%define: d = {a: 1}\n{d: d, e: d}', {'d': {'a': 1}, 'e': {'a': 1}}),
+    ('%define: a = [1]\na', [1]),
+    ('%version: 1\n{}', {}),
+]
+
+# Texte, die gueltig sind, die der Strict-Modus der Anwendung aber ablehnt
+STRICT_INVALID = [
+    '1', '"x"', 'null', 'true', '-0', '%define: a = 1\na', '%define: a = "x"\na',
+    '{a: 1, a: 2}', '{"a": 1, "\\u0061": 2}', 'a: 1\na: 2', "a: 1\n'a': 2", '[{b: {c: 1, c: 1}}]',
+    '["\\uDEAD"]', '["\\uFFFF"]', '["\\uFDEF"]', '{"\\uFFFE": 1}', '["\\u{2FFFF}"]',
+    '%define: d = [{a: 1, a: 2}]\n{}', '%version: s = "\\uFDD0"\n{}', '%define: u = "\\uDBFF"\n[1]',
+    # %strict: false widerspricht der Anwendung (6.8)
+    '%strict: false\n{}', '%strict: false\n[1]', '%define: no = false\n%strict: no\n{}',
 ]
 
 
@@ -136,6 +209,28 @@ def main():
             continue
         fails += 1
         print('FEHLER: sollte ungueltig sein: %r -> %r' % (text, got))
+    for text, exp in STRICT_VALID:
+        try:
+            got = parse(text, strict=True)
+        except XTJSONError as ex:
+            fails += 1
+            print('FEHLER: sollte im Strict-Modus gueltig sein: %r (%s)' % (text, ex))
+            continue
+        if got != exp:
+            fails += 1
+            print('FEHLER: %r -> %r, erwartet %r' % (text, got, exp))
+    for text in STRICT_INVALID:
+        try:
+            parse(text)                                # ohne Strict-Modus gueltig
+        except XTJSONError as ex:
+            fails += 1
+            print('FEHLER: sollte ohne Strict-Modus gueltig sein: %r (%s)' % (text, ex))
+        try:
+            got = parse(text, strict=True)
+        except XTJSONError:
+            continue
+        fails += 1
+        print('FEHLER: sollte im Strict-Modus ungueltig sein: %r -> %r' % (text, got))
     for text, exp in VERSIONS:
         try:
             got = parse_document(text)[1]
@@ -165,8 +260,9 @@ def main():
         print('FEHLER: Grenze nicht eingehalten: %r' % small)
     except XTJSONError:
         pass
-    print('Tests D: %d gueltig, %d ungueltig, %d Versionsangaben geprueft: %s'
-          % (len(VALID), len(INVALID), len(VERSIONS), 'OK' if not fails else '%d Fehler' % fails))
+    print('Tests D: %d gueltig, %d ungueltig, %d Versionsangaben, Strict-Modus %d gueltig und %d ungueltig geprueft: %s'
+          % (len(VALID), len(INVALID), len(VERSIONS), len(STRICT_VALID), len(STRICT_INVALID),
+             'OK' if not fails else '%d Fehler' % fails))
     return 1 if fails else 0
 
 

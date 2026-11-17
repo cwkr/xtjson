@@ -629,7 +629,14 @@
   "%version: s = 1\n%version: s = 2\n{}",
   "%version: [0, 6]\n{}",
   "%version: true\n{}",
-  "%version: 6k\n{}"
+  "%define: nil = null\n%version: nil\n{}",
+  "%strict: 1\n{}",
+  "%strict: 'true'\n{}",
+  "%strict: s = true\n{}",
+  "%strict: true\n%strict: true\n{}",
+  "%strict: true\n\"x\"",
+  "%strict: true\n{a: 1, a: 2}",
+  "%define: d = {a: 1, a: 2}\n%strict: true\n{}"
  ],
  "ref_json_samples": [
   "{\"a\":[1,2.5e-3,true,null],\"b\":{\"c\":\"d\\u00e9\"}}",
@@ -1968,6 +1975,135 @@
    {}
   ],
   [
+   "%version: windows = 2k\n{}",
+   {}
+  ],
+  [
+   "%version: 1.5pct\n{}",
+   {}
+  ],
+  [
+   "%version: 0x10L\n{}",
+   {}
+  ],
+  [
+   "%define: v = 1\n%version: v\n{}",
+   {}
+  ],
+  [
+   "%define: v = '1.4.0'\n%version: app = v\nversion: v",
+   {
+    "version": "1.4.0"
+   }
+  ],
+  [
+   "%define: n = 2k\n%version: s = n\n[n]",
+   [
+    2000
+   ]
+  ],
+  [
+   "%strict: true\n{}",
+   {}
+  ],
+  [
+   "%strict:true,[1]",
+   [
+    1
+   ]
+  ],
+  [
+   "%strict: false\n\"x\"",
+   "x"
+  ],
+  [
+   "%strict: false, 1",
+   1
+  ],
+  [
+   "%define: yes = true, %strict: yes\n[1]",
+   [
+    1
+   ]
+  ],
+  [
+   "%define: no = false\n%strict: no\n1",
+   1
+  ],
+  [
+   "%strict: true\na: 1",
+   {
+    "a": 1
+   }
+  ],
+  [
+   "%strict: true\n%define: a = [1]\na",
+   [
+    1
+   ]
+  ],
+  [
+   "%strict: true\n%version: 1\n{}",
+   {}
+  ],
+  [
+   "%define: strict = 1\n%strict: true\n[strict]",
+   [
+    1
+   ]
+  ],
+  [
+   "%strict: /* k */ true // k\n{}",
+   {}
+  ],
+  [
+   "%strict: true\n{\"\\uD83D\\uDE00\": \"\\u{1F600}\"}",
+   {
+    "\ud83d\ude00": "\ud83d\ude00"
+   }
+  ],
+  [
+   "%strict: true\n[{a: 1}, {a: 2}, {b: {a: 3}}]",
+   [
+    {
+     "a": 1
+    },
+    {
+     "a": 2
+    },
+    {
+     "b": {
+      "a": 3
+     }
+    }
+   ]
+  ],
+  [
+   "%define: a = {x: 1}\n%strict: true\n{a: a, b: a}",
+   {
+    "a": {
+     "x": 1
+    },
+    "b": {
+     "x": 1
+    }
+   }
+  ],
+  [
+   "%define: d = {a: 1, a: 2}\n%strict: false\n[d]",
+   [
+    {
+     "a": 2
+    }
+   ]
+  ],
+  [
+   "%strict: false\n[\"\\uDEAD\"]",
+   [
+    "\udead"
+   ]
+  ],
+  [
    "%version: 0.6\n%version:schema='2026.05.01b'\n%define:nil=null\n# Hyper media ref\n%define:self = {\n  href: 'http://api.example.org/people/1234'\n}\n\nid: 1234\nname: 'Bob'\nemail: nil\nself: self\n",
    {
     "id": 1234,
@@ -2054,11 +2190,13 @@
   "%version: {}\n{}",
   "%version: null\n{}",
   "%version: false\n{}",
-  "%define: v = 1\n%version: v\n{}",
   "%version: nil\n{}",
-  "%version: 1k\n{}",
-  "%version: 0x10L\n{}",
-  "%version: 1.5pct\n{}",
+  "%version: 1q\n{}",
+  "%define: n = null\n%version: n\n{}",
+  "%define: v = [1]\n%version: v\n{}",
+  "%define: t = true\n%version: t\n{}",
+  "%define: o = {}\n%version: s = o\n{}",
+  "%version: v\n%define: v = 1\n{}",
   "%version: s = [1]\n{}",
   "%version: s = {}\n{}",
   "%version: \"1\" = 1\n{}",
@@ -2066,6 +2204,55 @@
   "%version: 1 2\n{}",
   "%version:\n{}",
   "%version: a = \n{}",
+  "%strict: 1\n{}",
+  "%strict: 'true'\n{}",
+  "%strict: null\n{}",
+  "%strict: [true]\n{}",
+  "%strict: {}\n{}",
+  "%strict: s = true\n{}",
+  "%strict: xtjson = true\n{}",
+  "%strict: True\n{}",
+  "%strict: yes\n{}",
+  "%define: z = 0\n%strict: z\n{}",
+  "%define: e = \"\"\n%strict: e\n{}",
+  "%strict\n{}",
+  "%strict:\n{}",
+  "%strict: true",
+  "%Strict: true\n{}",
+  "% strict: true\n{}",
+  "%strict: yes\n%define: yes = true\n{}",
+  "%strict: true\n%strict: true\n{}",
+  "%strict: true\n%strict: false\n{}",
+  "%strict: false, %strict: false, {}",
+  "%strict: true\n\"x\"",
+  "%strict: true\n1",
+  "%strict: true\nnull",
+  "%strict: true\ntrue",
+  "%strict: true\n10k",
+  "%define: a = 1\n%strict: true\na",
+  "%define: yes = true\n%define: s = \"x\"\n%strict: yes\ns",
+  "%strict: true\n{a: 1, a: 2}",
+  "%strict: true\na: 1\n'a': 2",
+  "%strict: true\n{a: {\"\\u0061\": 1, a: 2}}",
+  "%strict: true\n[{a: 1, \"a\": 2}]",
+  "%define: d = {a: 1, a: 2}\n%strict: true\n{}",
+  "%define: d = {a: 1, a: 2}\n%define: yes = true\n%strict: yes\n{}",
+  "%strict: true\n%define: d = [{x: 1, x: 1}]\n{}",
+  "%strict: true\n[\"\\uDEAD\"]",
+  "%strict: true\n[\"\\uD83D\"]",
+  "%strict: true\n[\"\\uDE00\\uD83D\"]",
+  "%strict: true\n[\"\\uFFFF\"]",
+  "%strict: true\n[\"\\uFFFE\"]",
+  "%strict: true\n[\"\\u{FDD0}\"]",
+  "%strict: true\n[\"\\uFDEF\"]",
+  "%strict: true\n[\"\\u{10FFFE}\"]",
+  "%strict: true\n[\"\\u{1FFFF}\"]",
+  "%strict: true\n{\"\\uD800\": 1}",
+  "%strict: true\n'\\uFFFF': 1",
+  "%strict: true\n[\"\uffff\"]",
+  "%strict: true\n[\"\ufdd0\"]",
+  "%define: s = \"\\uDC00\"\n%strict: true\n{}",
+  "%version: \"\\uFFFE\"\n%strict: true\n{}",
   "a = 1",
   "[1 = 2]",
   "{a = 1}",
@@ -2109,6 +2296,123 @@
    {
     "v": 16
    }
+  ],
+  [
+   "%version: windows = 2k\n{}",
+   {
+    "windows": 2000
+   }
+  ],
+  [
+   "%version: 100ms\n{}",
+   {
+    "xtjson": 0.1
+   }
+  ],
+  [
+   "%define: v = '1.4.0'\n%version: app = v\n{}",
+   {
+    "app": "1.4.0"
+   }
+  ],
+  [
+   "%define: v = 6\n%version: v\n%version: w = v\n{}",
+   {
+    "xtjson": 6,
+    "w": 6
+   }
+  ],
+  [
+   "%strict: true\n%version: 1\n{}",
+   {
+    "xtjson": 1
+   }
   ]
+ ],
+ "d_strict_valid": [
+  [
+   "{}",
+   {}
+  ],
+  [
+   "[]",
+   []
+  ],
+  [
+   "a: 1",
+   {
+    "a": 1
+   }
+  ],
+  [
+   "[1, \"\\uD83D\\uDE00\", \"\\u{10FFFD}\", \"\\uFFFD\"]",
+   [
+    1,
+    "\ud83d\ude00",
+    "\udbff\udffd",
+    "\ufffd"
+   ]
+  ],
+  [
+   "{\"a\": 1, \"b\": {\"a\": 2}}",
+   {
+    "a": 1,
+    "b": {
+     "a": 2
+    }
+   }
+  ],
+  [
+   "%strict: true\n[1]",
+   [
+    1
+   ]
+  ],
+  [
+   "%define: d = {a: 1}\n{d: d, e: d}",
+   {
+    "d": {
+     "a": 1
+    },
+    "e": {
+     "a": 1
+    }
+   }
+  ],
+  [
+   "%define: a = [1]\na",
+   [
+    1
+   ]
+  ],
+  [
+   "%version: 1\n{}",
+   {}
+  ]
+ ],
+ "d_strict_invalid": [
+  "1",
+  "\"x\"",
+  "null",
+  "true",
+  "-0",
+  "%define: a = 1\na",
+  "%define: a = \"x\"\na",
+  "{a: 1, a: 2}",
+  "{\"a\": 1, \"\\u0061\": 2}",
+  "a: 1\na: 2",
+  "a: 1\n'a': 2",
+  "[{b: {c: 1, c: 1}}]",
+  "[\"\\uDEAD\"]",
+  "[\"\\uFFFF\"]",
+  "[\"\\uFDEF\"]",
+  "{\"\\uFFFE\": 1}",
+  "[\"\\u{2FFFF}\"]",
+  "%define: d = [{a: 1, a: 2}]\n{}",
+  "%version: s = \"\\uFDD0\"\n{}",
+  "%define: u = \"\\uDBFF\"\n[1]",
+  "%strict: false\n{}",
+  "%strict: false\n[1]",
+  "%define: no = false\n%strict: no\n{}"
  ]
 }
