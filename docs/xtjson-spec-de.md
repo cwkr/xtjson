@@ -274,6 +274,8 @@ Regeln:
 - **Bekannte Direktiven.** Diese Spezifikation legt genau drei Direktiven fest: `%define` (6.6), `%version` (6.7) und `%strict` (6.8). Jede andere Direktive ist ein Fehler. Groß- und Kleinschreibung zählen: `%Define` ist nicht `%define`. Ein Parser DARF KEINE weiteren Direktiven kennen oder von der Anwendung annehmen. Weitere Namen von Direktiven sind späteren Versionen dieser Spezifikation vorbehalten.
 - **Wiederholung.** Eine Direktive DARF mehrmals vorkommen, sofern ihr Abschnitt das nicht einschränkt.
 - **Wert.** Der Wert einer Direktive ist ein Wert nach 6.3. Er kann die benannten Werte verwenden, die frühere Direktiven definiert haben.
+- **Geprüfte Werte.** Die Werte von Direktiven MÜSSEN die Verbote aus Abschnitt 12 zu Namen, String-Werten und doppelten Namen einhalten, auch wenn das Dokument nicht im Strict-Modus gelesen wird, und selbst wenn ein mit ihnen definierter benannter Wert nicht verwendet wird.
+- **Reihenfolge.** Eine Direktive wirkt sich nicht auf die Direktiven aus, die im Dokument vor ihr stehen.
 - **Wirkung.** Direktiven tragen zum JSON-Äquivalent nichts bei außer den Definitionen benannter Werte (Abschnitt 10).
 
 ### 6.6 Die Direktive `%define`
@@ -346,10 +348,10 @@ Regeln:
 
 - **Form.** `%strict` MUSS ohne Bezeichner und `=` geschrieben werden. Sein Wert MUSS `true` oder `false` sein oder ein benannter Wert, dessen Wert `true` oder `false` ist. Jeder andere Wert ist ein Fehler (`%strict: 1`, `%strict: 'true'`).
 - **Nur einmal.** `%strict` MUSS höchstens einmal in einem Dokument vorkommen. Ein zweites `%strict` ist ein Fehler, auch wenn es denselben Wert angibt.
-- **`%strict: true`.** Ein Parser MUSS das Dokument im Strict-Modus lesen, auch wenn die Anwendung ihn nicht verlangt hat.
+- **`%strict: true`.** Ein Parser MUSS den Inhalt des Dokuments im Strict-Modus lesen, auch wenn die Anwendung ihn nicht verlangt hat.
 - **`%strict: false`.** Das Dokument verlangt den Strict-Modus nicht. Hat die Anwendung den Strict-Modus verlangt, widerspricht ihr das Dokument, und ein Parser MUSS es als Fehler ablehnen.
 - **Ohne `%strict`.** Ein Parser liest das Dokument im Strict-Modus, wenn die Anwendung ihn verlangt.
-- **Geltungsbereich.** Der Strict-Modus gilt für das ganze Dokument, auch für die Werte der Direktiven vor `%strict`.
+- **Geltungsbereich.** Der Strict-Modus gilt für den Inhalt des Dokuments, den Teil nach den Direktiven. Die Werte der Direktiven halten seine Verbote zu Namen, String-Werten und doppelten Namen in jedem Fall ein (6.5).
 - **Keine Wirkung auf den Wert.** Das JSON-Äquivalent hängt nicht von `%strict` ab. Die Direktive entscheidet nur darüber, ob das Dokument angenommen wird.
 
 ## 7. Objekte, Arrays und Trenner
@@ -763,7 +765,7 @@ Ein Beispiel mit Gegenüberstellung steht in [Anhang B.1](#b1-vollständiges-bei
 
 ## 12. Strict-Modus
 
-Im **Strict-Modus** setzt ein Parser über Abschnitt 4–9 hinaus die folgenden Verbote durch. Der Strict-Modus gilt, wenn die Anwendung ihn verlangt oder das Dokument `%strict: true` enthält (6.8). Die Verbote gelten auch für die Werte der Direktiven, selbst wenn ein mit ihnen definierter benannter Wert nicht verwendet wird. Maßgeblich sind dabei auch die Werte, die sich aus benannten Werten und Zahlen-Suffixen ergeben.
+Im **Strict-Modus** setzt ein Parser über Abschnitt 4–9 hinaus die folgenden Verbote durch. Der Strict-Modus gilt, wenn die Anwendung ihn verlangt oder das Dokument `%strict: true` enthält (6.8). Die Verbote gelten für den Inhalt des Dokuments; die Werte der Direktiven halten die Verbote zu Namen, String-Werten und doppelten Namen in jedem Fall ein (6.5). Maßgeblich sind dabei auch die Werte, die sich aus benannten Werten und Zahlen-Suffixen ergeben.
 
 - Namen und String-Werte DÜRFEN KEINE Surrogate und keine Unicode-Noncharacters enthalten, weder direkt noch als Escape-Sequenz. Ein einzelnes `"\uDEAD"` ist ungültig; ein korrektes Surrogatpaar ist zulässig.
 - Ein Objekt DARF KEINE doppelten Namen enthalten. Verglichen wird nach Auflösung aller Escape-Sequenzen und unabhängig von der Schreibweise des Namens (Bezeichner oder String in einer der Formen aus Abschnitt 8).
@@ -1021,7 +1023,8 @@ In den Tabellen steht `⏎` für einen Zeilenumbruch.
 | `%strict: true` ⏎ `%strict: true` ⏎ `{}` | `%strict` zweimal |
 | `%strict: true` ⏎ `"x"` | Strict-Modus: der Wurzelwert ist kein Objekt und kein Array |
 | `%strict: true` ⏎ `{a: 1, a: 2}` | Strict-Modus: doppelter Name |
-| `%define: d = {a: 1, a: 2}` ⏎ `%strict: true` ⏎ `{}` | der Strict-Modus gilt auch für die Direktiven vor `%strict` |
+| `%define: d = {a: 1, a: 2}` ⏎ `[d]` | doppelter Name im Wert einer Direktive, auch außerhalb des Strict-Modus |
+| `%define: n = "\uFFFF"` ⏎ `[1]` | Noncharacter im Wert einer Direktive, auch außerhalb des Strict-Modus |
 | `%strict: false` ⏎ `{}`, wenn die Anwendung den Strict-Modus verlangt | das Dokument widerspricht der Anwendung |
 
 **Namen**
@@ -1154,7 +1157,8 @@ Informativ. Festlegungen an Stellen, an denen mehrere Lösungen möglich waren, 
 | Direktiven: welche es gibt | nur `%define`, `%version` und `%strict`; jede andere Direktive ist ein Fehler, und Parser und Anwendung können keine hinzufügen | Jedes Dokument wird von jedem Parser gleich gelesen. Weitere Direktiven können spätere Versionen hinzufügen; Direktiven des Parsers später zuzulassen wäre kompatibel, sie einzuschränken nicht. |
 | `%version`: Wert | ein String oder eine Zahl, auch mit Suffix oder als benannter Wert; höchstens einmal je Version | Es gelten dieselben Schreibweisen wie für jeden anderen Wert; so kann etwa ein benannter Wert die Version sowohl in einer `%version`-Angabe als auch im Inhalt angeben. `true`, `false`, `null`, Objekte und Arrays geben keine Version an. Eine zweite Angabe zu derselben Version könnte der ersten nur widersprechen. |
 | `%version`: Wirkung | der Parser darf eine nicht unterstützte Version ablehnen oder die Angabe ignorieren | Ein Parser, der eine Version nicht kennt, kann Dokumente trotzdem lesen, die nur Regeln verwenden, die er kennt; unbekannte Regeln sind ohnehin ein Fehler. Versionen von anderem, etwa eines Schemas, sind Informationen für die Anwendung. |
-| Strict-Modus und Direktiven | die Verbote gelten auch für Werte von Direktiven, die nicht verwendet werden, und für die Direktiven vor `%strict` | Ein Parser prüft jeden Wert dort, wo er ihn liest, unabhängig davon, ob er später verwendet wird. `%strict` kann einen vorher definierten benannten Wert verwenden und deshalb nicht immer zuerst stehen; seine Wirkung hängt nicht von seiner Position ab. |
+| Direktiven und Strict-Modus | die Werte von Direktiven halten immer die Verbote zu Namen, String-Werten und doppelten Namen ein; `%strict` gilt nur für den Inhalt | Eine Definition mit einem doppelten Namen oder einem Noncharacter ist fast immer ein Versehen. Ein Parser prüft jeden Wert einer Direktive dort, wo er ihn liest, und meldet einen Fehler dort, wo er auftritt, unabhängig davon, ob später noch `%strict` folgt. Benannte Werte, die in den Inhalt eingesetzt werden, halten damit auch die Verbote des Strict-Modus ein. |
+| Direktiven: Reihenfolge | eine Direktive wirkt nicht auf die Direktiven vor ihr | Jede Direktive lässt sich vollständig prüfen, wenn sie gelesen wird, und ein Parser liest die Direktiven in einem Durchgang. Das gilt auch für Direktiven, die spätere Versionen hinzufügen. |
 | Strict-Modus: Wurzelwert | ein Objekt oder ein Array | [I-JSON] empfiehlt das nur. Ein einzelner String oder eine einzelne Zahl als Wurzelwert lässt sich später nicht um weitere Member erweitern; im Strict-Modus wird die Empfehlung zu einer Regel, die ein Parser prüfen kann. |
 | Strict-Modus: Unterstützung | jeder Parser muss ihn anbieten | Sonst nähme ein Parser ein Dokument mit `%strict: true` an, das ein anderer ablehnt; jedes Dokument bleibt portabel. |
 | `%strict`: Wert | `true` oder `false`, auch als benannter Wert; höchstens einmal | Ein Schalter hat zwei Zustände. Ein zweites `%strict` könnte das erste nur wiederholen oder ihm widersprechen. |
@@ -1182,12 +1186,12 @@ Informativ. Festlegungen an Stellen, an denen mehrere Lösungen möglich waren, 
 
 **Entwurf 0.6**
 
-- 6.5 (neu): Direktiven. Eine Direktive am Dokumentanfang beginnt mit `%`, unmittelbar gefolgt von ihrem Namen und `:`, und dann einem Wert, wahlweise mit vorangestelltem Bezeichner und `=`. Direktiven werden wie Elemente getrennt. Es gibt genau die Direktiven `%define`, `%version` und `%strict`; jede andere Direktive ist ein Fehler.
+- 6.5 (neu): Direktiven. Eine Direktive am Dokumentanfang beginnt mit `%`, unmittelbar gefolgt von ihrem Namen und `:`, und dann einem Wert, wahlweise mit vorangestelltem Bezeichner und `=`. Direktiven werden wie Elemente getrennt. Es gibt genau die Direktiven `%define`, `%version` und `%strict`; jede andere Direktive ist ein Fehler. Die Werte von Direktiven halten immer die Verbote aus Abschnitt 12 zu Namen, String-Werten und doppelten Namen ein, und eine Direktive wirkt sich nicht auf die Direktiven vor ihr aus.
 - 6.4, 6.6 (neu): Benannte Werte werden nur im Dokument definiert, mit `%define`; die Anwendung kann keine benannten Werte mehr definieren. Einem benannten Wert kann ein Objekt oder ein Array zugeordnet werden. Eine Definition kann die benannten Werte verwenden, die vor ihr definiert sind; eine zweite Definition desselben benannten Werts ist ein Fehler.
 - 6.7 (neu): `%version` gibt die Version dieser Spezifikation an und, mit einem Bezeichner, Versionen von anderem, etwa eines Schemas. Ihr Wert ist ein String oder eine Zahl, auch mit Suffix oder als benannter Wert.
-- 6.8 (neu): `%strict: true` lässt einen Parser das Dokument im Strict-Modus lesen. `%strict: false` ist ein Fehler, wenn die Anwendung den Strict-Modus verlangt.
+- 6.8 (neu): `%strict: true` lässt einen Parser den Inhalt des Dokuments im Strict-Modus lesen. `%strict: false` ist ein Fehler, wenn die Anwendung den Strict-Modus verlangt.
 - 6.1, 6.2: Ein Dokument beginnt mit optionalen Direktiven. Abschnitt 6 heißt jetzt „Dokument, Direktiven, Wurzelobjekt und Werte“.
-- 11, 12: Jedes konforme Dokument ist portabel. Parser dürfen die Größe des Werts nach dem Ersetzen der benannten Werte begrenzen. Aus dem I-JSON-Profil wird der Strict-Modus, den jeder Parser anbieten muss. Im Strict-Modus muss der Wurzelwert ein Objekt oder ein Array sein, und die Verbote gelten auch für die Werte von Direktiven. Abschnitt 12 heißt jetzt „Strict-Modus“.
+- 11, 12: Jedes konforme Dokument ist portabel. Parser dürfen die Größe des Werts nach dem Ersetzen der benannten Werte begrenzen. Aus dem I-JSON-Profil wird der Strict-Modus, den jeder Parser anbieten muss. Im Strict-Modus muss der Wurzelwert ein Objekt oder ein Array sein. Abschnitt 12 heißt jetzt „Strict-Modus“.
 - 1, 2, 3, 7.2, 10, 13 und Anhänge A bis D sind an diese Änderungen angepasst.
 
 **Entwurf 0.5**

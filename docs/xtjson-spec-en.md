@@ -274,6 +274,8 @@ Rules:
 - **Known directives.** This specification defines exactly three directives: `%define` (6.6), `%version` (6.7) and `%strict` (6.8). Every other directive is an error. Case is significant: `%Define` is not `%define`. A parser MUST NOT know further directives or accept any from the application. Further directive names are reserved for later versions of this specification.
 - **Repetition.** A directive MAY occur more than once, unless its section restricts this.
 - **Value.** The value of a directive is a value according to 6.3. It can use the named values that earlier directives have defined.
+- **Checked values.** The values of directives MUST satisfy the prohibitions of section 12 on names, string values and duplicate names, also when the document is not read in strict mode, and even where a named value defined by them is not used.
+- **Order.** A directive has no effect on the directives that come before it in the document.
 - **Effect.** Directives contribute nothing to the JSON equivalent except the definitions of named values (section 10).
 
 ### 6.6 The directive `%define`
@@ -346,10 +348,10 @@ Rules:
 
 - **Form.** `%strict` MUST be written without an identifier and `=`. Its value MUST be `true` or `false`, or a named value whose value is `true` or `false`. Any other value is an error (`%strict: 1`, `%strict: 'true'`).
 - **Only once.** `%strict` MUST occur at most once in a document. A second `%strict` is an error, even if it states the same value.
-- **`%strict: true`.** A parser MUST read the document in strict mode, even if the application has not requested it.
+- **`%strict: true`.** A parser MUST read the content of the document in strict mode, even if the application has not requested it.
 - **`%strict: false`.** The document does not require strict mode. If the application has requested strict mode, the document contradicts it, and a parser MUST reject it as an error.
 - **Without `%strict`.** A parser reads the document in strict mode if the application requests it.
-- **Scope.** Strict mode applies to the whole document, including the values of the directives before `%strict`.
+- **Scope.** Strict mode applies to the content of the document, the part after the directives. The values of the directives satisfy its prohibitions on names, string values and duplicate names in every case (6.5).
 - **No effect on the value.** The JSON equivalent does not depend on `%strict`. The directive decides only whether the document is accepted.
 
 ## 7. Objects, arrays and separators
@@ -763,7 +765,7 @@ An example with a side-by-side comparison is given in [Appendix B.1](#b1-complet
 
 ## 12. Strict mode
 
-In **strict mode** a parser enforces the following prohibitions beyond sections 4–9. Strict mode applies if the application requests it or if the document contains `%strict: true` (6.8). The prohibitions also apply to the values of the directives, even where a named value defined by them is not used. The values that result from named values and number suffixes are also relevant here.
+In **strict mode** a parser enforces the following prohibitions beyond sections 4–9. Strict mode applies if the application requests it or if the document contains `%strict: true` (6.8). The prohibitions apply to the content of the document; the values of the directives satisfy the prohibitions on names, string values and duplicate names in every case (6.5). The values that result from named values and number suffixes are also relevant here.
 
 - Names and string values MUST NOT contain surrogates or Unicode noncharacters, neither directly nor as an escape sequence. A single `"\uDEAD"` is invalid; a correct surrogate pair is permitted.
 - An object MUST NOT contain duplicate names. The comparison is made after all escape sequences have been resolved and independently of the notation of the name (identifier or string in one of the forms from section 8).
@@ -1021,7 +1023,8 @@ In the tables `⏎` stands for a line break.
 | `%strict: true` ⏎ `%strict: true` ⏎ `{}` | `%strict` twice |
 | `%strict: true` ⏎ `"x"` | strict mode: the root value is not an object and not an array |
 | `%strict: true` ⏎ `{a: 1, a: 2}` | strict mode: duplicate name |
-| `%define: d = {a: 1, a: 2}` ⏎ `%strict: true` ⏎ `{}` | strict mode also applies to the directives before `%strict` |
+| `%define: d = {a: 1, a: 2}` ⏎ `[d]` | duplicate name in the value of a directive, also outside strict mode |
+| `%define: n = "\uFFFF"` ⏎ `[1]` | noncharacter in the value of a directive, also outside strict mode |
 | `%strict: false` ⏎ `{}`, if the application requests strict mode | the document contradicts the application |
 
 **Names**
@@ -1154,7 +1157,8 @@ Informative. Decisions at points where several solutions were possible, with the
 | Directives: which exist | only `%define`, `%version` and `%strict`; every other directive is an error, and the parser and the application cannot add any | Every document is read in the same way by every parser. Further directives can be added by later versions; permitting directives of the parser later would be compatible, restricting them would not. |
 | `%version`: value | a string or a number, also with a suffix or as a named value; at most once per version | The same notations apply as for any other value; a named value can, for example, give the version both in a `%version` statement and in the content. `true`, `false`, `null`, objects and arrays do not state a version. A second statement for the same version could only contradict the first one. |
 | `%version`: effect | the parser may reject an unsupported version or ignore the statement | A parser that does not know a version can still read documents that use only rules it knows; unknown rules are errors anyway. Versions of other things, such as a schema, are information for the application. |
-| Strict mode and directives | the prohibitions also apply to values of directives that are not used, and to the directives before `%strict` | A parser checks every value where it reads it, independent of whether it is used later. `%strict` can use a named value defined before it and therefore cannot always come first; its effect does not depend on its position. |
+| Directives and strict mode | the values of directives always satisfy the prohibitions on names, string values and duplicate names; `%strict` applies only to the content | A definition with a duplicate name or a noncharacter is almost always a mistake. A parser checks every value of a directive where it reads it and reports an error where it occurs, independent of whether a later `%strict` follows. Named values that are inserted into the content therefore satisfy the prohibitions of strict mode as well. |
+| Directives: order | a directive has no effect on the directives before it | Every directive can be checked completely when it is read, and a parser reads the directives in one pass. This also holds for directives that later versions add. |
 | Strict mode: root value | an object or an array | [I-JSON] only recommends this. A single string or number as the root value cannot be extended later by further members; in strict mode the recommendation becomes a rule that a parser can check. |
 | Strict mode: support | every parser must offer it | Otherwise one parser would accept a document with `%strict: true` that another rejects; every document remains portable. |
 | `%strict`: value | `true` or `false`, also as a named value; at most once | A switch has two states. A second `%strict` could only repeat or contradict the first one. |
@@ -1182,12 +1186,12 @@ Informative. Decisions at points where several solutions were possible, with the
 
 **Draft 0.6**
 
-- 6.5 (new): directives. A directive at the start of the document begins with `%`, followed immediately by its name and `:`, and then a value, optionally preceded by an identifier and `=`. Directives are separated like items. There are exactly the directives `%define`, `%version` and `%strict`; every other directive is an error.
+- 6.5 (new): directives. A directive at the start of the document begins with `%`, followed immediately by its name and `:`, and then a value, optionally preceded by an identifier and `=`. Directives are separated like items. There are exactly the directives `%define`, `%version` and `%strict`; every other directive is an error. The values of directives always satisfy the prohibitions of section 12 on names, string values and duplicate names, and a directive has no effect on the directives before it.
 - 6.4, 6.6 (new): named values are defined only in the document, with `%define`; the application can no longer define named values. A named value can be assigned an object or an array. A definition can use the named values defined before it; a second definition of the same named value is an error.
 - 6.7 (new): `%version` states the version of this specification and, with an identifier, versions of other things such as a schema. Its value is a string or a number, also with a suffix or as a named value.
-- 6.8 (new): `%strict: true` makes a parser read the document in strict mode. `%strict: false` is an error if the application requests strict mode.
+- 6.8 (new): `%strict: true` makes a parser read the content of the document in strict mode. `%strict: false` is an error if the application requests strict mode.
 - 6.1, 6.2: a document begins with optional directives. Section 6 is now called "Document, directives, root object and values".
-- 11, 12: every conforming document is portable. Parsers may limit the size of the value after the named values have been replaced. The I-JSON profile becomes strict mode, which every parser must offer. In strict mode the root value must be an object or an array, and the prohibitions also apply to the values of directives. Section 12 is now called "Strict mode".
+- 11, 12: every conforming document is portable. Parsers may limit the size of the value after the named values have been replaced. The I-JSON profile becomes strict mode, which every parser must offer. In strict mode the root value must be an object or an array. Section 12 is now called "Strict mode".
 - 1, 2, 3, 7.2, 10, 13 and Appendices A to D are adapted to these changes.
 
 **Draft 0.5**

@@ -31,7 +31,7 @@ VALID = [
     (D + '%define: liste = [nil, zero, halb]\n%define: obj = {l: liste, j: ja}\n[obj, liste]',
      [{'l': [None, 0, 0.5], 'j': True}, [None, 0, 0.5]]),
     ('%define: e = {}\n%define: a = []\n[e, a, {e: e}]', [{}, [], {'e': {}}]),
-    ('%define: o = {a: 1, a: 2}\no', {'a': 2}),
+    ('%define: o = {a: 1, b: 2}\no', {'a': 1, 'b': 2}),
     ('%define: s = "\n  zwei\n  Zeilen\n  "\n[s]', ['zwei\nZeilen\n']),
     # Suffixe: Faktor 1000, 1024, 1048576
     ('10k', 10000), ('10K', 10000),
@@ -71,7 +71,8 @@ VALID = [
 INVALID = [
     'nil', '[abc]', 'True', 'NULL', '%define: nil = 1\n[Nil]',
     D + '[nil nil]', D + 'nil zero', 'NaN', 'Infinity', D + '[ture]',
-    # Definitionen, die gegen 6.4 und 6.6 verstossen
+    # Definitionen, die gegen 6.4 bis 6.6 verstossen; doppelter Name im Wert (6.5)
+    '%define: o = {a: 1, a: 2}\no',
     '%define: true = 1\n1', '%define: false = false\n1', '%define: null = null\n1',
     '%define: a-b = 1\n1', '%define: 1a = 1\n1', '%define: "" = 1\n1', "%define: 'a' = 1\n1",
     '%define: ä = 1\n1', '%define: x = NaN\n1', '%define: x = undefined\n1',

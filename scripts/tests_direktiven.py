@@ -83,9 +83,10 @@ VALID = [
     ('%strict: true\n{"\\uD83D\\uDE00": "\\u{1F600}"}', {'\U0001F600': '\U0001F600'}),
     ('%strict: true\n[{a: 1}, {a: 2}, {b: {a: 3}}]', [{'a': 1}, {'a': 2}, {'b': {'a': 3}}]),
     ('%define: a = {x: 1}\n%strict: true\n{a: a, b: a}', {'a': {'x': 1}, 'b': {'x': 1}}),
-    # ohne %strict: true gelten die Verbote des Strict-Modus nicht
-    ('%define: d = {a: 1, a: 2}\n%strict: false\n[d]', [{'a': 2}]),
+    # ohne Strict-Modus gelten seine Verbote im Inhalt nicht
     ('%strict: false\n["\\uDEAD"]', ['\udead']),
+    ('%strict: false\n{a: 1, a: 2}', {'a': 2}),
+    ('%define: a = 1\n{a: a, "a": 2}', {'a': 2}),
     # Beispiele aus der Aufgabenstellung
     ("%version: 0.6\n%version:schema='2026.05.01b'\n%define:nil=null\n# Hyper media ref\n"
      "%define:self = {\n  href: 'http://api.example.org/people/1234'\n}\n\nid: 1234\nname: 'Bob'\n"
@@ -145,6 +146,13 @@ INVALID = [
     '%strict: true\n["\\u{10FFFE}"]', '%strict: true\n["\\u{1FFFF}"]', '%strict: true\n{"\\uD800": 1}', "%strict: true\n'\\uFFFF': 1",
     '%strict: true\n["\uFFFF"]', '%strict: true\n["\uFDD0"]',
     '%define: s = "\\uDC00"\n%strict: true\n{}', '%version: "\\uFFFE"\n%strict: true\n{}',
+    # Werte von Direktiven halten die Verbote zu Strings und doppelten Namen
+    # immer ein, auch ohne Strict-Modus (6.5)
+    '%define: d = {a: 1, a: 2}\n[d]', '%define: d = {a: 1, a: 2}\n[1]', '%define: d = {a: 1, a: 2}\n%strict: false\n[d]',
+    '%define: d = [{a: 1, a: 2}]\n{}', '%define: o = {"a": 1, "\\u0061": 2}\n[1]', "%define: k = {'\\uFDD0': 1}\n[1]",
+    '%define: s = "\\uDEAD"\n[1]', '%define: s = "\\uFFFF"\n[s]', '%define: u = "\\uDBFF"\n[1]', '%define: s = "\uFFFE"\n[1]',
+    '%version: "\\uFFFE"\n{}', '%version: s = "\\uFDD0"\n{}', '%version: s = "\\uDC00"\n{}',
+    '%strict: false\n%define: d = {a: 1, a: 2}\n[1]',
     # '=' gibt es nur in Direktiven
     'a = 1', '[1 = 2]', '{a = 1}', 'a: = 1', '=',
     # Grenze fuer die Groesse nach dem Ersetzen benannter Werte (11, 13)
@@ -184,7 +192,6 @@ STRICT_INVALID = [
     '1', '"x"', 'null', 'true', '-0', '%define: a = 1\na', '%define: a = "x"\na',
     '{a: 1, a: 2}', '{"a": 1, "\\u0061": 2}', 'a: 1\na: 2', "a: 1\n'a': 2", '[{b: {c: 1, c: 1}}]',
     '["\\uDEAD"]', '["\\uFFFF"]', '["\\uFDEF"]', '{"\\uFFFE": 1}', '["\\u{2FFFF}"]',
-    '%define: d = [{a: 1, a: 2}]\n{}', '%version: s = "\\uFDD0"\n{}', '%define: u = "\\uDBFF"\n[1]',
     # %strict: false widerspricht der Anwendung (6.8)
     '%strict: false\n{}', '%strict: false\n[1]', '%define: no = false\n%strict: no\n{}',
 ]

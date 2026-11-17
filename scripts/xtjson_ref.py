@@ -251,12 +251,20 @@ class Parser:
         self.t = tokenize(text)
         self.p = 0
         self.strict = strict
-        # Verstoesse gegen den Strict-Modus (12). Sie werden immer gesammelt, weil
-        # %strict erst nach Werten stehen kann, fuer die es gilt.
+        # Werte von Direktiven halten die Verbote zu Strings und doppelten Namen
+        # immer ein (6.5); im Inhalt werden Verstoesse gegen den Strict-Modus (12)
+        # gesammelt und am Ende gemeldet, wenn er gilt.
+        self.in_directives = False
         self.violations = []
-        for k, v, _ in self.t:                         # alle Strings sind Namen oder Werte
-            if k == 'str' and any(strict_char(ch) for ch in v):
-                self.violations.append('Surrogat oder Noncharacter in %r' % v)
+
+    def violation(self, msg):
+        if self.in_directives:
+            raise XTJSONError(msg + ' im Wert einer Direktive')
+        self.violations.append(msg)
+
+    def check_str(self, v):
+        if any(strict_char(ch) for ch in v):
+            self.violation('Surrogat oder Noncharacter in %r' % v)
 
     def peek(self):
         return self.t[self.p]
@@ -267,6 +275,7 @@ class Parser:
         return tok
 
     def document(self):
+        self.in_directives = True
         while self.peek()[0] == 'dir':
             self.directive()
             k, _, nl = self.peek()                     # Trenner wie zwischen Elementen (7.3)
@@ -276,6 +285,7 @@ class Parser:
                 raise XTJSONError('Komma oder Zeilenumbruch nach der Direktive erwartet')
             if self.peek()[0] == 'eof':
                 raise XTJSONError('Dokument ohne Inhalt nach den Direktiven')
+        self.in_directives = False
         k0 = self.peek()[0]
         if k0 in ('str', 'id') and self.t[self.p + 1][0] == ':':
             v = self.members('eof')
@@ -338,7 +348,10 @@ class Parser:
             return obj
         if k == '[':
             return self.items()
-        if k in ('str', 'num'):
+        if k == 'str':
+            self.check_str(v)
+            return v
+        if k == 'num':
             return v
         if k == 'id':
             if v in FIXED_VALUES:
@@ -369,10 +382,12 @@ class Parser:
             k, name, _ = self.next()
             if k not in ('str', 'id'):
                 raise XTJSONError('Name erwartet')
+            if k == 'str':
+                self.check_str(name)
             if self.next()[0] != ':':
                 raise XTJSONError("':' erwartet")
             if name in obj:
-                self.violations.append('doppelter Name %r' % name)
+                self.violation('doppelter Name %r' % name)
             obj[name] = self.value()
             if not self.separator(closer):
                 return obj
@@ -456,7 +471,8 @@ def main(spec_path):
         "%version: '0.6'\n%version: xtjson = '0.6'\n{}", '%version: s = 1\n%version: s = 2\n{}',
         '%version: [0, 6]\n{}', '%version: true\n{}', '%define: nil = null\n%version: nil\n{}',
         '%strict: 1\n{}', "%strict: 'true'\n{}", '%strict: s = true\n{}', '%strict: true\n%strict: true\n{}',
-        '%strict: true\n"x"', '%strict: true\n{a: 1, a: 2}', '%define: d = {a: 1, a: 2}\n%strict: true\n{}',
+        '%strict: true\n"x"', '%strict: true\n{a: 1, a: 2}', '%define: d = {a: 1, a: 2}\n[d]',
+        '%define: n = "\\uFFFF"\n[1]',
     ]
     for t in invalid:
         try:

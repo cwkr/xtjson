@@ -79,10 +79,10 @@
 
   <section class="form" id="directive">
     <h3>directive</h3>
-    <p>A <dfn>directive</dfn> is a statement at the start of the document. The <code>%</code> and the name of the directive are written without white space between them. Directives are separated like items, and a separator also follows the last one. There are exactly three directives; any other is an error.</p>
+    <p>A <dfn>directive</dfn> is a statement at the start of the document. The <code>%</code> and the name of the directive are written without white space between them. Directives are separated like items, and a separator also follows the last one. There are exactly three directives; any other is an error. The values of directives are always checked like strict mode checks names and strings: duplicate names, surrogates and noncharacters are errors there. A directive has no effect on the directives before it.</p>
     <p><code>%define: nil = null</code> defines a <a href="#named-value">named value</a>. The value can be any value, including an object or an array, and can use the named values defined before it. A named value can be defined only once, and <code>true</code>, <code>false</code> and <code>null</code> cannot be redefined.</p>
     <p><code>%version: '0.6'</code> states the version of the specification that the document is written for; a parser may reject a version that it does not support. With an identifier, as in <code>%version: schema = '2026.05.01b'</code>, it states the version of something else, as information for the application. The value is a string or a number, also with a suffix or as a named value, for example <code>%version: windows = 2k</code>; each version is stated at most once.</p>
-    <p><code>%strict: true</code> makes the parser read the document in <a href="#strict-mode">strict mode</a>. The value is <code>true</code> or <code>false</code>, also as a named value, and <code>%strict</code> occurs at most once. If the application has requested strict mode, <code>%strict: false</code> is an error.</p>
+    <p><code>%strict: true</code> makes the parser read the content of the document in <a href="#strict-mode">strict mode</a>. The value is <code>true</code> or <code>false</code>, also as a named value, and <code>%strict</code> occurs at most once. If the application has requested strict mode, <code>%strict: false</code> is an error.</p>
     <div class="diagram">{{rr:directive}}</div>
   </section>
 
@@ -241,7 +241,7 @@
 
 <section id="strict-mode">
   <h2>Strict mode</h2>
-  <p>In <dfn>strict mode</dfn> a parser also rejects documents with duplicate names, with surrogates or Unicode noncharacters in names and strings, or with a root value that is not an object or an array. Strict mode applies if the application requests it or if the document contains <code>%strict: true</code>, and it covers the values of all directives as well. Every conforming parser offers it. The JSON equivalent of a document that is valid in strict mode, and whose numbers stay within the range of IEEE 754 binary64, is an <a href="https://www.rfc-editor.org/rfc/rfc7493">I-JSON</a> message.</p>
+  <p>In <dfn>strict mode</dfn> a parser also rejects documents with duplicate names, with surrogates or Unicode noncharacters in names and strings, or with a root value that is not an object or an array. Strict mode applies if the application requests it or if the document contains <code>%strict: true</code>, and it covers the content of the document; the values of the directives are checked in any case. Every conforming parser offers it. The JSON equivalent of a document that is valid in strict mode, and whose numbers stay within the range of IEEE 754 binary64, is an <a href="https://www.rfc-editor.org/rfc/rfc7493">I-JSON</a> message.</p>
 </section>
 
 <section id="principles">
