@@ -26,6 +26,7 @@ scripts/
   tests_zeilenumbruch_strings.py  tests: line breaks, strings, names, escapes
   tests_mehrzeilige_strings.py    tests: value of strings across several lines
   tests_definitionen.py           tests: named values and number suffixes
+  tests_direktiven.py             tests: directives, %define and %version
   build_index.py                  generates docs/index.html
   index_template.html             template for docs/index.html
   export_corpus.py                exports the test cases as JSON for implementations
@@ -47,15 +48,16 @@ python3 scripts/xtjson_ref.py docs/xtjson-spec-en.md
 python3 scripts/tests_zeilenumbruch_strings.py
 python3 scripts/tests_mehrzeilige_strings.py
 python3 scripts/tests_definitionen.py
+python3 scripts/tests_direktiven.py
 python3 scripts/compare_versions.py docs/xtjson-spec-de.md docs/xtjson-spec-en.md
 ```
 
-Each script ends with a result line and exit code 0 on success. The scripts print their messages in German: `ERGEBNIS: OK` and `ERGEBNIS: keine Abweichung in 1-6` mean success, `FEHLER` marks a failure. Run all six after every change to `docs/` or `scripts/`. A change is not done until all six pass.
+Each script ends with a result line and exit code 0 on success. The scripts print their messages in German: `ERGEBNIS: OK` and `ERGEBNIS: keine Abweichung in 1-6` mean success, `FEHLER` marks a failure. Run all seven after every change to `docs/` or `scripts/`. A change is not done until all seven pass.
 
 What they check:
 
 - `xtjson_ref.py <version>` parses every fenced block tagged `xtjson` in the given version. If a block tagged `json` follows immediately, its value must be equal. It also runs built-in valid and invalid cases and plain JSON texts (the superset property).
-- The three `tests_*.py` files contain pairs of text and expected value, and texts that must be rejected.
+- The four `tests_*.py` files contain pairs of text and expected value, and texts that must be rejected. `tests_direktiven.py` also checks the version statements and the limit for the size after replacing named values.
 - `compare_versions.py` compares the outline, the ABNF blocks (without comments), the shape of the example values, tables, list items and the number of normative key words per section. Item 7 of its output lists code spans that occur in only one version; only translated example words are acceptable there.
 
 The comparison is mechanical. It does not detect differences of meaning in prose. Always read changed sentences against each other in both versions.
@@ -80,7 +82,7 @@ python3 scripts/build_index.py --check   # fails if docs/index.html is out of da
 3. **Version and change list.** Every substantive change increases the draft number in the header of both versions and gets an entry in the section "Änderungen" / "Changes". The text itself does not refer to earlier drafts ("formerly", "now", "no longer"); such remarks belong only in the change list.
 4. **Tests are part of the change.** A new or changed rule gets valid and invalid cases in the test files, and the reference parser is adapted. Every example in the text must run through the parser.
 5. **Keep the appendices in step.** Check and update Appendix B.3 (invalid documents), Appendix C (deliberately not included) and Appendix D (design decisions with rationale) with every rule change.
-6. **Check cross-references.** Section numbers, anchors in the table of contents and the extension table in section 1 (E1 to E13) must be correct in both versions.
+6. **Check cross-references.** Section numbers, anchors in the table of contents and the extension table in section 1 (E1 to E14) must be correct in both versions.
 7. **Implementations follow.** A specification change that alters behaviour is not finished until the implementations in this repository are updated or an open issue records what is outstanding.
 
 ### Normative key words
@@ -114,7 +116,8 @@ Use the terms from section 2 of the specification consistently. The most importa
 | Zeilenfortsetzung | line continuation |
 | Begrenzer | delimiter |
 | Einrückung | indentation |
-| Definition, vordefiniert, eigene Definition | definition, predefined, custom definition |
+| Direktive | directive |
+| Definition, vordefiniert | definition, predefined |
 | JSON-Äquivalent | JSON equivalent |
 | portabel | portable |
 
@@ -126,8 +129,8 @@ No change may give up these properties:
 
 - **Superset.** Every UTF-8 encoded JSON text is a valid XTJSON document with the same meaning (K1, K2). An extension may only occupy notations that are a syntax error in JSON.
 - **JSON data model.** Every document has a JSON equivalent (section 10). There are no new data types, no expressions, no references.
-- **Predefined and not changeable** are `true`, `false`, `null` and all number suffixes. The table in 9.5 is exhaustive: `k`, `K`, `kb`, `Kb`, `kB`, `KB`, `mb`, `Mb`, `mB`, `MB`, `ms`, `s`, `min`, `h`, `pct`, `px`, `L`, `n`.
-- **Definitions belong to the parser, not to the document.** A document can define neither named values nor suffixes. The application can define named values (a string, a number, `true`, `false` or `null`; never an object or an array), but no suffixes: those are defined only by the specification. Anything undefined is an error.
+- **Predefined and not changeable** are `true`, `false`, `null`, the directives `%define` and `%version`, and all number suffixes. The table in 9.5 is exhaustive: `k`, `K`, `kb`, `Kb`, `kB`, `KB`, `mb`, `Mb`, `mB`, `MB`, `ms`, `s`, `min`, `h`, `pct`, `px`, `L`, `n`.
+- **Definitions belong to the document, not to the parser.** Named values are defined only in the document, with `%define` (any JSON value, including objects and arrays, copied to every position where it is used). The application can define neither named values nor directives nor suffixes; suffixes and directives are defined only by the specification. Every document is therefore portable. Anything undefined is an error.
 - **Errors instead of guessing.** When in doubt, an input is an error and is not silently interpreted (unknown escape sequences, undefined identifiers, mixed indentation).
 - **Narrow rules first.** Where several solutions are possible, choose the narrower one and give the rationale in Appendix D. Loosening later is compatible; restricting is not.
 
@@ -138,10 +141,13 @@ Do not simply implement proposals that touch one of these principles. Present th
 An implementation in this repository is a conforming XTJSON parser, generator or converter in the sense of section 11 of the specification. In particular:
 
 - **No dialects.** Accept exactly what the grammar in Appendix A allows, and reject everything else. Do not add convenience extensions, lenient modes or fallbacks that the specification does not define. Options that restrict (for example an I-JSON mode according to section 12) are fine.
-- **Only predefined definitions by default.** Without action by the application, only `true`, `false` and `null` are active as named values. Offer an API for custom named values; reject definitions that violate 6.4: a name that is not an identifier, an object or an array as the value, and any attempt to redefine a predefined one. Report such misuse as an error of the application, distinct from an error of the document.
-- **No custom suffixes.** Know exactly the suffixes in the table in 9.5. Do not offer an API to add, change or remove suffixes.
+- **Named values only from the document.** Only `true`, `false`, `null` and the named values defined by `%define` in the document are known. Do not offer an API to define named values.
+- **No custom directives or suffixes.** Know exactly the directives `%define` and `%version` (6.5 to 6.7) and the suffixes in the table in 9.5. Do not offer an API to add, change or remove directives or suffixes.
+- **Version statements.** Make the `%version` statements of a document available to the application (identifier and value, the version of the specification under `xtjson`). Rejecting an unsupported version of the specification is permitted, not required.
+- **Limit the size after replacing named values** (11, 13), and report an error when the limit is hit; definitions that use one another can grow exponentially.
 - **Behaviour that is easy to get wrong:**
-  - Duplicate names: the member that comes last in the document applies (7.2); forbidden in I-JSON mode.
+  - Duplicate names: the member that comes last in the document applies (7.2); forbidden in I-JSON mode, also in values of directives that are not used.
+  - Directives: only at the top level, before the content, `%` directly followed by the name, separated like items (a separator also after the last one), and a document of directives alone is an error. `%define` needs `identifier =`, defines each name once (not `true`, `false`, `null`), and its value sees only earlier definitions. `%version` takes a string or a number without suffix; at most once per identifier, and `%version: v` is the same as `%version: xtjson = v`. Every other directive is an error.
   - Line break: LF, CR or CR LF, with CR LF counting as one. U+2028 and U+2029 are white space, not line breaks, and do not end a line comment.
   - A line break inside a block comment is not a separator.
   - Strings: there is one kind of string, in `"` or `'`, and every string may extend across several lines. Line breaks (LF, CR, CR LF) and tab may appear unescaped; every other control character, including VT and FF, must be escaped. Three quotation marks in a row are not a delimiter but an error. Names may extend across several lines too.
@@ -163,18 +169,19 @@ An implementation in this repository is a conforming XTJSON parser, generator or
   `grep -c 'u0061\|u00e4\|u00e9\|uD83D\|u00E4\|u000B\|uDEAD' docs/*.md` must report the same count for both versions (currently 6 each).
 - **White space at the end of lines.** In examples with strings across several lines it matters, or is removed by rule. It is made visible in tables with `·` for a space and `⏎` for a line break, never by real spaces at the end of a line. Editors and formatters must not re-wrap the Markdown files or strip white space.
 - **Fence tags.** Complete, valid documents go in blocks tagged `xtjson`, JSON equivalents directly after them in `json`, grammar in `abnf`. Invalid examples and fragments are written as inline code or in tables, never in an `xtjson` block.
-- **Examples with custom definitions.** The example in 6.4 assumes definitions (`nil`, `zero`, `unbekannt` / `unknown`). They are listed in `EXAMPLE_DEFS` in `scripts/xtjson_ref.py`. If you add an example with further definitions, add them there and name them in the text.
+- **Examples with named values.** Every example defines its named values itself with `%define`; there are no definitions outside the document.
 - **Translated examples.** Names and texts in examples are translated; structure and numbers are not. `compare_versions.py` checks that the values have the same shape.
 - **Line endings.** The Markdown files use LF. Tests for CR and CR LF are written as escape sequences in the Python files.
 
 ## Reference parser
 
-- Interface: `parse(text, ijson=False, values=None)`. `values` maps identifiers to JSON values that are not objects or arrays. The suffixes are fixed in `SUFFIXES`.
-- Invalid documents raise `XTJSONError`. Invalid definitions passed by the application raise `ValueError` but not `XTJSONError`.
+- Interface: `parse(text, ijson=False, max_expansion=MAX_EXPANSION)` returns the value; `parse_document(...)` with the same parameters returns `(value, versions)`, where `versions` maps the identifiers of the `%version` statements to their values (`xtjson` for the specification). `max_expansion` limits the number of JSON values that replacing named values produces. The suffixes are fixed in `SUFFIXES`.
+- Invalid documents, including a document that hits the limit, raise `XTJSONError`.
 - Known gaps compared with the specification; do not treat them as done:
   - The I-JSON mode checks only duplicate names, not surrogates, noncharacters or number ranges.
   - Decimal numbers with a fraction part or an exponent become `float` (binary64). Exact arithmetic is used only for integers and for suffixes.
   - It expects text that is already decoded; checking UTF-8 is left to the caller.
+  - It records `%version` but never rejects a version (permitted by 6.7).
 - Messages, comments and test file names in `scripts/` are in German, written without umlauts. Keep that as it is; do not translate or rename them as a side effect of other work.
 
 ## Working method

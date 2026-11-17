@@ -199,14 +199,17 @@ CHARS_DQ = 'any character except " \\ and control characters'
 CHARS_SQ = "any character except ' \\ and control characters"
 
 DIAGRAMS = {
-    'document': Choice(N('value'), N('members')),
+    'document': Seq(Opt(Seq(Loop(N('directive'), N('separator')), N('separator'))),
+                    Choice(N('value'), N('members'))),
+    'directive': Seq(Choice(T('%define'), T('%version')), T(':'),
+                     Opt(Seq(N('identifier'), T('='))), N('value')),
     'object': Seq(T('{'), Opt(N('members')), T('}')),
     'members': Seq(Loop(Seq(N('name'), T(':'), N('value')), N('separator')), Opt(T(','))),
     'array': Seq(T('['), Opt(Seq(Loop(N('value'), N('separator')), Opt(T(',')))), T(']')),
     'separator': Choice(T(','), C('white space containing a line break')),
     'value': Choice(N('object'), N('array'), N('string'), N('number'), N('named value')),
     'named value': Choice(T('true'), T('false'), T('null'),
-                          Seq(N('identifier'), Label('defined by the application'))),
+                          Seq(N('identifier'), Label('defined with %define'))),
     'name': Choice(N('string'), N('identifier')),
     'identifier': Seq(Choice(C('a–z A–Z'), T('_'), T('$')),
                       Many(Choice(C('a–z A–Z'), C('0–9'), T('_'), T('$')))),

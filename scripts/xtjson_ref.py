@@ -1,4 +1,5 @@
-"""Referenz-Parser fuer XTJSON (Entwurf 0.5) + Pruefung der Beispiele der Spezifikation."""
+"""Referenz-Parser fuer XTJSON (Entwurf 0.6) + Pruefung der Beispiele der Spezifikation."""
+import copy
 import json
 import re
 import sys
@@ -33,19 +34,18 @@ for _names, _factor, _divisor in (
         SUFFIXES[_n] = (_factor, _divisor)
 
 
-def check_definitions(values):
-    """Prueft eigene Definitionen (6.4). Verstoesse sind Fehler der Anwendung (ValueError)."""
-    for name, val in values.items():
-        if not isinstance(name, str) or not ID.fullmatch(name):
-            raise ValueError('kein gueltiger Bezeichner: %r' % (name,))
-        if name in FIXED_VALUES:
-            raise ValueError('%r ist vordefiniert und nicht aenderbar' % name)
-        if isinstance(val, (dict, list, tuple)):
-            raise ValueError('%r: Objekte und Arrays sind als benannter Wert nicht erlaubt' % name)
-        try:
-            json.dumps(val, allow_nan=False)          # muss ein JSON-Wert sein
-        except (TypeError, ValueError):
-            raise ValueError('%r ist kein JSON-Wert zugeordnet' % name) from None
+# Grenze fuer die Groesse des Werts nach dem Ersetzen benannter Werte (11, 13):
+# Anzahl der JSON-Werte, die durch Ersetzen entstehen.
+MAX_EXPANSION = 1000000
+
+
+def size(v):
+    """Anzahl der JSON-Werte in v (ein Objekt oder Array zaehlt mit)."""
+    if isinstance(v, dict):
+        return 1 + sum(size(x) for x in v.values())
+    if isinstance(v, list):
+        return 1 + sum(size(x) for x in v)
+    return 1
 
 
 def apply_suffix(text, value, suf):
@@ -129,7 +129,7 @@ def tokenize(s):
             if j < 0:
                 raise XTJSONError('Blockkommentar nicht abgeschlossen')
             i = j + 2
-        elif c in '{}[]:,':
+        elif c in '{}[]:,=':
             toks.append((c, c, nl))
             nl = False
             i += 1
@@ -207,12 +207,21 @@ def tokenize(s):
             else:
                 v = float(t)
             i = m.end()
+            kind = 'num'
             ms = SUF.match(s, i)
             if ms:
                 v = apply_suffix(t, v, ms.group())
                 i = ms.end()
-            toks.append(('num', v, nl))
+                kind = 'snum'                          # Zahl mit Suffix (fuer %version)
+            toks.append((kind, v, nl))
             nl = False
+        elif c == '%':                                 # Direktive (6.5): '%' und Name ohne Leerraum
+            m = ID.match(s, i + 1)
+            if not m:
+                raise XTJSONError("Name der Direktive muss unmittelbar auf '%' folgen")
+            toks.append(('dir', m.group(), nl))
+            nl = False
+            i = m.end()
         else:
             m = ID.match(s, i)
             if not m:
@@ -228,9 +237,12 @@ def tokenize(s):
 
 
 class Parser:
-    def __init__(self, text, ijson=False, values=None):
-        self.values = dict(values or {})
-        check_definitions(self.values)
+    def __init__(self, text, ijson=False, max_expansion=MAX_EXPANSION):
+        self.values = {}                               # Definitionen aus %define (6.6)
+        self.sizes = {}
+        self.versions = {}                             # Angaben aus %version (6.7)
+        self.expanded = 0
+        self.max_expansion = max_expansion
         self.t = tokenize(text)
         self.p = 0
         self.ijson = ijson
@@ -244,14 +256,49 @@ class Parser:
         return tok
 
     def document(self):
-        k0 = self.t[0][0]
-        if k0 in ('str', 'id') and len(self.t) > 1 and self.t[1][0] == ':':
+        while self.peek()[0] == 'dir':
+            self.directive()
+            k, _, nl = self.peek()                     # Trenner wie zwischen Elementen (7.3)
+            if k == ',':
+                self.next()
+            elif not nl or k == 'eof':
+                raise XTJSONError('Komma oder Zeilenumbruch nach der Direktive erwartet')
+            if self.peek()[0] == 'eof':
+                raise XTJSONError('Dokument ohne Inhalt nach den Direktiven')
+        k0 = self.peek()[0]
+        if k0 in ('str', 'id') and self.t[self.p + 1][0] == ':':
             v = self.members('eof')
         else:
             v = self.value()
         if self.peek()[0] != 'eof':
             raise XTJSONError('Text nach dem Wurzelwert')
         return v
+
+    def directive(self):
+        _, name, _ = self.next()
+        if self.next()[0] != ':':
+            raise XTJSONError("':' nach dem Namen der Direktive erwartet")
+        ident = None
+        if self.peek()[0] == 'id' and self.t[self.p + 1][0] == '=':
+            ident = self.next()[1]
+            self.next()
+        if name == 'define':
+            if ident is None:
+                raise XTJSONError('%define braucht einen Bezeichner und =')
+            if ident in FIXED_VALUES or ident in self.values:
+                raise XTJSONError('benannter Wert %r ist bereits definiert' % ident)
+            v = self.value()                           # ident ist hier noch nicht definiert
+            self.values[ident] = v
+            self.sizes[ident] = size(v)
+        elif name == 'version':
+            ident = 'xtjson' if ident is None else ident
+            if ident in self.versions:
+                raise XTJSONError('Version %r ist bereits angegeben' % ident)
+            if self.peek()[0] not in ('str', 'num'):
+                raise XTJSONError('%version erwartet einen String oder eine Zahl ohne Suffix')
+            self.versions[ident] = self.next()[1]
+        else:
+            raise XTJSONError('unbekannte Direktive %%%s' % name)
 
     def value(self):
         k, v, _ = self.next()
@@ -264,13 +311,16 @@ class Parser:
             return obj
         if k == '[':
             return self.items()
-        if k in ('str', 'num'):
+        if k in ('str', 'num', 'snum'):
             return v
         if k == 'id':
             if v in FIXED_VALUES:
                 return FIXED_VALUES[v]
             if v in self.values:
-                return self.values[v]
+                self.expanded += self.sizes[v]
+                if self.expanded > self.max_expansion:
+                    raise XTJSONError('Grenze fuer die Groesse nach dem Ersetzen benannter Werte erreicht')
+                return copy.deepcopy(self.values[v])   # jede Stelle erhaelt eine eigene Kopie
             raise XTJSONError('benannter Wert %r ist nicht definiert' % (v,))
         raise XTJSONError('Wert erwartet, gefunden %r' % (v,))
 
@@ -312,18 +362,19 @@ class Parser:
                 return arr
 
 
-def parse(text, ijson=False, values=None):
-    """Liest ein XTJSON-Dokument.
+def parse_document(text, ijson=False, max_expansion=MAX_EXPANSION):
+    """Liest ein XTJSON-Dokument und liefert (Wert, Versionen).
 
-    values: eigene benannte Werte, {Bezeichner: JSON-Wert}; keine Objekte und Arrays
+    Versionen: {Bezeichner: Wert} aus den %version-Direktiven (6.7); die Version
+    dieser Spezifikation steht unter 'xtjson'. Der Referenz-Parser prueft sie nicht.
     """
-    return Parser(text, ijson, values).document()
+    p = Parser(text, ijson, max_expansion)
+    return p.document(), p.versions
 
 
-# Definitionen, die die Beispiele der Spezifikation voraussetzen (6.4)
-EXAMPLE_DEFS = dict(
-    values={'nil': None, 'zero': 0, 'unbekannt': 'keine Angaben', 'unknown': 'not specified'},
-)
+def parse(text, ijson=False, max_expansion=MAX_EXPANSION):
+    """Liest ein XTJSON-Dokument und liefert seinen Wert."""
+    return parse_document(text, ijson, max_expansion)[0]
 
 
 # ----------------------------------------------------------------------------
@@ -339,7 +390,7 @@ def main(spec_path):
             continue
         n_l += 1
         try:
-            v = parse(body, **EXAMPLE_DEFS)
+            v = parse(body)
         except XTJSONError as ex:
             fails += 1
             print('FEHLER xtjson-Block %d: %s\n%s' % (n_l, ex, body))
@@ -368,6 +419,13 @@ def main(spec_path):
         '"\\X41"', '"\\ "', '"\\e"', '"\\U0041"', "'\\.'",
         '"""a"""', "'''a'''", '""""""', '{"""a""": 1}', '"a\\ \nb"', '"a\\\t\nb"', '"a\\ \r\nb"',
         '"a\x0cb"', '"a\\\u2028b"', '"abc', "'a\nb", '"\n\ta\n  b\n "',
+        # Direktiven (6.5 bis 6.7)
+        '% define: a = 1\n[a]', '%include: "a.xtj"\n{}', '%Define: a = 1\n[a]', '%define: "x"\n{}',
+        '%define: true = 1\n[true]', '%define: a = 1\n%define: a = 2\n[a]',
+        '%define: a = b\n%define: b = 1\n[a]', '%define: a = [a]\na', '%define: a = 1 [a]',
+        '%define: a = 1', 'a: 1\n%define: b = 2', '[%define: a = 1]',
+        "%version: '0.6'\n%version: xtjson = '0.6'\n{}", '%version: s = 1\n%version: s = 2\n{}',
+        '%version: [0, 6]\n{}', '%version: true\n{}', '%version: 6k\n{}',
     ]
     for t in invalid:
         try:
@@ -412,6 +470,8 @@ def main(spec_path):
         ('"a\nb"', 'a\nb'), ("'a\nb'", 'a\nb'), ('"a\\\nb"', 'ab'), ('"a\\\r\nb"', 'ab'),
         ('"a\\\rb"', 'ab'), ("'a\\\n  b'", 'a  b'), ('a: "x\\\ny"\nb: 2', {'a': 'xy', 'b': 2}),
         ('"a\tb"', 'a\tb'), ('"a\\\\\nb"', 'a\\\nb'),
+        ('%define: a = 1\n[a]', [1]), ("%version: '0.6', %define: leer = \"\", [null, 543, leer]", [None, 543, '']),
+        ('%define: a = {b: [1]}\nx: a\ny: a', {'x': {'b': [1]}, 'y': {'b': [1]}}),
     ]
     for t, exp in valid:
         try:
@@ -442,8 +502,9 @@ def main(spec_path):
             print('FEHLER Superset: %r (%s)' % (t, ex))
     print('JSON-Texte geprueft: %d' % len(samples))
 
-    # 5) I-JSON-Modus: doppelte Namen unabhaengig von der Schreibweise
-    for t in ['{a: 1, "a": 2}', "a: 1\n'\\u0061': 2"]:
+    # 5) I-JSON-Modus: doppelte Namen unabhaengig von der Schreibweise, auch in
+    #    Werten von Direktiven, die nicht verwendet werden (12)
+    for t in ['{a: 1, "a": 2}', "a: 1\n'\\u0061': 2", '%define: d = {a: 1, a: 2}\n1']:
         try:
             parse(t, ijson=True)
             fails += 1

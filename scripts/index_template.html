@@ -46,7 +46,8 @@
     <li><strong>Hexadecimal, octal and binary integers:</strong> <code>0xFF</code>, <code>0o755</code>, <code>0b1010</code>.</li>
     <li><strong>Digit grouping</strong> with <code>_</code>: <code>1_000_000</code>.</li>
     <li><strong>Number suffixes:</strong> <code>10k</code>, <code>64mb</code>, <code>250ms</code>.</li>
-    <li><strong>Named values:</strong> identifiers that the application defines as aliases for JSON values, such as <code>nil</code>.</li>
+    <li><strong>Named values:</strong> identifiers that the document defines as aliases for JSON values, such as <code>nil</code>.</li>
+    <li><strong>Directives</strong> at the start of the document: <code>%define</code> for named values and <code>%version</code> for versions.</li>
     <li><strong>More white space characters:</strong> all white space characters of ECMAScript.</li>
   </ul>
 </section>
@@ -72,8 +73,16 @@
 
   <section class="form" id="document">
     <h3>document</h3>
-    <p>A <dfn>document</dfn> is either a single <a href="#value">value</a>, as in JSON, or a sequence of <a href="#members">members</a> without enclosing braces. The second form denotes the object that contains exactly these members and needs at least one member. It exists only at the top level; an empty object is written as <code>{}</code>.</p>
+    <p>A <dfn>document</dfn> begins with optional <a href="#directive">directives</a>. They are followed either by a single <a href="#value">value</a>, as in JSON, or by a sequence of <a href="#members">members</a> without enclosing braces. The second form denotes the object that contains exactly these members and needs at least one member. It exists only at the top level; an empty object is written as <code>{}</code>.</p>
     <div class="diagram">{{rr:document}}</div>
+  </section>
+
+  <section class="form" id="directive">
+    <h3>directive</h3>
+    <p>A <dfn>directive</dfn> is a statement at the start of the document. The <code>%</code> and the name of the directive are written without white space between them. Directives are separated like items, and a separator also follows the last one. There are exactly two directives; any other is an error.</p>
+    <p><code>%define: nil = null</code> defines a <a href="#named-value">named value</a>. The value can be any value, including an object or an array, and can use the named values defined before it. A named value can be defined only once, and <code>true</code>, <code>false</code> and <code>null</code> cannot be redefined.</p>
+    <p><code>%version: '0.6'</code> states the version of the specification that the document is written for; a parser may reject a version that it does not support. With an identifier, as in <code>%version: schema = '2026.05.01b'</code>, it states the version of something else, as information for the application. The value is a string or a number without suffix, and each version is stated at most once.</p>
+    <div class="diagram">{{rr:directive}}</div>
   </section>
 
   <section class="form" id="object">
@@ -108,7 +117,7 @@
 
   <section class="form" id="named-value">
     <h3>named value</h3>
-    <p>A <dfn>named value</dfn> is an <a href="#identifier">identifier</a> at a value position. It is another notation for the JSON value that a definition assigns to it. <code>true</code>, <code>false</code> and <code>null</code> are predefined and cannot be changed. The application can pass further definitions to the parser, for example <code>nil</code> for <code>null</code>; the assigned value is a string, a number, <code>true</code>, <code>false</code> or <code>null</code>, never an object or an array. A document cannot define named values itself, case is significant, and an identifier without a definition is an error; it is never read as a string.</p>
+    <p>A <dfn>named value</dfn> is an <a href="#identifier">identifier</a> at a value position. It is another notation for the JSON value that a definition assigns to it, and is replaced by a copy of that value. <code>true</code>, <code>false</code> and <code>null</code> are predefined and cannot be changed. All other named values are defined by the document itself with the <a href="#directive">directive</a> <code>%define</code>, for example <code>nil</code> for <code>null</code>; the application cannot define named values. Case is significant, and an identifier without a definition is an error; it is never read as a string.</p>
     <div class="diagram">{{rr:named value}}</div>
   </section>
 
@@ -224,6 +233,7 @@
     <li>Strings become JSON strings in double quotation marks with the same value.</li>
     <li>Numbers are written as JSON numbers: without <code>_</code>, in decimal notation, and with the suffix replaced by the result of its conversion.</li>
     <li>Named values other than <code>true</code>, <code>false</code> and <code>null</code> are replaced by the JSON value assigned to them.</li>
+    <li>Directives are removed.</li>
   </ol>
   <p>A document that uses at least one of the extensions is not a JSON text. It must not be labelled with the media type <code>application/json</code> or sent to recipients that expect JSON.</p>
 </section>
@@ -231,8 +241,8 @@
 <section id="principles">
   <h2>Principles</h2>
   <ul>
-    <li><strong>Definitions belong to the parser, not to the document.</strong> A document can define neither named values nor suffixes. Named values can be defined by the application; suffixes are fixed by the specification. A document that uses only the predefined named values is portable: every conforming parser can read it.</li>
-    <li><strong>Errors instead of guessing.</strong> Unknown escape sequences, white space after a line continuation, undefined identifiers, unknown suffixes and mixed indentation are errors and are not silently interpreted.</li>
+    <li><strong>Every document is portable.</strong> Named values are defined only in the document, with <code>%define</code>; suffixes and directives are fixed by the specification. The application can add none of them, so the value of a document depends only on its text, and every conforming parser reads it in the same way.</li>
+    <li><strong>Errors instead of guessing.</strong> Unknown escape sequences, white space after a line continuation, undefined identifiers, unknown directives, unknown suffixes and mixed indentation are errors and are not silently interpreted.</li>
     <li><strong>Never code.</strong> XTJSON is not a subset of a programming language and is never read by evaluating it as program code.</li>
   </ul>
 </section>

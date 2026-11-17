@@ -10,9 +10,8 @@ Aufruf:
 
 Standard fuer Datei: xtjson-js/test/corpus.json
 
-Von den abgelehnten Definitionen (BAD_DEFS) werden nur die exportiert, die
-sich als JSON darstellen lassen (c_bad_values); Werte wie NaN, Mengen oder
-beliebige Objekte prueft jede Implementierung selbst.
+d_versions enthaelt Paare aus Text und den erwarteten Versionsangaben
+(6.7), {Bezeichner: Wert}; die Version der Spezifikation steht unter 'xtjson'.
 """
 import ast
 import json
@@ -26,6 +25,7 @@ sys.path.insert(0, str(ROOT / 'scripts'))
 sys.dont_write_bytecode = True
 
 import tests_definitionen as tc  # noqa: E402
+import tests_direktiven as td  # noqa: E402
 import tests_mehrzeilige_strings as tb  # noqa: E402
 import tests_zeilenumbruch_strings as ta  # noqa: E402
 
@@ -48,31 +48,6 @@ def ref_lists():
     return lists
 
 
-def defs_label(defs):
-    """'D' fuer die Definitionen D, sonst None oder nur die benannten Werte."""
-    if defs is tc.D:
-        return 'D'
-    if not defs:
-        return None
-    if set(defs) != {'values'}:
-        raise SystemExit('FEHLER: unbekannte Definitionen: %r' % (defs,))
-    return {'values': defs['values']}
-
-
-def bad_values():
-    """Die abgelehnten benannten Werte aus BAD_DEFS, die sich als JSON darstellen lassen."""
-    out = []
-    for defs in tc.BAD_DEFS:
-        if set(defs) != {'values'}:
-            raise SystemExit('FEHLER: unbekannte Definitionen: %r' % (defs,))
-        try:
-            json.dumps(defs['values'], allow_nan=False)
-        except (TypeError, ValueError):
-            continue
-        out.append(defs['values'])
-    return out
-
-
 def corpus():
     ref = ref_lists()
     return {
@@ -84,10 +59,11 @@ def corpus():
         'a_invalid': ta.INVALID,
         'b_valid': [[t, v] for t, v in tb.VALID],
         'b_invalid': tb.INVALID,
-        'c_values': tc.VALUES,
-        'c_valid': [[t, defs_label(d), v] for t, d, v in tc.VALID],
-        'c_invalid': [[t, defs_label(d)] for t, d in tc.INVALID],
-        'c_bad_values': bad_values(),
+        'c_valid': [[t, v] for t, v in tc.VALID],
+        'c_invalid': tc.INVALID,
+        'd_valid': [[t, v] for t, v in td.VALID],
+        'd_invalid': td.INVALID,
+        'd_versions': [[t, v] for t, v in td.VERSIONS],
     }
 
 

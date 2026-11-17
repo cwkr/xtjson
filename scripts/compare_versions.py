@@ -17,7 +17,7 @@ import sys
 from collections import Counter
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from xtjson_ref import parse, EXAMPLE_DEFS  # noqa: E402
+from xtjson_ref import parse  # noqa: E402
 
 FENCE = re.compile(r'```(\w+)\n(.*?)```', re.S)
 
@@ -137,7 +137,7 @@ def main(de_path, en_path):
         print('BEISPIELE: unterschiedliche Folge von Bloecken')
     n = 0
     for (l1, b1), (l2, b2) in zip(xd, xe):
-        v1, v2 = parse(b1, **EXAMPLE_DEFS), parse(b2, **EXAMPLE_DEFS)
+        v1, v2 = parse(b1), parse(b2)
         n += 1
         if shape(v1) != shape(v2):
             problems += 1

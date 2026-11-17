@@ -467,6 +467,35 @@
   [
    "\"a\\\\\nb\"",
    "a\\\nb"
+  ],
+  [
+   "%define: a = 1\n[a]",
+   [
+    1
+   ]
+  ],
+  [
+   "%version: '0.6', %define: leer = \"\", [null, 543, leer]",
+   [
+    null,
+    543,
+    ""
+   ]
+  ],
+  [
+   "%define: a = {b: [1]}\nx: a\ny: a",
+   {
+    "x": {
+     "b": [
+      1
+     ]
+    },
+    "y": {
+     "b": [
+      1
+     ]
+    }
+   }
   ]
  ],
  "ref_invalid": [
@@ -583,7 +612,24 @@
   "\"a\\\u2028b\"",
   "\"abc",
   "'a\nb",
-  "\"\n\ta\n  b\n \""
+  "\"\n\ta\n  b\n \"",
+  "% define: a = 1\n[a]",
+  "%include: \"a.xtj\"\n{}",
+  "%Define: a = 1\n[a]",
+  "%define: \"x\"\n{}",
+  "%define: true = 1\n[true]",
+  "%define: a = 1\n%define: a = 2\n[a]",
+  "%define: a = b\n%define: b = 1\n[a]",
+  "%define: a = [a]\na",
+  "%define: a = 1 [a]",
+  "%define: a = 1",
+  "a: 1\n%define: b = 2",
+  "[%define: a = 1]",
+  "%version: '0.6'\n%version: xtjson = '0.6'\n{}",
+  "%version: s = 1\n%version: s = 2\n{}",
+  "%version: [0, 6]\n{}",
+  "%version: true\n{}",
+  "%version: 6k\n{}"
  ],
  "ref_json_samples": [
   "{\"a\":[1,2.5e-3,true,null],\"b\":{\"c\":\"d\\u00e9\"}}",
@@ -1053,22 +1099,13 @@
   "\"\"\"\n  a\n  \"\"\"",
   "'''\n  a\n  '''"
  ],
- "c_values": {
-  "nil": null,
-  "zero": 0,
-  "unbekannt": "keine Angaben",
-  "halb": 0.5,
-  "ja": true
- },
  "c_valid": [
   [
-   "nil",
-   "D",
+   "%define: nil = null\n%define: zero = 0\n%define: unbekannt = 'keine Angaben'\n%define: halb = 0.5\n%define: ja = true\nnil",
    null
   ],
   [
-   "[nil, zero, unbekannt]",
-   "D",
+   "%define: nil = null\n%define: zero = 0\n%define: unbekannt = 'keine Angaben'\n%define: halb = 0.5\n%define: ja = true\n[nil, zero, unbekannt]",
    [
     null,
     0,
@@ -1076,8 +1113,7 @@
    ]
   ],
   [
-   "[nil\nzero\nunbekannt]",
-   "D",
+   "%define: nil = null\n%define: zero = 0\n%define: unbekannt = 'keine Angaben'\n%define: halb = 0.5\n%define: ja = true\n[nil\nzero\nunbekannt]",
    [
     null,
     0,
@@ -1085,23 +1121,20 @@
    ]
   ],
   [
-   "{nil: nil}",
-   "D",
+   "%define: nil = null\n%define: zero = 0\n%define: unbekannt = 'keine Angaben'\n%define: halb = 0.5\n%define: ja = true\n{nil: nil}",
    {
     "nil": null
    }
   ],
   [
-   "nil: zero\nzero: nil",
-   "D",
+   "%define: nil = null\n%define: zero = 0\n%define: unbekannt = 'keine Angaben'\n%define: halb = 0.5\n%define: ja = true\nnil: zero\nzero: nil",
    {
     "nil": 0,
     "zero": null
    }
   ],
   [
-   "a: halb, b: ja",
-   "D",
+   "%define: nil = null\n%define: zero = 0\n%define: unbekannt = 'keine Angaben'\n%define: halb = 0.5\n%define: ja = true\na: halb, b: ja",
    {
     "a": 0.5,
     "b": true
@@ -1109,7 +1142,6 @@
   ],
   [
    "[true\nfalse\nnull]",
-   null,
    [
     true,
     false,
@@ -1118,59 +1150,33 @@
   ],
   [
    "true: false",
-   null,
    {
     "true": false
    }
   ],
   [
-   "[$a, _b]",
-   {
-    "values": {
-     "$a": 1,
-     "_b": "x"
-    }
-   },
+   "%define: $a = 1\n%define: _b = 'x'\n[$a, _b]",
    [
     1,
     "x"
    ]
   ],
   [
-   "[Nil, nil]",
-   {
-    "values": {
-     "Nil": 1,
-     "nil": 2
-    }
-   },
+   "%define: Nil = 1, %define: nil = 2, [Nil, nil]",
    [
     1,
     2
    ]
   ],
   [
-   "[NaN, Infinity]",
-   {
-    "values": {
-     "NaN": null,
-     "Infinity": "\u221e"
-    }
-   },
+   "%define: NaN = null\n%define: Infinity = \"\u221e\"\n[NaN, Infinity]",
    [
     null,
     "\u221e"
    ]
   ],
   [
-   "[px, ms, k]",
-   {
-    "values": {
-     "px": 1,
-     "ms": 2,
-     "k": 3
-    }
-   },
+   "%define: px = 1, %define: ms = 2, %define: k = 3\n[px, ms, k]",
    [
     1,
     2,
@@ -1178,133 +1184,147 @@
    ]
   ],
   [
+   "%define: nil = null\n%define: zero = 0\n%define: unbekannt = 'keine Angaben'\n%define: halb = 0.5\n%define: ja = true\n%define: liste = [nil, zero, halb]\n%define: obj = {l: liste, j: ja}\n[obj, liste]",
+   [
+    {
+     "l": [
+      null,
+      0,
+      0.5
+     ],
+     "j": true
+    },
+    [
+     null,
+     0,
+     0.5
+    ]
+   ]
+  ],
+  [
+   "%define: e = {}\n%define: a = []\n[e, a, {e: e}]",
+   [
+    {},
+    [],
+    {
+     "e": {}
+    }
+   ]
+  ],
+  [
+   "%define: o = {a: 1, a: 2}\no",
+   {
+    "a": 2
+   }
+  ],
+  [
+   "%define: s = \"\n  zwei\n  Zeilen\n  \"\n[s]",
+   [
+    "zwei\nZeilen\n"
+   ]
+  ],
+  [
    "10k",
-   null,
    10000
   ],
   [
    "10K",
-   null,
    10000
   ],
   [
    "1kb",
-   null,
    1024
   ],
   [
    "1Kb",
-   null,
    1024
   ],
   [
    "1kB",
-   null,
    1024
   ],
   [
    "1KB",
-   null,
    1024
   ],
   [
    "1mb",
-   null,
    1048576
   ],
   [
    "1Mb",
-   null,
    1048576
   ],
   [
    "1mB",
-   null,
    1048576
   ],
   [
    "1MB",
-   null,
    1048576
   ],
   [
    "1.5k",
-   null,
    1500
   ],
   [
    "0.5kb",
-   null,
    512
   ],
   [
    "0.1kb",
-   null,
    102.4
   ],
   [
    "-2k",
-   null,
    -2000
   ],
   [
    "0x10kb",
-   null,
    16384
   ],
   [
    "0b11k",
-   null,
    3000
   ],
   [
    "0o17K",
-   null,
    15000
   ],
   [
    "0XffKB",
-   null,
    261120
   ],
   [
    "1e3k",
-   null,
    1000000
   ],
   [
    "1_000k",
-   null,
    1000000
   ],
   [
    "2.5e-1k",
-   null,
    250
   ],
   [
    "0k",
-   null,
    0
   ],
   [
    "64mb",
-   null,
    67108864
   ],
   [
    "0.001k",
-   null,
    1
   ],
   [
    "1.0005k",
-   null,
    1000.5
   ],
   [
    "[10k\n20k]",
-   null,
    [
     10000,
     20000
@@ -1312,7 +1332,6 @@
   ],
   [
    "{a: 10k, b: 1mb}",
-   null,
    {
     "a": 10000,
     "b": 1048576
@@ -1320,14 +1339,12 @@
   ],
   [
    "a: 5k // Kommentar",
-   null,
    {
     "a": 5000
    }
   ],
   [
    "[1k,2k]",
-   null,
    [
     1000,
     2000
@@ -1335,127 +1352,102 @@
   ],
   [
    "100ms",
-   null,
    0.1
   ],
   [
    "1ms",
-   null,
    0.001
   ],
   [
    "1500ms",
-   null,
    1.5
   ],
   [
    "1000ms",
-   null,
    1
   ],
   [
    "250ms",
-   null,
    0.25
   ],
   [
    "-250ms",
-   null,
    -0.25
   ],
   [
    "0x10ms",
-   null,
    0.016
   ],
   [
    "1e3ms",
-   null,
    1
   ],
   [
    "0.5ms",
-   null,
    0.0005
   ],
   [
    "0ms",
-   null,
    0
   ],
   [
    "30s",
-   null,
    30
   ],
   [
    "0s",
-   null,
    0
   ],
   [
    "1.5s",
-   null,
    1.5
   ],
   [
    "-3s",
-   null,
    -3
   ],
   [
    "0x10s",
-   null,
    16
   ],
   [
    "5min",
-   null,
    300
   ],
   [
    "0.5min",
-   null,
    30
   ],
   [
    "1.5min",
-   null,
    90
   ],
   [
    "0.01min",
-   null,
    0.6
   ],
   [
    "2h",
-   null,
    7200
   ],
   [
    "12h",
-   null,
    43200
   ],
   [
    "1.5h",
-   null,
    5400
   ],
   [
    "0b11h",
-   null,
    10800
   ],
   [
    "-1h",
-   null,
    -3600
   ],
   [
    "[30s\n5min\n2h]",
-   null,
    [
     30,
     300,
@@ -1464,658 +1456,659 @@
   ],
   [
    "a: 250ms // Kommentar",
-   null,
    {
     "a": 0.25
    }
   ],
   [
    "50pct",
-   null,
    0.5
   ],
   [
    "110pct",
-   null,
    1.1
   ],
   [
    "-50pct",
-   null,
    -0.5
   ],
   [
    "12.5pct",
-   null,
    0.125
   ],
   [
    "100pct",
-   null,
    1
   ],
   [
    "1e2pct",
-   null,
    1
   ],
   [
    "0x10pct",
-   null,
    0.16
   ],
   [
    "0pct",
-   null,
    0
   ],
   [
    "4.4e308pct",
-   null,
    4400000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
   ],
   [
    "-1e310ms",
-   null,
    -10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
   ],
   [
    "12px",
-   null,
    12
   ],
   [
    "1.5px",
-   null,
    1.5
   ],
   [
    "-12px",
-   null,
    -12
   ],
   [
    "0xFFpx",
-   null,
    255
   ],
   [
    "100L",
-   null,
    100
   ],
   [
    "0xFFL",
-   null,
    255
   ],
   [
    "-1L",
-   null,
    -1
   ],
   [
    "1_000L",
-   null,
    1000
   ],
   [
    "10n",
-   null,
    10
   ],
   [
    "-3n",
-   null,
    -3
   ],
   [
    "0b101n",
-   null,
    5
   ],
   [
    "1e3n",
-   null,
    1000.0
   ],
   [
    "1_0",
-   null,
    10
   ],
   [
    "1_0k",
-   null,
    10000
   ],
   [
    "1_0s",
-   null,
    10
   ],
   [
    "0x1_0L",
-   null,
    16
   ],
   [
-   "[50pct, 10k, nil]",
-   "D",
+   "%define: nil = null\n%define: zero = 0\n%define: unbekannt = 'keine Angaben'\n%define: halb = 0.5\n%define: ja = true\n[50pct, 10k, nil]",
    [
     0.5,
     10000,
     null
    ]
+  ],
+  [
+   "%define: t = 30s\n%define: g = 64mb\n[t, g]",
+   [
+    30,
+    67108864
+   ]
   ]
  ],
  "c_invalid": [
-  [
-   "nil",
-   null
-  ],
-  [
-   "[abc]",
-   null
-  ],
-  [
-   "True",
-   null
-  ],
-  [
-   "NULL",
-   null
-  ],
-  [
-   "[Nil]",
-   {
-    "values": {
-     "nil": 1
-    }
-   }
-  ],
-  [
-   "[nil nil]",
-   "D"
-  ],
-  [
-   "nil zero",
-   "D"
-  ],
-  [
-   "NaN",
-   null
-  ],
-  [
-   "Infinity",
-   null
-  ],
-  [
-   "[ture]",
-   "D"
-  ],
-  [
-   "10q",
-   null
-  ],
-  [
-   "10m",
-   null
-  ],
-  [
-   "10M",
-   null
-  ],
-  [
-   "10kk",
-   null
-  ],
-  [
-   "10kbs",
-   null
-  ],
-  [
-   "10k5",
-   null
-  ],
-  [
-   "10y",
-   null
-  ],
-  [
-   "10wx",
-   null
-  ],
-  [
-   "10g",
-   null
-  ],
-  [
-   "10mi",
-   null
-  ],
-  [
-   "10mins",
-   null
-  ],
-  [
-   "10sec",
-   null
-  ],
-  [
-   "10hs",
-   null
-  ],
-  [
-   "10ss",
-   null
-  ],
-  [
-   "10px2",
-   null
-  ],
-  [
-   "10min5",
-   null
-  ],
-  [
-   "10pc",
-   null
-  ],
-  [
-   "10pcts",
-   null
-  ],
-  [
-   "10kB1",
-   null
-  ],
-  [
-   "10k_",
-   null
-  ],
-  [
-   "10s_",
-   null
-  ],
-  [
-   "10_k",
-   null
-  ],
-  [
-   "1_s",
-   null
-  ],
-  [
-   "10$",
-   null
-  ],
-  [
-   "10$s",
-   null
-  ],
-  [
-   "10_",
-   null
-  ],
-  [
-   "1__0",
-   null
-  ],
-  [
-   "1_",
-   null
-  ],
-  [
-   "10nn",
-   null
-  ],
-  [
-   "10LL",
-   null
-  ],
-  [
-   "10_s",
-   null
-  ],
-  [
-   "10_ms",
-   null
-  ],
-  [
-   "10_px",
-   null
-  ],
-  [
-   "0x10_k",
-   null
-  ],
-  [
-   "1e3_k",
-   null
-  ],
-  [
-   "1.5_k",
-   null
-  ],
-  [
-   "[10_k]",
-   null
-  ],
-  [
-   "10_k",
-   {
-    "values": {
-     "_k": 1
-    }
-   }
-  ],
-  [
-   "[1_]",
-   {
-    "values": {
-     "_": 1
-    }
-   }
-  ],
-  [
-   "10l",
-   null
-  ],
-  [
-   "10S",
-   null
-  ],
-  [
-   "10MS",
-   null
-  ],
-  [
-   "10Ms",
-   null
-  ],
-  [
-   "10mS",
-   null
-  ],
-  [
-   "10Min",
-   null
-  ],
-  [
-   "10MIN",
-   null
-  ],
-  [
-   "10H",
-   null
-  ],
-  [
-   "10PX",
-   null
-  ],
-  [
-   "10Px",
-   null
-  ],
-  [
-   "10pX",
-   null
-  ],
-  [
-   "10N",
-   null
-  ],
-  [
-   "10PCT",
-   null
-  ],
-  [
-   "10Pct",
-   null
-  ],
-  [
-   "10ab",
-   null
-  ],
-  [
-   "10e",
-   null
-  ],
-  [
-   "10E",
-   null
-  ],
-  [
-   "10Bk",
-   null
-  ],
-  [
-   "10bk",
-   null
-  ],
-  [
-   "10f",
-   null
-  ],
-  [
-   "10%",
-   null
-  ],
-  [
-   "50%",
-   null
-  ],
-  [
-   "10kb%",
-   null
-  ],
-  [
-   "10k%",
-   null
-  ],
-  [
-   "10pct%",
-   null
-  ],
-  [
-   "%",
-   null
-  ],
-  [
-   "10x",
-   null
-  ],
-  [
-   "10X",
-   null
-  ],
-  [
-   "10o",
-   null
-  ],
-  [
-   "10O",
-   null
-  ],
-  [
-   "10xy",
-   null
-  ],
-  [
-   "10oz",
-   null
-  ],
-  [
-   "0.0x",
-   null
-  ],
-  [
-   "1e3x",
-   null
-  ],
-  [
-   "10b",
-   null
-  ],
-  [
-   "10 k",
-   null
-  ],
-  [
-   "10 ms",
-   null
-  ],
-  [
-   "10 px",
-   null
-  ],
-  [
-   "100 pct",
-   null
-  ],
-  [
-   "10k k",
-   null
-  ],
-  [
-   "10ms ms",
-   null
-  ],
-  [
-   "[10k 20k]",
-   null
-  ],
-  [
-   "[30s 5min]",
-   null
-  ],
-  [
-   "1.k",
-   null
-  ],
-  [
-   "1.s",
-   null
-  ],
-  [
-   "k",
-   null
-  ],
-  [
-   "ms",
-   null
-  ],
-  [
-   "0x",
-   null
-  ],
-  [
-   "0xk",
-   null
-  ],
-  [
-   "0o",
-   null
-  ],
-  [
-   "0Xy",
-   null
-  ],
-  [
-   "0O",
-   null
-  ],
-  [
-   "-0x",
-   null
-  ],
-  [
-   "0ok",
-   null
-  ],
-  [
-   "0b",
-   null
-  ],
-  [
-   "0B",
-   null
-  ],
-  [
-   "0xs",
-   null
-  ],
-  [
-   "0bn",
-   null
-  ],
-  [
-   "10q",
-   {
-    "values": {
-     "q": 2
-    }
-   }
-  ],
-  [
-   "10nil",
-   "D"
-  ],
-  [
-   "[px]",
-   null
-  ]
+  "nil",
+  "[abc]",
+  "True",
+  "NULL",
+  "%define: nil = 1\n[Nil]",
+  "%define: nil = null\n%define: zero = 0\n%define: unbekannt = 'keine Angaben'\n%define: halb = 0.5\n%define: ja = true\n[nil nil]",
+  "%define: nil = null\n%define: zero = 0\n%define: unbekannt = 'keine Angaben'\n%define: halb = 0.5\n%define: ja = true\nnil zero",
+  "NaN",
+  "Infinity",
+  "%define: nil = null\n%define: zero = 0\n%define: unbekannt = 'keine Angaben'\n%define: halb = 0.5\n%define: ja = true\n[ture]",
+  "%define: true = 1\n1",
+  "%define: false = false\n1",
+  "%define: null = null\n1",
+  "%define: a-b = 1\n1",
+  "%define: 1a = 1\n1",
+  "%define: \"\" = 1\n1",
+  "%define: 'a' = 1\n1",
+  "%define: \u00e4 = 1\n1",
+  "%define: x = NaN\n1",
+  "%define: x = undefined\n1",
+  "%define: nil = null\n%define: zero = 0\n%define: unbekannt = 'keine Angaben'\n%define: halb = 0.5\n%define: ja = true\n%define: nil = null\n1",
+  "%define: nil = null\n%define: zero = 0\n%define: unbekannt = 'keine Angaben'\n%define: halb = 0.5\n%define: ja = true\n%define: halb = 0.5\nhalb",
+  "%define: a = [b]\n%define: b = 1\na",
+  "%define: a = {x: a}\na",
+  "10q",
+  "10m",
+  "10M",
+  "10kk",
+  "10kbs",
+  "10k5",
+  "10y",
+  "10wx",
+  "10g",
+  "10mi",
+  "10mins",
+  "10sec",
+  "10hs",
+  "10ss",
+  "10px2",
+  "10min5",
+  "10pc",
+  "10pcts",
+  "10kB1",
+  "10k_",
+  "10s_",
+  "10_k",
+  "1_s",
+  "10$",
+  "10$s",
+  "10_",
+  "1__0",
+  "1_",
+  "10nn",
+  "10LL",
+  "10_s",
+  "10_ms",
+  "10_px",
+  "0x10_k",
+  "1e3_k",
+  "1.5_k",
+  "[10_k]",
+  "%define: _k = 1\n10_k",
+  "%define: _ = 1\n[1_]",
+  "10l",
+  "10S",
+  "10MS",
+  "10Ms",
+  "10mS",
+  "10Min",
+  "10MIN",
+  "10H",
+  "10PX",
+  "10Px",
+  "10pX",
+  "10N",
+  "10PCT",
+  "10Pct",
+  "10ab",
+  "10e",
+  "10E",
+  "10Bk",
+  "10bk",
+  "10f",
+  "10%",
+  "50%",
+  "10kb%",
+  "10k%",
+  "10pct%",
+  "%",
+  "10x",
+  "10X",
+  "10o",
+  "10O",
+  "10xy",
+  "10oz",
+  "0.0x",
+  "1e3x",
+  "10b",
+  "10 k",
+  "10 ms",
+  "10 px",
+  "100 pct",
+  "10k k",
+  "10ms ms",
+  "[10k 20k]",
+  "[30s 5min]",
+  "1.k",
+  "1.s",
+  "k",
+  "ms",
+  "0x",
+  "0xk",
+  "0o",
+  "0Xy",
+  "0O",
+  "-0x",
+  "0ok",
+  "0b",
+  "0B",
+  "0xs",
+  "0bn",
+  "%define: q = 2\n10q",
+  "%define: nil = null\n%define: zero = 0\n%define: unbekannt = 'keine Angaben'\n%define: halb = 0.5\n%define: ja = true\n10nil",
+  "[px]"
  ],
- "c_bad_values": [
-  {
-   "true": 1
-  },
-  {
-   "false": false
-  },
-  {
-   "null": null
-  },
-  {
-   "a-b": 1
-  },
-  {
-   "1a": 1
-  },
-  {
-   "": 1
-  },
-  {
-   "\u00e4": 1
-  },
-  {
-   "x": []
-  },
-  {
-   "x": {}
-  },
-  {
-   "x": [
+ "d_valid": [
+  [
+   "%define:nil=null\n[nil]",
+   [
+    null
+   ]
+  ],
+  [
+   "%define :a=1\n[a]",
+   [
+    1
+   ]
+  ],
+  [
+   "%define:\n  a\n  =\n  1\n[a]",
+   [
+    1
+   ]
+  ],
+  [
+   "%define: a /* k */ = /* k */ 1\n[a]",
+   [
+    1
+   ]
+  ],
+  [
+   "%define: a = // k\n  1\n[a]",
+   [
+    1
+   ]
+  ],
+  [
+   "%define:\ta\t=\t1\n[a]",
+   [
+    1
+   ]
+  ],
+  [
+   "%define: a = 1, [a]",
+   [
+    1
+   ]
+  ],
+  [
+   "%define: a = 1,\n[a]",
+   [
+    1
+   ]
+  ],
+  [
+   "%define: a = 1\n,[a]",
+   [
+    1
+   ]
+  ],
+  [
+   "%define: a = 1 // k\n[a]",
+   [
+    1
+   ]
+  ],
+  [
+   "%define: a = 1 /* k */\n[a]",
+   [
+    1
+   ]
+  ],
+  [
+   "%define: a = 1\r\n[a]",
+   [
+    1
+   ]
+  ],
+  [
+   "%define: a = 1\r[a]",
+   [
+    1
+   ]
+  ],
+  [
+   "%define: a = 1,\n\n[a]",
+   [
+    1
+   ]
+  ],
+  [
+   "%define: a = 1, %define: b = 2, [a, b]",
+   [
     1,
     2
    ]
-  },
-  {
-   "x": {
+  ],
+  [
+   "%define: a = 1\n\n\n%define: b = 2\n\n[a, b]",
+   [
+    1,
+    2
+   ]
+  ],
+  [
+   "# Kommentar\n%define: a = 1\n\n# x\nb: a",
+   {
+    "b": 1
+   }
+  ],
+  [
+   "#!/usr/bin/env xtjson-tool\n%version: 1\n{}",
+   {}
+  ],
+  [
+   "\ufeff%define: a = 1\n[a]",
+   [
+    1
+   ]
+  ],
+  [
+   "/* k */ %define: a = 1\n[a]",
+   [
+    1
+   ]
+  ],
+  [
+   "%define: a = 1\n\"x\": a",
+   {
+    "x": 1
+   }
+  ],
+  [
+   "%define: a = 1\n'x': a, y: a",
+   {
+    "x": 1,
+    "y": 1
+   }
+  ],
+  [
+   "%define: a = 1\na: a",
+   {
     "a": 1
    }
-  },
-  {
-   "x": [
+  ],
+  [
+   "%define: a = 1\n{\"a\": a}",
+   {
+    "a": 1
+   }
+  ],
+  [
+   "%define: a = \"x\"\n\"s\"",
+   "s"
+  ],
+  [
+   "%define: a = 1\n-1",
+   -1
+  ],
+  [
+   "%define: a = 1\na",
+   1
+  ],
+  [
+   "%define: a = 1\n%define: b = a\n%define: c = b\n[c]",
+   [
+    1
+   ]
+  ],
+  [
+   "%define: a = 1\n%define: b = [a, a]\n%define: c = {b: b}\nc",
+   {
+    "b": [
+     1,
+     1
+    ]
+   }
+  ],
+  [
+   "%define: a = {x: [1, {y: null}]}\n[a, a]",
+   [
+    {
+     "x": [
+      1,
+      {
+       "y": null
+      }
+     ]
+    },
+    {
+     "x": [
+      1,
+      {
+       "y": null
+      }
+     ]
+    }
+   ]
+  ],
+  [
+   "%define: true_ = true\n[true_]",
+   [
+    true
+   ]
+  ],
+  [
+   "%define: define = 1\n%define: version = 2\n[define, version]",
+   [
     1,
     2
    ]
-  },
-  {
-   "x": [
-    []
+  ],
+  [
+   "%define: a = 10k\n[a]",
+   [
+    10000
    ]
-  }
+  ],
+  [
+   "%define: a = \"\n  x\n  \"\n[a]",
+   [
+    "x\n"
+   ]
+  ],
+  [
+   "%version: v = 1\n%define: v = 2\n[v]",
+   [
+    2
+   ]
+  ],
+  [
+   "%define: v = 2\n%version: v = 1\n[v]",
+   [
+    2
+   ]
+  ],
+  [
+   "%version: xtjson = 1\n{xtjson: 1}",
+   {
+    "xtjson": 1
+   }
+  ],
+  [
+   "%version: 0.6\n{}",
+   {}
+  ],
+  [
+   "%version: -1\n{}",
+   {}
+  ],
+  [
+   "%version: 0x10\n{}",
+   {}
+  ],
+  [
+   "%version: 1_000\n{}",
+   {}
+  ],
+  [
+   "%version: ''\n{}",
+   {}
+  ],
+  [
+   "%version: \"a\nb\"\n{}",
+   {}
+  ],
+  [
+   "%version: 0.6\n%version:schema='2026.05.01b'\n%define:nil=null\n# Hyper media ref\n%define:self = {\n  href: 'http://api.example.org/people/1234'\n}\n\nid: 1234\nname: 'Bob'\nemail: nil\nself: self\n",
+   {
+    "id": 1234,
+    "name": "Bob",
+    "email": null,
+    "self": {
+     "href": "http://api.example.org/people/1234"
+    }
+   }
+  ],
+  [
+   "%version:xtjson='0.6.1',%define:empty=\"\",[null, 543, empty]",
+   [
+    null,
+    543,
+    ""
+   ]
+  ]
+ ],
+ "d_invalid": [
+  "% define: a = 1\n[a]",
+  "%\tdefine: a = 1\n[a]",
+  "%/**/define: a = 1\n[a]",
+  "%\ndefine: a = 1\n[a]",
+  "%define a = 1\n[a]",
+  "%define: a 1\n[a]",
+  "%define: a == 1\n[a]",
+  "%define: = 1\n1",
+  "%define:\n1",
+  "%\n1",
+  "%1: 2\n1",
+  "%-define: a = 1\n[a]",
+  "%%define: a = 1\n[a]",
+  "%define: a = 1;\n[a]",
+  "%define: a := 1\n[a]",
+  "%define: \"a\" = 1\n[a]",
+  "%define: 'a' = 1\n1",
+  "%\"define\": a = 1\n[a]",
+  "%define: a = 1 = 2\n[a]",
+  "%define: a = %define: b = 1\n[a]",
+  "%DEFINE: a = 1\n[a]",
+  "%Version: 1\n{}",
+  "%import: text = \"./text.txt\"\n{}",
+  "%extends: \"./base.xtj\"\n{}",
+  "%x: 1\n{}",
+  "%_define: a = 1\n[a]",
+  "%defines: a = 1\n[a]",
+  "%define: a = 1 [a]",
+  "%define: a = 1 %define: b = 2\n[a]",
+  "%define: a = 1,,[a]",
+  "%define: a = 1 /* \n */ [a]",
+  "%define: a = 1\u2028[a]",
+  "%define: a = 1\u000b[a]",
+  "%define: a = 1 a: a",
+  ",%define: a = 1\n[a]",
+  "%define: a = 1",
+  "%define: a = 1,",
+  "%define: a = 1\n",
+  "%define: a = 1\n// k\n",
+  "%version: 1,\n",
+  "%version: 1\n%define: a = 1",
+  "[1]\n%define: a = 1",
+  "{a: 1}\n%define: b = 2",
+  "{%define: a = 1}",
+  "{a: %define: b = 1}",
+  "a: 1\n%version: 1",
+  "\"s\"\n%version: 1",
+  "[%version: 1]",
+  "a: %define",
+  "%define: a = [%define: b = 1]\n1",
+  "%define: 1\n{}",
+  "%define: \"x\"\n{}",
+  "%define: {a: 1}\n{}",
+  "%define: a\n[a]",
+  "%define: a = 1\n%define: a = 1\n[a]",
+  "%define: a = b\n[a]",
+  "%define: a = [a]\n1",
+  "%define: a = 1\n[A]",
+  "%define: null = 1\n1",
+  "%version: 1\n%version: 2\n{}",
+  "%version: xtjson = 1\n%version: '1'\n{}",
+  "%version: 1\n%version: xtjson = 1\n{}",
+  "%version: s = 1\n%version: s = 1\n{}",
+  "%version: {}\n{}",
+  "%version: null\n{}",
+  "%version: false\n{}",
+  "%define: v = 1\n%version: v\n{}",
+  "%version: nil\n{}",
+  "%version: 1k\n{}",
+  "%version: 0x10L\n{}",
+  "%version: 1.5pct\n{}",
+  "%version: s = [1]\n{}",
+  "%version: s = {}\n{}",
+  "%version: \"1\" = 1\n{}",
+  "%version\n{}",
+  "%version: 1 2\n{}",
+  "%version:\n{}",
+  "%version: a = \n{}",
+  "a = 1",
+  "[1 = 2]",
+  "{a = 1}",
+  "a: = 1",
+  "=",
+  "%define: s0 = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1]\n%define: s1 = [s0, s0, s0, s0, s0, s0, s0, s0, s0, s0]\n%define: s2 = [s1, s1, s1, s1, s1, s1, s1, s1, s1, s1]\n%define: s3 = [s2, s2, s2, s2, s2, s2, s2, s2, s2, s2]\n%define: s4 = [s3, s3, s3, s3, s3, s3, s3, s3, s3, s3]\n%define: s5 = [s4, s4, s4, s4, s4, s4, s4, s4, s4, s4]\n%define: s6 = [s5, s5, s5, s5, s5, s5, s5, s5, s5, s5]\n%define: s7 = [s6, s6, s6, s6, s6, s6, s6, s6, s6, s6]\n%define: s8 = [s7, s7, s7, s7, s7, s7, s7, s7, s7, s7]\n%define: s9 = [s8, s8, s8, s8, s8, s8, s8, s8, s8, s8]\ns9"
+ ],
+ "d_versions": [
+  [
+   "{}",
+   {}
+  ],
+  [
+   "%version: '0.6'\n{}",
+   {
+    "xtjson": "0.6"
+   }
+  ],
+  [
+   "%version: xtjson = 0.6\n{}",
+   {
+    "xtjson": 0.6
+   }
+  ],
+  [
+   "%version: '0.6', %version: schema = '2026.05.01b'\n{}",
+   {
+    "xtjson": "0.6",
+    "schema": "2026.05.01b"
+   }
+  ],
+  [
+   "%version: a = 1\n%version: b = 2\n%define: c = 3\n[c]",
+   {
+    "a": 1,
+    "b": 2
+   }
+  ],
+  [
+   "%version: v = 0x10\n{}",
+   {
+    "v": 16
+   }
+  ]
  ]
 }
