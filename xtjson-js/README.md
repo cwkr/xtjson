@@ -73,7 +73,7 @@ named value (6.6); its value can be any value, including an object or an
 array, and can use the named values defined before it. Every position where
 a named value is used gets a copy of its own. `%version` states the version
 of the specification, or with an identifier the version of something else
-(6.7). `%strict: true` makes the parser read the document in
+(6.7). `%strict: true` makes the parser read the content of the document in
 [strict mode](#strict-mode) (6.8).
 
 ```js
@@ -100,6 +100,9 @@ work: address
   states the version `2000`. Each version is stated at most once.
 - The value of `%strict` is `true` or `false`, also as a named value, and
   `%strict` occurs at most once.
+- The values of directives must not contain duplicate names, unpaired
+  surrogates or noncharacters, with or without strict mode and even if a
+  named value is not used (6.5). Such a value is an error where it occurs.
 - Definitions that use one another can multiply the size of the value. The
   option `maxExpansion` limits the number of values that replacing named
   values produces, `maxDepth` also limits their nesting.
@@ -301,16 +304,16 @@ its prohibitions:
   ending in FFFE or FFFF), written directly or as an escape sequence;
 - a root value that is not an object or an array.
 
-The prohibitions also apply to the values of all directives, even if a named
-value is not used. The JSON equivalent of a document that is valid in strict
+The values of directives are checked for the first two in every case, see
+[Directives and named values](#directives-and-named-values). The JSON equivalent of a document that is valid in strict
 mode is an I-JSON message (RFC 7493), provided its numbers stay within the
 range of IEEE 754 binary64; that range is a recommendation and is not
 enforced.
 
 Strict mode applies if the application requests it with `strict: true` or if
-the document contains `%strict: true` (6.8). `%strict` can come after other
-directives, for example to use a named value; its effect still covers the
-whole document, including the directives before it. With `strict: true`, a
+the document contains `%strict: true` (6.8). It applies to the content of
+the document, the part after the directives; `%strict` can therefore come
+after other directives, for example to use a named value. With `strict: true`, a
 document with `%strict: false` is an error, because it contradicts the
 application.
 

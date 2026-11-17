@@ -47,8 +47,9 @@ export interface OptionsInit {
    * Strict mode (section 12). `parse` rejects a document in which an object
    * contains a name twice, in which a name or string value contains an
    * unpaired surrogate or a Unicode noncharacter, or whose root value is not
-   * an object or an array; this also applies to the values of directives,
-   * even if they are not used. A document with `%strict: false` is an error.
+   * an object or an array. The values of directives are checked for
+   * duplicate names, surrogates and noncharacters in any case, also without
+   * this option. A document with `%strict: false` is an error.
    * `stringify` throws a `TypeError` for such names and strings and for a
    * root value that is not an object or an array.
    * Default: false; then a document can still request strict mode with

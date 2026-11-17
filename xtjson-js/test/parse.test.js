@@ -321,15 +321,20 @@ describe('strict mode', () => {
     assert.equal(parse(String.raw`["﷏ﷰ�\u{1FFFD}\u{10000}"]`, strict)[0].length, 7);
   });
 
-  test('values of directives count as well, even if they are not used', () => {
-    assert.deepEqual(parse('%define: good = "b"\n[good]', strict), ['b']);
-    const e = error('%define: bad = "ok\\uFFFF"\n1', strict);
-    assert.match(e.message, /noncharacter U\+FFFF/);
-    assert.deepEqual([e.line, e.column], [1, 16]);
-    assert.match(error('%define: lone = "\\uD800"\n[lone]', strict).message, /unpaired surrogate U\+D800/);
-    assert.match(error('%version: "\\uD800"\n1', strict).message, /unpaired surrogate U\+D800/);
-    // outside strict mode the same document is fine
-    assert.deepEqual(parse('%define: lone = "\\uD800"\n[lone]'), ['\uD800']);
+  test('values of directives are always checked, even if they are not used (6.5)', () => {
+    for (const options of [strict, undefined]) {
+      assert.deepEqual(parse('%define: good = "b"\n[good]', options), ['b']);
+      const e = error('%define: bad = "ok\\uFFFF"\n[1]', options);
+      assert.match(e.message, /The string contains the noncharacter U\+FFFF, which is not permitted in the value of a directive/);
+      assert.deepEqual([e.line, e.column], [1, 16]);
+      assert.match(error('%define: lone = "\\uD800"\n[lone]', options).message, /unpaired surrogate U\+D800, which is not permitted in the value of a directive/);
+      assert.match(error('%version: "\\uD800"\n{}', options).message, /unpaired surrogate U\+D800/);
+      const d = error('%define: d = {a: 1, "\\u0061": 2}\n{}', options);
+      assert.match(d.message, /Duplicate name "a"; names must be unique in the value of a directive \(first occurrence at line 1, column 15\)/);
+      assert.deepEqual([d.line, d.column], [1, 21]);
+    }
+    // in the content, outside strict mode, the same values are fine
+    assert.deepEqual(parse('["\\uD800", {a: 1, a: 2}]'), ['\uD800', { a: 2 }]);
   });
 
   test('large numbers are not rejected (only a SHOULD in section 12)', () => {
@@ -357,14 +362,15 @@ describe('strict mode', () => {
     assert.equal(parse('%define: no = false\n%strict: no\n1'), 1);
   });
 
-  test('%strict also applies to the directives before it', () => {
-    const e = error('%define: d = {a: 1, a: 2}\n%define: yes = true\n%strict: yes\n{}');
-    assert.match(e.message, /Duplicate name "a"; names must be unique in strict mode \(first occurrence at line 1, column 15\) \(strict mode is requested by %strict at line 3, column 1\)/);
+  test('%strict applies to the content, not to the directives', () => {
+    // a violation in a directive is reported where it occurs, before %strict is read
+    const e = error('%define: d = {a: 1, a: 2}\n%strict: false\n{}');
+    assert.match(e.message, /names must be unique in the value of a directive/);
     assert.deepEqual([e.line, e.column], [1, 21]);
-    assert.match(error('%version: "\\uD800"\n%strict: true\n{}').message, /unpaired surrogate U\+D800.*requested by %strict at line 2, column 1/);
-    // the first violation is reported
-    assert.match(error('%define: s = "\\uFFFF"\n%define: d = {a: 1, a: 2}\n%strict: true\n{}').message, /noncharacter U\+FFFF/);
-    assert.deepEqual(parse('%define: d = {a: 1, a: 2}\n%strict: false\n[d]'), [{ a: 2 }]);
+    assert.match(error('%strict: false\n%define: s = "\\uFFFF"\n[1]').message, /not permitted in the value of a directive/);
+    // the content is checked from the first token after the directives
+    assert.match(error('%strict: true\n%define: a = 1\n{x: a, x: a}').message, /names must be unique in strict mode/);
+    assert.deepEqual(parse('%strict: false\n%define: a = 1\n{x: a, x: a}'), { x: 1 });
   });
 
   test('%strict: false contradicts strict mode of the application', () => {

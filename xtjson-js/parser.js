@@ -243,12 +243,13 @@ export class Parser {
   /** Number of JSON values produced so far by replacing named values. */
   #expanded = 0;
   /**
-   * Strict mode checks (12): 0 off, 1 record the first violation (in the
-   * directives, before `%strict` is known), 2 report every violation.
+   * True while the prohibitions of section 12 on names, strings and
+   * duplicate names are checked: always in the values of directives (6.5),
+   * in the content only in strict mode.
    */
-  #check = 0;
-  /** @type {{reason: string, offset: number} | undefined} first violation recorded in the directives */
-  #violation;
+  #check = false;
+  /** True while the directives are read. */
+  #inDirectives = false;
   /** @type {boolean | undefined} the value of `%strict` (6.8) */
   #docStrict;
   /** Offset of the `%strict` directive. */
@@ -341,8 +342,8 @@ export class Parser {
     this.#depth = 0;
     this.#expanded = 0;
     this.#versions = versions;
-    this.#check = this.#strict ? 2 : 1;
-    this.#violation = undefined;
+    this.#check = true;
+    this.#inDirectives = true;
     this.#docStrict = undefined;
     try {
       if (typeof source.isWellFormed === 'function' ? !source.isWellFormed() : LONE_SURROGATE.test(source)) {
@@ -364,7 +365,6 @@ export class Parser {
       this.#len = 0;
       this.#defined.clear();
       this.#versions = new Map();
-      this.#violation = undefined;
     }
     if (reviver !== undefined && reviver !== null) value = internalize({ '': value }, '', reviver);
     return { value, versions };
@@ -474,19 +474,10 @@ export class Parser {
       this.#fail('The document is empty; expected a value or at least one member');
     }
     this.#parseDirectives();
-    // Strict mode (12): with %strict: true, a violation in the values of the
-    // directives is an error as well.
-    if (this.#check === 1) {
-      if (this.#docStrict === true) {
-        if (this.#violation !== undefined) {
-          const { line, column } = locate(this.#text, this.#docStrictOffset);
-          this.#fail(`${this.#violation.reason} (strict mode is requested by %strict at line ${line}, column ${column})`, this.#violation.offset);
-        }
-        this.#check = 2;
-      } else {
-        this.#check = 0;
-      }
-    }
+    // The content is checked in strict mode (12), requested by the
+    // application or by %strict: true (6.8).
+    this.#inDirectives = false;
+    this.#check = this.#strict || this.#docStrict === true;
     const start = this.#pos;
     const c = this.#peek();
 
@@ -509,7 +500,7 @@ export class Parser {
       value = this.#parseValue();
     }
 
-    if (this.#check === 2 && (value === null || typeof value !== 'object')) {
+    if (this.#check && (value === null || typeof value !== 'object')) {
       this.#fail('In strict mode the root value must be an object or an array', start);
     }
     const end = this.#pos;
@@ -644,10 +635,9 @@ export class Parser {
     this.#docStrictOffset = start;
   }
 
-  /** A violation of strict mode (12): reported, or recorded while the directives are read. */
-  #strictViolation(reason, offset) {
-    if (this.#check === 2) this.#fail(reason, offset);
-    this.#violation ??= { reason, offset };
+  /** Where the prohibitions of section 12 are checked, for messages. */
+  #checkedIn() {
+    return this.#inDirectives ? 'in the value of a directive' : 'in strict mode';
   }
 
   #failDirectivePosition(offset = this.#pos) {
@@ -694,7 +684,7 @@ export class Parser {
         return null;
     }
     // Named values defined by %define (6.6). Their strings and names were
-    // checked for strict mode when the definition was read (12).
+    // checked when the definition was read (6.5).
     const definition = this.#defined.get(id);
     if (definition !== undefined) {
       if (this.#depth + definition.depth > this.#maxDepth) {
@@ -761,8 +751,8 @@ export class Parser {
    * name has already been read and the position is on the ':'.
    */
   #parseMembers(obj, closer, start, name) {
-    // Strict mode: offset of each name, to report duplicates (12).
-    const seen = this.#check !== 0 ? new Map() : undefined;
+    // Offset of each name, to report duplicates (6.5, 12).
+    const seen = this.#check ? new Map() : undefined;
     let nameStart = start;
     for (;;) {
       if (name === undefined) {
@@ -775,7 +765,7 @@ export class Parser {
           seen.set(name, nameStart);
         } else {
           const { line, column } = locate(this.#text, first);
-          this.#strictViolation(`Duplicate name ${JSON.stringify(name)}; names must be unique in strict mode (first occurrence at line ${line}, column ${column})`, nameStart);
+          this.#fail(`Duplicate name ${JSON.stringify(name)}; names must be unique ${this.#checkedIn()} (first occurrence at line ${line}, column ${column})`, nameStart);
         }
       }
       this.#skipSpace();
@@ -887,7 +877,7 @@ export class Parser {
         }
         this.#pos = pos + 1;
         const value = chunk === start + 1 ? text.slice(chunk, pos) : out + text.slice(chunk, pos);
-        if (this.#check !== 0) this.#checkStrictString(value, start);
+        if (this.#check) this.#checkStrictString(value, start);
         return value;
       }
       if (c === BACKSLASH) {
@@ -999,7 +989,7 @@ export class Parser {
   /** String with a line break, a tab or a line continuation (8.3); `start` is the offset of its delimiter. */
   #readStringLines(q, start) {
     const value = this.#stringLinesValue(q, start);
-    if (this.#check !== 0) this.#checkStrictString(value, start);
+    if (this.#check) this.#checkStrictString(value, start);
     return value;
   }
 
@@ -1007,7 +997,7 @@ export class Parser {
   #checkStrictString(value, start) {
     const issue = strictStringIssue(value);
     if (issue !== undefined) {
-      this.#strictViolation(`The string contains ${issue}, which is not permitted in strict mode`, start);
+      this.#fail(`The string contains ${issue}, which is not permitted ${this.#checkedIn()}`, start);
     }
   }
 
