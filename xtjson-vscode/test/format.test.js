@@ -25,6 +25,10 @@ describe('formatText', () => {
     assert.equal(formatText('\n', spaces(2)), '');
   });
 
+  test('lays out directives like members', () => {
+    assert.equal(formatText("%version:'0.6',%define:nil=null\nx:nil\n", spaces(2)), "%version: '0.6',\n%define: nil = null\nx: nil\n");
+  });
+
   test('keeps comments', () => {
     assert.equal(formatText('# head\na:1 // note\n', spaces(2)), '# head\na: 1 // note\n');
   });

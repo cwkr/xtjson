@@ -72,6 +72,39 @@ describe('grammar', () => {
     assert.equal(scopeOf('a: True', 'True'), 'variable.other.constant.xtjson');
   });
 
+  test('directives', () => {
+    const text = "%version: '0.6'\n%version: schema = 1, %define:nil=null\n%define: self = {\n  href: nil\n}\nself: self";
+    assert.deepEqual(tokens(text).filter(([t]) => t.startsWith('%')).map(([, s]) => s), [
+      'keyword.control.directive.xtjson',
+      'keyword.control.directive.xtjson',
+      'keyword.control.directive.xtjson',
+      'keyword.control.directive.xtjson',
+    ]);
+    assert.equal(scopeOf(text, 'schema'), 'support.type.property-name.xtjson');
+    assert.equal(scopeOf(text, '0.6'), 'string.quoted.single.xtjson');
+    assert.deepEqual(tokens(text).filter(([t]) => t === 'nil').map(([, s]) => s), [
+      'entity.name.constant.xtjson',
+      'variable.other.constant.xtjson',
+    ]);
+    assert.deepEqual(tokens(text).filter(([t]) => t === 'self').map(([, s]) => s), [
+      'entity.name.constant.xtjson',
+      'support.type.property-name.xtjson',
+      'variable.other.constant.xtjson',
+    ]);
+    assert.equal(scopeOf(text, '='), 'keyword.operator.assignment.xtjson');
+    // the identifier on a line of its own
+    assert.equal(scopeOf('%define:\n  a\n  = 1\n[a]', '='), 'keyword.operator.assignment.xtjson');
+  });
+
+  test('unknown directives and a lone % are marked as invalid', () => {
+    assert.equal(scopeOf('%import: x = "a"', '%import'), 'invalid.illegal.unknown-directive.xtjson');
+    assert.equal(scopeOf('%Define: x = 1', '%Define'), 'invalid.illegal.unknown-directive.xtjson');
+    assert.equal(scopeOf('%defines: x = 1', '%defines'), 'invalid.illegal.unknown-directive.xtjson');
+    assert.equal(scopeOf('% define: x = 1', '%'), 'invalid.illegal.directive.xtjson');
+    assert.equal(scopeOf('a: 50%', '%'), 'invalid.illegal.directive.xtjson');
+    assert.equal(scopeOf('a: "100%"', '100%'), 'string.quoted.double.xtjson');
+  });
+
   test('strings and escapes', () => {
     assert.equal(scopeOf('a: "x # y"', 'x # y'), 'string.quoted.double.xtjson');
     assert.equal(scopeOf("a: 'it\\'s'", 'it'), 'string.quoted.single.xtjson');
@@ -124,6 +157,7 @@ describe('grammar', () => {
       ...corpus.a_valid.map(([text]) => text),
       ...corpus.b_valid.map(([text]) => text),
       ...corpus.c_valid.map(([text]) => text),
+      ...corpus.d_valid.map(([text]) => text),
     ];
     for (const lang of ['de', 'en']) {
       const spec = readFileSync(new URL(`../../docs/xtjson-spec-${lang}.md`, import.meta.url), 'utf8');

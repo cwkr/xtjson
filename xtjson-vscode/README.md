@@ -6,10 +6,11 @@ of JSON for files maintained by people, in files with the extension
 
 - **Syntax highlighting** for comments (`//`, `#`, `/* */`), names with and
   without quotation marks, strings across several lines, escape
-  sequences including the line continuation, numbers in all bases with digit grouping, number suffixes, and
-  named values. Invalid escape sequences, unescaped control characters in
-  strings, three quotation marks in a row and malformed numbers (`0755`,
-  `10_k`, `5l`) are marked as errors.
+  sequences including the line continuation, numbers in all bases with digit grouping, number suffixes,
+  named values, and the directives `%define` and `%version`. Invalid escape
+  sequences, unescaped control characters in strings, three quotation marks
+  in a row, malformed numbers (`0755`, `10_k`, `5l`) and unknown directives
+  are marked as errors.
 - **Folding** of objects, arrays, strings across several lines, block comments, runs of
   line comments, and regions between `// #region` and `// #endregion` (or
   `#region` and `#endregion`).
@@ -17,19 +18,21 @@ of JSON for files maintained by people, in files with the extension
   indentation settings. It uses `format` from
   [`@cwkr/xtjson`](https://github.com/cwkr/xtjson/tree/main/xtjson-js#readme): comments and the notation of names
   and values are kept, every member and array item is placed on a line of its
-  own, and at most one blank line between items is kept.
+  own, directives are laid out like members, and at most one blank line
+  between items is kept.
 - Comment toggling, bracket matching and auto-closing of brackets and quotes.
 
-Implements the XTJSON specification, draft 0.5
+Implements the XTJSON specification, draft 0.6
 ([`docs/xtjson-spec-en.md`](https://github.com/cwkr/xtjson/blob/main/docs/xtjson-spec-en.md)).
 
 ## Limits
 
 - Highlighting and folding are lexical. They do not check the structure of
-  the document, and an identifier at a value position is highlighted as a
-  named value whether or not it is defined: definitions belong to the
-  application that reads the document (section 6.4). A name that extends
-  across several lines is highlighted as a string.
+  the document: an identifier at a value position is highlighted as a named
+  value whether or not a `%define` defines it, and a directive is
+  highlighted wherever it stands. The identifier before the `=` of a
+  directive is recognized only on the line of the directive. A name that
+  extends across several lines is highlighted as a string.
 - `format` does not validate the document. A valid document keeps its value;
   an invalid one is formatted as far as possible. Formatting a selection is
   not supported.

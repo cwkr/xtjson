@@ -5,6 +5,7 @@
   "comment": "TextMate grammar for XTJSON (docs/xtjson-spec-en.md, Appendix A). It is lexical: it highlights tokens and marks some invalid notations, but it does not check the structure of the document.",
   "patterns": [
     { "include": "#comments" },
+    { "include": "#directives" },
     { "include": "#property-names" },
     { "include": "#strings" },
     { "include": "#numbers" },
@@ -31,6 +32,31 @@
           "match": "(#).*$",
           "captures": { "1": { "name": "punctuation.definition.comment.xtjson" } }
         }
+      ]
+    },
+    "directives": {
+      "comment": "Directives (6.5 to 6.7): '%' directly followed by the name, then ':', and optionally an identifier and '='. The identifier is recognized only on the line of the directive. Unknown directives and '%' without a name are errors; whether a directive stands at the start of the document is not checked.",
+      "patterns": [
+        {
+          "match": "(%define)(?![A-Za-z0-9_$])(?:[ \\t]*(:)(?:[ \\t]*([A-Za-z_$][A-Za-z0-9_$]*)[ \\t]*(=))?)?",
+          "captures": {
+            "1": { "name": "keyword.control.directive.xtjson" },
+            "2": { "name": "punctuation.separator.key-value.xtjson" },
+            "3": { "name": "entity.name.constant.xtjson" },
+            "4": { "name": "keyword.operator.assignment.xtjson" }
+          }
+        },
+        {
+          "match": "(%version)(?![A-Za-z0-9_$])(?:[ \\t]*(:)(?:[ \\t]*([A-Za-z_$][A-Za-z0-9_$]*)[ \\t]*(=))?)?",
+          "captures": {
+            "1": { "name": "keyword.control.directive.xtjson" },
+            "2": { "name": "punctuation.separator.key-value.xtjson" },
+            "3": { "name": "support.type.property-name.xtjson" },
+            "4": { "name": "keyword.operator.assignment.xtjson" }
+          }
+        },
+        { "name": "invalid.illegal.unknown-directive.xtjson", "match": "%[A-Za-z_$][A-Za-z0-9_$]*" },
+        { "name": "invalid.illegal.directive.xtjson", "match": "%" }
       ]
     },
     "property-names": {
@@ -124,7 +150,7 @@
           "match": "(?<![A-Za-z0-9_$])(?:true|false|null)(?![A-Za-z0-9_$])"
         },
         {
-          "comment": "A custom named value (6.4); whether it is defined is up to the application.",
+          "comment": "A named value defined with %define (6.4); whether it is defined is not checked.",
           "name": "variable.other.constant.xtjson",
           "match": "(?<![A-Za-z0-9_$])[A-Za-z_$][A-Za-z0-9_$]*"
         }
@@ -137,7 +163,8 @@
         { "name": "punctuation.definition.array.begin.xtjson", "match": "\\[" },
         { "name": "punctuation.definition.array.end.xtjson", "match": "\\]" },
         { "name": "punctuation.separator.key-value.xtjson", "match": ":" },
-        { "name": "punctuation.separator.comma.xtjson", "match": "," }
+        { "name": "punctuation.separator.comma.xtjson", "match": "," },
+        { "comment": "'=' of a directive whose identifier is not on the line of its name.", "name": "keyword.operator.assignment.xtjson", "match": "=" }
       ]
     }
   }
