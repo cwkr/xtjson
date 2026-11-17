@@ -8,26 +8,21 @@ import { fileURLToPath } from 'node:url';
 import { format, parse } from '../xtjson.js';
 
 const corpus = JSON.parse(readFileSync(new URL('./corpus.json', import.meta.url), 'utf8'));
-const EXAMPLE_DEFS = {
-  namedValues: { nil: null, zero: 0, unbekannt: 'keine Angaben', unknown: 'not specified' },
-};
 
-/** Valid texts of the corpus and the specification, with their options. */
+/** Valid texts of the corpus and the specification. */
 function validTexts() {
   const texts = [
-    ...corpus.ref_valid.map(([text]) => [text, null]),
-    ...corpus.ref_json_samples.map((text) => [text, null]),
-    ...corpus.a_valid.map(([text]) => [text, null]),
-    ...corpus.b_valid.map(([text]) => [text, null]),
-    ...corpus.c_valid.map(([text, label]) => [
-      text,
-      label === 'D' ? { namedValues: corpus.c_values } : label && { namedValues: label.values },
-    ]),
+    ...corpus.ref_valid.map(([text]) => text),
+    ...corpus.ref_json_samples,
+    ...corpus.a_valid.map(([text]) => text),
+    ...corpus.b_valid.map(([text]) => text),
+    ...corpus.c_valid.map(([text]) => text),
+    ...corpus.d_valid.map(([text]) => text),
   ];
   for (const lang of ['de', 'en']) {
     const path = fileURLToPath(new URL(`../../docs/xtjson-spec-${lang}.md`, import.meta.url));
     if (!existsSync(path)) continue;
-    for (const m of readFileSync(path, 'utf8').matchAll(/```xtjson\n([^]*?)```/g)) texts.push([m[1], EXAMPLE_DEFS]);
+    for (const m of readFileSync(path, 'utf8').matchAll(/```xtjson\n([^]*?)```/g)) texts.push(m[1]);
   }
   return texts;
 }
@@ -80,19 +75,26 @@ describe('format', () => {
     assert.throws(() => format('[1]', true), TypeError);
   });
 
+  test('lays out directives like members', () => {
+    const text = "%version:'0.6',%define:nil=null\n# c\n%define: self = {\n href: 1\n}\n\nid: 1\nself: self";
+    assert.equal(format(text, 2), "%version: '0.6',\n%define: nil = null\n# c\n%define: self = {\n  href: 1\n}\n\nid: 1\nself: self");
+    assert.equal(format(text), "%version:'0.6',%define:nil=null # c\n%define:self={href:1},id:1,self:self");
+    assert.equal(format('%define:\n  a\n  =\n  1\n[a]', 2), '%define: a = 1\n[\n  a\n]');
+  });
+
   test('valid documents keep their value and formatting is stable', () => {
-    for (const [text, options] of validTexts()) {
-      const expected = parse(text, null, options);
+    for (const text of validTexts()) {
+      const expected = parse(text);
       for (const space of [2, '\t', 0]) {
         const formatted = format(text, space);
-        assert.deepEqual(parse(formatted, null, options), expected, `${JSON.stringify(text)} with ${JSON.stringify(space)}`);
+        assert.deepEqual(parse(formatted), expected, `${JSON.stringify(text)} with ${JSON.stringify(space)}`);
         assert.equal(format(formatted, space), formatted, `stable: ${JSON.stringify(text)}`);
       }
     }
   });
 
   test('invalid documents are formatted without an error', () => {
-    for (const text of [...corpus.ref_invalid, ...corpus.a_invalid, ...corpus.b_invalid]) {
+    for (const text of [...corpus.ref_invalid, ...corpus.a_invalid, ...corpus.b_invalid, ...corpus.c_invalid, ...corpus.d_invalid]) {
       assert.equal(typeof format(text, 2), 'string');
       assert.equal(typeof format(text), 'string');
     }

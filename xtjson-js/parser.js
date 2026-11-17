@@ -1,7 +1,7 @@
 /**
  * XTJSON parser: `Parser`, `ParserError` and `parse()`.
  *
- * Implements the XTJSON specification, draft 0.5 (docs/xtjson-spec-en.md).
+ * Implements the XTJSON specification, draft 0.6 (docs/xtjson-spec-en.md).
  *
  * Design notes:
  * - Single-pass recursive descent parser working directly on UTF-16 code
@@ -31,6 +31,7 @@ const CR = 0x0d;
 const SPACE = 0x20;
 const DQUOTE = 0x22;
 const HASH = 0x23;
+const PERCENT = 0x25;
 const SQUOTE = 0x27;
 const STAR = 0x2a;
 const PLUS = 0x2b;
@@ -41,6 +42,7 @@ const SLASH = 0x2f;
 const DIGIT_0 = 0x30;
 const DIGIT_9 = 0x39;
 const COLON = 0x3a;
+const EQUALS = 0x3d;
 const LBRACKET = 0x5b;
 const BACKSLASH = 0x5c;
 const RBRACKET = 0x5d;
@@ -67,6 +69,11 @@ const RADIX_PREFIX = { 2: '0b', 8: '0o', 16: '0x' };
 const SUFFIX_LIST = 'k, K, kb, Kb, kB, KB, mb, Mb, mB, MB, ms, s, min, h, pct, px, L and n';
 
 const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+
+/** The first character of a number suffix (9.5); none occurs in a number without suffix. */
+const SUFFIX_START = /[g-np-wyzG-NP-WYZ$]/;
+
+const DIRECTIVE_LIST = '%define and %version';
 
 /** True for `c` (a code unit, NaN or EOF) with one of the given flags in `flags`. */
 function hasFlag(flags, c, flag) {
@@ -167,6 +174,33 @@ function setMember(obj, name, value) {
   }
 }
 
+/**
+ * Size and depth of a value read by the parser: the number of JSON values
+ * in it (every object, array and other value counts as one) and the
+ * nesting depth of its objects and arrays (0 for other values).
+ * @returns {[number, number]}
+ */
+function measure(value) {
+  if (value === null || typeof value !== 'object') return [1, 0];
+  let size = 1;
+  let depth = 0;
+  for (const item of Array.isArray(value) ? value : Object.values(value)) {
+    const [s, d] = measure(item);
+    size += s;
+    if (d > depth) depth = d;
+  }
+  return [size, depth + 1];
+}
+
+/** A copy of a value read by the parser; every position of a named value gets its own (6.4). */
+function copyValue(value) {
+  if (value === null || typeof value !== 'object') return value;
+  if (Array.isArray(value)) return value.map(copyValue);
+  const obj = {};
+  for (const name of Object.keys(value)) setMember(obj, name, copyValue(value[name]));
+  return obj;
+}
+
 // ---------------------------------------------------------------------------
 // Parser
 
@@ -174,19 +208,17 @@ function setMember(obj, name, value) {
  * Parser for XTJSON documents with fixed options. Validates the options once;
  * reuse the instance for many documents.
  *
- *     const parser = new Parser({ namedValues: { nil: null } });
+ *     const parser = new Parser({ ijson: true });
  *     const value = parser.parse(text);
+ *     const { value, versions } = parser.parseDocument(text);
  */
 export class Parser {
   // Configuration, fixed when the parser is created
   /** @type {import('./shared.js').OptionsState} */
   #state;
-  /** @type {Map<string, unknown>} */
-  #values;
   #ijson = false;
-  /** @type {Map<string, string>} */
-  #ijsonIssues;
   #maxDepth = 0;
+  #maxExpansion = 0;
   /** @type {Uint8Array} */
   #flags;
   /** @type {Int8Array} */
@@ -200,6 +232,16 @@ export class Parser {
   #pos = 0;
   #depth = 0;
   #busy = false;
+  /**
+   * Named values defined by `%define` (6.6): value, size and depth as by
+   * `measure`, and the offset of the identifier.
+   * @type {Map<string, {value: unknown, size: number, depth: number, offset: number}>}
+   */
+  #defined = new Map();
+  /** @type {Map<string, string | number>} version statements of `%version` (6.7) */
+  #versions = new Map();
+  /** Number of JSON values produced so far by replacing named values. */
+  #expanded = 0;
 
   /**
    * The number suffixes of 9.5, built on first use; the table is exhaustive.
@@ -211,8 +253,8 @@ export class Parser {
   static #suffixTable;
 
   /**
-   * @param {import('./shared.js').Options | object | null} [options] custom
-   *   named values, the I-JSON mode and the maximum nesting depth
+   * @param {import('./shared.js').Options | object | null} [options] the
+   *   I-JSON mode and the limits
    * @throws {TypeError} if the options are invalid
    */
   constructor(options) {
@@ -231,10 +273,9 @@ export class Parser {
 
   #configure(state) {
     this.#state = state;
-    this.#values = state.values;
     this.#ijson = state.ijson;
-    this.#ijsonIssues = state.ijsonIssues;
     this.#maxDepth = state.maxDepth;
+    this.#maxExpansion = state.maxExpansion;
   }
 
   /**
@@ -249,22 +290,46 @@ export class Parser {
    * @throws {TypeError} if the reviver is not a function
    */
   parse(text, reviver) {
+    return this.#run('parse', text, reviver).value;
+  }
+
+  /**
+   * Parses an XTJSON document and returns its value together with the
+   * version statements of its `%version` directives (6.7). The version of
+   * the specification is stored under `xtjson`. The versions are not
+   * checked; that is left to the application.
+   *
+   * @param {string} text the document; converted to a string as in
+   *   `JSON.parse`
+   * @param {Function | null} [reviver] transforms the value, as in `JSON.parse`
+   * @returns {{value: any, versions: Map<string, string | number>}}
+   * @throws {ParserError} if the text is not a valid XTJSON document
+   * @throws {TypeError} if the reviver is not a function
+   */
+  parseDocument(text, reviver) {
+    return this.#run('parseDocument', text, reviver);
+  }
+
+  #run(caller, text, reviver) {
     if (reviver !== undefined && reviver !== null && typeof reviver !== 'function') {
-      throw new TypeError(`Parser.parse: the reviver must be a function, not ${typeof reviver}`);
+      throw new TypeError(`Parser.${caller}: the reviver must be a function, not ${typeof reviver}`);
     }
     const source = String(text);
     if (this.#busy) {
       // Called again during a run: use a parser of its own.
       const parser = new Parser();
       parser.#configure(this.#state);
-      return parser.parse(source, reviver);
+      return parser.#run(caller, source, reviver);
     }
     let value;
+    const versions = new Map();
     this.#busy = true;
     this.#text = source;
     this.#len = source.length;
     this.#pos = 0;
     this.#depth = 0;
+    this.#expanded = 0;
+    this.#versions = versions;
     try {
       if (typeof source.isWellFormed === 'function' ? !source.isWellFormed() : LONE_SURROGATE.test(source)) {
         const offset = source.search(LONE_SURROGATE);
@@ -283,8 +348,11 @@ export class Parser {
       this.#busy = false;
       this.#text = '';
       this.#len = 0;
+      this.#defined.clear();
+      this.#versions = new Map();
     }
-    return reviver === undefined || reviver === null ? value : internalize({ '': value }, '', reviver);
+    if (reviver !== undefined && reviver !== null) value = internalize({ '': value }, '', reviver);
+    return { value, versions };
   }
 
   // ----- Messages ---------------------------------------------------------
@@ -387,11 +455,12 @@ export class Parser {
 
   #parseDocument() {
     this.#skipSpace();
-    const start = this.#pos;
-    const c = this.#peek();
-    if (c === EOF) {
+    if (this.#peek() === EOF) {
       this.#fail('The document is empty; expected a value or at least one member');
     }
+    this.#parseDirectives();
+    const start = this.#pos;
+    const c = this.#peek();
 
     let value;
     if (c === DQUOTE || c === SQUOTE || hasFlag(this.#flags, c, ID_START)) {
@@ -412,11 +481,124 @@ export class Parser {
       value = this.#parseValue();
     }
 
+    const end = this.#pos;
     this.#skipSpace();
     if (this.#pos < this.#len) {
+      // '%' directly after a number is a suffix that does not exist ('50%').
+      if (this.#peek() === PERCENT && this.#pos > end) this.#failDirectivePosition();
       this.#fail(`Unexpected ${describeAt(this.#text, this.#pos)} after the root value; a document contains exactly one value`);
     }
     return value;
+  }
+
+  // ----- Directives (6.5 to 6.7) ------------------------------------------
+
+  /** Reads the directives at the start of the document, each with the separator after it. */
+  #parseDirectives() {
+    while (this.#peek() === PERCENT) {
+      this.#parseDirective();
+      const before = this.#pos;
+      const newline = this.#skipSpace();
+      const c = this.#peek();
+      if (c === COMMA) {
+        this.#pos++;
+        this.#skipSpace();
+      } else if (!newline && c !== EOF) {
+        let reason = `Expected a comma or a line break after the directive, found ${describeAt(this.#text, this.#pos)}`;
+        const gap = this.#text.slice(before, this.#pos);
+        if (/[\u2028\u2029]/.test(gap)) {
+          reason += '; U+2028 and U+2029 are not line breaks';
+        } else if (/\/\*[^]*[\r\n]/.test(gap)) {
+          reason += '; a line break inside a block comment does not separate items';
+        }
+        this.#fail(reason);
+      }
+      if (this.#peek() === EOF) {
+        this.#fail('The document contains only directives; expected a value or at least one member after them');
+      }
+    }
+  }
+
+  /** A directive (6.5), from the '%' to the end of its value. */
+  #parseDirective() {
+    const start = this.#pos;
+    this.#pos++; // '%'
+    if (!hasFlag(this.#flags, this.#peek(), ID_START)) {
+      this.#fail(`The name of a directive must follow '%' directly, without white space or comments; the directives are ${DIRECTIVE_LIST}`);
+    }
+    const name = this.#readIdentifier();
+    if (name !== 'define' && name !== 'version') {
+      const lower = name.toLowerCase();
+      const hint = lower === 'define' || lower === 'version'
+        ? `; did you mean '%${lower}'? Directives are case-sensitive`
+        : '';
+      this.#fail(`Unknown directive '%${name}'${hint}. The directives are ${DIRECTIVE_LIST}`, start);
+    }
+    this.#skipSpace();
+    if (this.#peek() !== COLON) this.#failUnexpected(`':' after '%${name}'`);
+    this.#pos++;
+    this.#skipSpace();
+    // An identifier followed by '=' (one token of lookahead), or the value alone.
+    const idStart = this.#pos;
+    let id;
+    if (hasFlag(this.#flags, this.#peek(), ID_START)) {
+      const identifier = this.#readIdentifier();
+      this.#skipSpace();
+      if (this.#peek() === EQUALS) {
+        id = identifier;
+        this.#pos++;
+        this.#skipSpace();
+      } else {
+        this.#pos = idStart;
+      }
+    }
+    if (name === 'define') this.#define(id, idStart);
+    else this.#version(id, idStart);
+  }
+
+  /** `%define` (6.6): defines the named value `id`. */
+  #define(id, idStart) {
+    if (id === undefined) {
+      this.#fail("%define needs an identifier and '=' before the value, as in '%define: nil = null'", idStart);
+    }
+    if (isPredefined(id)) {
+      this.#fail(`The named value '${id}' is predefined and cannot be redefined`, idStart);
+    }
+    const earlier = this.#defined.get(id);
+    if (earlier !== undefined) {
+      const { line, column } = locate(this.#text, earlier.offset);
+      this.#fail(`The named value '${id}' is already defined at line ${line}, column ${column}; a named value can be defined only once`, idStart);
+    }
+    const value = this.#parseValue(); // `id` is not yet defined in its own value
+    const [size, depth] = measure(value);
+    this.#defined.set(id, { value, size, depth, offset: idStart });
+  }
+
+  /** `%version` (6.7): records the version statement for `id`, or for the specification. */
+  #version(id, idStart) {
+    const key = id ?? 'xtjson';
+    if (this.#versions.has(key)) {
+      const which = key === 'xtjson' ? 'of the specification' : `'${key}'`;
+      const forms = key === 'xtjson' ? " (%version: v and %version: xtjson = v are the same)" : '';
+      this.#fail(`The version ${which} is already stated${forms}; each version may be stated only once`, idStart);
+    }
+    const valueStart = this.#pos;
+    const c = this.#peek();
+    let value;
+    if (c === DQUOTE || c === SQUOTE) {
+      value = this.#readString(c);
+    } else if (c === MINUS || isDigit(c)) {
+      value = this.#parseNumber();
+      if (SUFFIX_START.test(this.#text.slice(valueStart, this.#pos))) value = undefined;
+    }
+    if (value === undefined) {
+      this.#fail('The value of %version must be a string or a number without suffix', valueStart);
+    }
+    this.#versions.set(key, value);
+  }
+
+  #failDirectivePosition(offset = this.#pos) {
+    this.#fail('A directive is permitted only at the top level, before the content of the document', offset);
   }
 
   // ----- Values (6.3) -----------------------------------------------------
@@ -433,6 +615,8 @@ export class Parser {
         return this.#readString(c);
       case MINUS:
         return this.#parseNumber();
+      case PERCENT:
+        return this.#failDirectivePosition();
       default:
         if (isDigit(c)) return this.#parseNumber();
         if (hasFlag(this.#flags, c, ID_START)) {
@@ -456,16 +640,18 @@ export class Parser {
       case 'null':
         return null;
     }
-    const value = this.#values.get(id);
-    if (value !== undefined) {
-      if (this.#ijson) {
-        // 12: the values that result from named values count as well.
-        const issue = this.#ijsonIssues.get(id);
-        if (issue !== undefined) {
-          this.#fail(`The value of the named value '${id}' contains ${issue}, which is not permitted in I-JSON mode`, start);
-        }
+    // Named values defined by %define (6.6). Their strings and names were
+    // checked for the I-JSON mode when the definition was read (12).
+    const definition = this.#defined.get(id);
+    if (definition !== undefined) {
+      if (this.#depth + definition.depth > this.#maxDepth) {
+        this.#fail(`Nesting depth exceeds the limit of ${this.#maxDepth} (option maxDepth) when the named value '${id}' is replaced`, start);
       }
-      return value;
+      this.#expanded += definition.size;
+      if (this.#expanded > this.#maxExpansion) {
+        this.#fail(`Replacing named values produces more than ${this.#maxExpansion} values (option maxExpansion); definitions that use one another multiply the size of the value`, start);
+      }
+      return definition.depth === 0 ? definition.value : copyValue(definition.value);
     }
 
     let hint;
@@ -475,7 +661,7 @@ export class Parser {
     } else if (id === 'NaN' || id === 'Infinity' || id === 'undefined') {
       hint = `; ${id} is not a JSON value`;
     } else {
-      hint = `; text without quotation marks is not a string, write "${id}" for a string`;
+      hint = `; text without quotation marks is not a string, write "${id}" for a string or define '${id}' with %define before it is used`;
     }
     return this.#fail(`Undefined named value '${id}'${hint}`, start);
   }
@@ -554,6 +740,7 @@ export class Parser {
     const c = this.#peek();
     if (c === DQUOTE || c === SQUOTE) return this.#readString(c);
     if (hasFlag(this.#flags, c, ID_START)) return this.#readIdentifier();
+    if (c === PERCENT) this.#failDirectivePosition();
     if (isDigit(c) || c === MINUS) {
       this.#fail('A name without quotation marks must begin with a letter, "_" or "$"; write this name in quotation marks');
     }
@@ -1234,19 +1421,49 @@ let defaultParser;
  * @param {Function | import('./shared.js').Options | object | null} [reviver]
  *   a function transforms the result, as in `JSON.parse`; an object are the
  *   options
- * @param {import('./shared.js').Options | object | null} [options] custom
- *   named values, the I-JSON mode and the maximum nesting depth
+ * @param {import('./shared.js').Options | object | null} [options] the
+ *   I-JSON mode and the limits
  * @returns {any} the value; a number with the suffix `n` and without a
  *   fraction part becomes a BigInt if its value is an integer
  * @throws {ParserError} if the text is not a valid XTJSON document
  * @throws {TypeError} if the arguments or the options are invalid
  */
 export function parse(text, reviver, options) {
+  const [parser, fn] = parserFor('parse', reviver, options);
+  return parser.parse(text, fn);
+}
+
+/**
+ * Parses an XTJSON document and returns its value together with the version
+ * statements of its `%version` directives (6.7), as a `Map` from identifier
+ * to value; the version of the specification is stored under `xtjson`. The
+ * arguments are the same as for `parse`.
+ *
+ *     parseDocument('%version: "0.6"\nport: 8080')
+ *     // { value: { port: 8080 }, versions: Map { 'xtjson' => '0.6' } }
+ *
+ * @param {string} text the document
+ * @param {Function | import('./shared.js').Options | object | null} [reviver]
+ * @param {import('./shared.js').Options | object | null} [options]
+ * @returns {{value: any, versions: Map<string, string | number>}}
+ * @throws {ParserError} if the text is not a valid XTJSON document
+ * @throws {TypeError} if the arguments or the options are invalid
+ */
+export function parseDocument(text, reviver, options) {
+  const [parser, fn] = parserFor('parseDocument', reviver, options);
+  return parser.parseDocument(text, fn);
+}
+
+/**
+ * Assigns the optional arguments of parse() or parseDocument() and returns
+ * the parser for the options together with the reviver.
+ */
+function parserFor(caller, reviver, options) {
   if (reviver !== undefined || options !== undefined) {
-    const args = readArguments('parse', [reviver, options], PARSE_ARGUMENTS);
+    const args = readArguments(caller, [reviver, options], PARSE_ARGUMENTS);
     reviver = args[0];
     options = args[1];
   }
   const parser = options === undefined ? (defaultParser ??= new Parser()) : new Parser(options);
-  return parser.parse(text, reviver);
+  return [parser, reviver];
 }

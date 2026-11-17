@@ -9,22 +9,9 @@ import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-import { parse, ParserError } from '../xtjson.js';
+import { parse, parseDocument, ParserError } from '../xtjson.js';
 
 const corpus = JSON.parse(readFileSync(new URL('./corpus.json', import.meta.url), 'utf8'));
-
-/** Definitions of scripts/tests_definitionen.py (`D`). */
-const D = { namedValues: corpus.c_values };
-
-/** Definitions that the examples in the specification assume (EXAMPLE_DEFS). */
-const EXAMPLE_DEFS = {
-  namedValues: { nil: null, zero: 0, unbekannt: 'keine Angaben', unknown: 'not specified' },
-};
-
-function defsFor(label) {
-  if (label === 'D') return D;
-  return label === null ? null : { namedValues: label.values };
-}
 
 function show(text) {
   return JSON.stringify(text);
@@ -44,24 +31,26 @@ function asNumbers(value) {
   return value;
 }
 
-function assertValid(text, expected, defs) {
+function assertValid(text, expected) {
   let actual;
   try {
-    actual = parse(text, null, defs);
+    actual = parse(text);
   } catch (error) {
     assert.fail(`should be valid: ${show(text)} (${error.message})`);
   }
   assert.deepEqual(asNumbers(actual), expected, `value of ${show(text)}`);
 }
 
-function assertInvalid(text, defs) {
-  assert.throws(() => parse(text, null, defs), ParserError, `should be invalid: ${show(text)}`);
+function assertInvalid(text) {
+  assert.throws(() => parse(text), ParserError, `should be invalid: ${show(text)}`);
 }
 
 const groups = [
   ['xtjson_ref.py', 'ref'],
   ['tests_zeilenumbruch_strings.py', 'a'],
   ['tests_mehrzeilige_strings.py', 'b'],
+  ['tests_definitionen.py', 'c'],
+  ['tests_direktiven.py', 'd'],
 ];
 
 for (const [file, key] of groups) {
@@ -84,10 +73,17 @@ test('xtjson_ref.py: duplicate names are rejected only in I-JSON mode', () => {
     assert.deepEqual(parse(text), { a: 2 });
     assert.throws(() => parse(text, { ijson: true }), /Duplicate name "a"/);
   }
+  // also in the value of a directive that is not used (12)
+  const text = '%define: d = {a: 1, a: 2}\n1';
+  assert.equal(parse(text), 1);
+  assert.throws(() => parse(text, { ijson: true }), /Duplicate name "a"/);
 });
 
 test('I-JSON mode: valid texts give the same value or an I-JSON error', () => {
-  const all = [...corpus.ref_valid, ...corpus.a_valid, ...corpus.b_valid, ...corpus.ref_json_samples.map((t) => [t, JSON.parse(t)])];
+  const all = [
+    ...corpus.ref_valid, ...corpus.a_valid, ...corpus.b_valid, ...corpus.c_valid, ...corpus.d_valid,
+    ...corpus.ref_json_samples.map((t) => [t, JSON.parse(t)]),
+  ];
   let rejected = 0;
   for (const [text, expected] of all) {
     let actual;
@@ -103,29 +99,16 @@ test('I-JSON mode: valid texts give the same value or an I-JSON error', () => {
   assert.ok(rejected > 0 && rejected < 10, `rejected ${rejected}`);
 });
 
-test('tests_definitionen.py: valid texts', () => {
-  for (const [text, label, expected] of corpus.c_valid) assertValid(text, expected, defsFor(label));
-});
-
-test('tests_definitionen.py: invalid texts', () => {
-  for (const [text, label] of corpus.c_invalid) assertInvalid(text, defsFor(label));
-});
-
-test('tests_definitionen.py: invalid definitions are a TypeError, not a ParserError', () => {
-  const bad = [
-    ...corpus.c_bad_values.map((values) => ({ namedValues: values })),
-    // BAD_DEFS that cannot be exported as JSON
-    { namedValues: { x: NaN } }, { namedValues: { x: new (class X {})() } }, { namedValues: { x: new Set([1, 2]) } },
-  ];
-  assert.ok(bad.length > 10);
-  for (const defs of bad) {
-    assert.throws(() => parse('1', null, defs), (error) => {
-      return error instanceof TypeError && !(error instanceof ParserError);
-    }, JSON.stringify(defs.namedValues));
+test('tests_direktiven.py: version statements', () => {
+  for (const [text, expected] of corpus.d_versions) {
+    assert.deepEqual(Object.fromEntries(parseDocument(text).versions), expected, show(text));
   }
 });
 
-test('tests_definitionen.py: custom suffixes are not accepted', () => {
+test('tests_definitionen.py: the application cannot define named values or suffixes', () => {
+  assert.throws(() => parse('nil', null, { namedValues: { nil: null } }), (error) => {
+    return error instanceof TypeError && /defined in the document with %define/.test(error.message);
+  });
   assert.throws(() => parse('1', null, { suffixes: { q: Math.abs } }), TypeError);
 });
 
@@ -140,7 +123,7 @@ for (const lang of ['de', 'en']) {
     blocks.forEach(([tag, body], i) => {
       if (tag !== 'xtjson') return;
       count++;
-      const value = parse(body, null, EXAMPLE_DEFS);
+      const value = parse(body);
       if (blocks[i + 1]?.[0] === 'json') {
         assert.deepEqual(value, JSON.parse(blocks[i + 1][1]), `example ${count}`);
       }

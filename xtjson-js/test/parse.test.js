@@ -4,12 +4,12 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import * as xtjson from '../xtjson.js';
-import { parse, Parser, Options, ParserError } from '../xtjson.js';
+import { parse, parseDocument, Parser, Options, ParserError } from '../xtjson.js';
 
 /** Asserts a ParserError and returns it. */
-function error(text, defs) {
+function error(text, options) {
   try {
-    parse(text, null, defs);
+    parse(text, null, options);
   } catch (e) {
     assert.ok(e instanceof ParserError, `expected ParserError, got ${e}`);
     return e;
@@ -19,17 +19,17 @@ function error(text, defs) {
 
 describe('API', () => {
   test('named exports only, no default export', () => {
-    assert.deepEqual(Object.keys(xtjson).sort(), ['Generator', 'Options', 'Parser', 'ParserError', 'format', 'parse', 'stringify']);
+    assert.deepEqual(Object.keys(xtjson).sort(), ['Generator', 'Options', 'Parser', 'ParserError', 'format', 'parse', 'parseDocument', 'stringify']);
     assert.equal('default' in xtjson, false);
   });
 
   test('Parser keeps its options and hides its state', () => {
-    const parser = new Parser({ namedValues: { nil: null } });
-    assert.deepEqual(parser.parse('a: nil'), { a: null });
+    const parser = new Parser({ ijson: true });
+    assert.deepEqual(parser.parse('%define: nil = null\na: nil'), { a: null });
     assert.deepEqual(parser.parse('[1, 2]'), [1, 2]);
+    assert.throws(() => parser.parse('{a: 1, a: 2}'), /Duplicate name/);
     assert.deepEqual(Object.keys(parser), []);
-    assert.deepEqual(Object.getOwnPropertyNames(Parser.prototype).sort(), ['constructor', 'parse']);
-    assert.throws(() => new Parser().parse('nil'), /Undefined named value 'nil'/);
+    assert.deepEqual(Object.getOwnPropertyNames(Parser.prototype).sort(), ['constructor', 'parse', 'parseDocument']);
   });
 
   test('Parser can be reused after an error and called from a reviver', () => {
@@ -108,9 +108,9 @@ describe('reviver', () => {
 });
 
 describe('call forms', () => {
-  const init = { namedValues: { nil: null } };
+  const init = { ijson: true };
   const defs = new Options(init);
-  const text = '[nil, 50pct, 1]';
+  const text = '%define: nil = null\n[nil, 50pct, 1]';
   const expected = [null, 0.5, 1];
   const double = (k, v) => (typeof v === 'number' ? v * 2 : v);
 
@@ -134,82 +134,126 @@ describe('call forms', () => {
   });
 
   test('invalid arguments are a TypeError', () => {
-    assert.throws(() => parse(text, { namedValues: { true: 1 } }), TypeError);
+    assert.throws(() => parse(text, { namedValues: { nil: null } }), TypeError);
     assert.throws(() => parse(text, []), /unexpected argument of type object/);
     assert.throws(() => parse(text, null, 'x'), /unexpected argument of type string/);
     assert.throws(() => parse(text, defs, () => 1), /the reviver is in the wrong position/);
   });
 });
 
-describe('options: named values', () => {
-  const init = { namedValues: { nil: null, zero: 0, yes: true, name: 'demo', half: 0.5 } };
-
-  test('accepts a plain object, a Map or an iterable of pairs', () => {
-    const text = '[nil, zero, yes, name, half, 50pct]';
-    const expected = [null, 0, true, 'demo', 0.5, 0.5];
-    assert.deepEqual(parse(text, null, init), expected);
-    assert.deepEqual(parse(text, null, { namedValues: new Map(Object.entries(init.namedValues)) }), expected);
-    assert.deepEqual(parse(text, null, { namedValues: Object.entries(init.namedValues) }), expected);
-  });
-
-  test('Options keeps the order of the named values', () => {
-    const defs = new Options({ namedValues: [['zeta', 1], ['alpha', 2], ['mid', 3]] });
-    assert.deepEqual([...defs.namedValues.keys()], ['zeta', 'alpha', 'mid']);
-    const fromObject = new Options({ namedValues: { zeta: 1, alpha: 2, $x: 3, _y: 4 } });
-    assert.deepEqual([...fromObject.namedValues.keys()], ['zeta', 'alpha', '$x', '_y']);
-  });
-
-  test('Options is immutable and independent of its input', () => {
-    const source = { a: 1 };
-    const defs = new Options({ namedValues: source });
-    source.a = 2;
-    source.other = 1;
-    assert.equal(parse('a', null, defs), 1);
-    assert.ok(Object.isFrozen(defs));
-    defs.namedValues.set('other', 1); // a copy; does not change defs
-    assert.throws(() => parse('other', null, defs), ParserError);
-  });
-
-  test('an Options instance can be used as init', () => {
-    const copy = new Options(new Options({ ...init, ijson: true }));
-    assert.deepEqual(parse('[name, 1pct]', null, copy), ['demo', 0.01]);
-    assert.equal(copy.ijson, true);
-  });
-
-  test('without definitions only the predefined ones are active', () => {
-    assert.match(error('nil').message, /Undefined named value 'nil'/);
+describe('directives and named values', () => {
+  test('named values are defined in the document with %define', () => {
+    const text = '%define: nil = null\n%define: zero = 0, %define: half = 50pct\n[nil, zero, half, true]';
+    assert.deepEqual(parse(text), [null, 0, 0.5, true]);
+    assert.match(error('nil').message, /Undefined named value 'nil'.*define 'nil' with %define before it is used/);
     assert.equal(parse('10k'), 10000);
   });
 
-  test('objects and arrays are not permitted as named values (6.4)', () => {
-    for (const value of [[], {}, [1, 2], { a: 1 }, [[]], new Date(), new Map()]) {
-      assert.throws(() => new Options({ namedValues: { x: value } }),
-        (e) => e instanceof TypeError && /the named value 'x' is an? (array|object); a named value must be a string, a number, true, false or null/.test(e.message));
+  test('a definition applies only to the document that contains it', () => {
+    const parser = new Parser();
+    assert.deepEqual(parser.parse('%define: a = 1\n[a]'), [1]);
+    assert.throws(() => parser.parse('[a]'), /Undefined named value 'a'/);
+    assert.deepEqual(parser.parse('%define: a = 2\n[a]'), [2]);
+  });
+
+  test('objects and arrays are copied to every position (6.4)', () => {
+    const v = parse('%define: address = {city: "x", lines: [1, 2]}\nhome: address\nwork: address');
+    assert.deepEqual(v.home, { city: 'x', lines: [1, 2] });
+    assert.notEqual(v.home, v.work);
+    assert.notEqual(v.home.lines, v.work.lines);
+    v.home.lines.push(3);
+    assert.deepEqual(v.work.lines, [1, 2]);
+    const p = parse('%define: o = {"__proto__": {"x": 1}}\n[o, o]');
+    assert.deepEqual(Object.keys(p[1]), ['__proto__']);
+    assert.equal(Object.getPrototypeOf(p[1]), Object.prototype);
+  });
+
+  test('a reviver sees the copies', () => {
+    const v = parse('%define: a = [1]\nx: a\ny: a', (key, value) => (typeof value === 'number' ? value + 1 : value));
+    assert.deepEqual(v, { x: [2], y: [2] });
+  });
+
+  test('parseDocument returns the version statements', () => {
+    const { value, versions } = parseDocument("%version: '0.6'\n%version: schema = 20260401\n%define: a = 1\n[a]");
+    assert.deepEqual(value, [1]);
+    assert.ok(versions instanceof Map);
+    assert.deepEqual([...versions], [['xtjson', '0.6'], ['schema', 20260401]]);
+    assert.deepEqual([...parseDocument('{}').versions], []);
+    assert.deepEqual([...parseDocument('%version: xtjson = 1.5\n{}').versions], [['xtjson', 1.5]]);
+    assert.deepEqual(parseDocument('[1]', (k, v) => (v === 1 ? 2 : v)).value, [2]);
+    assert.deepEqual(new Parser({ ijson: true }).parseDocument('%version: 1\n1').value, 1);
+  });
+
+  test('error messages for directives', () => {
+    const cases = [
+      ['% define: a = 1\n[a]', /The name of a directive must follow '%' directly/, [1, 2]],
+      ['%Define: a = 1\n[a]', /Unknown directive '%Define'; did you mean '%define'\? Directives are case-sensitive/, [1, 1]],
+      ['%import: x = "a"\n{}', /Unknown directive '%import'\. The directives are %define and %version/, [1, 1]],
+      ['%define a = 1\n[a]', /expected ':' after '%define'/, [1, 9]],
+      ['%define: "x"\n{}', /%define needs an identifier and '=' before the value/, [1, 10]],
+      ['%define: null = 1\n1', /The named value 'null' is predefined and cannot be redefined/, [1, 10]],
+      ['%define: a = 1\n%define: a = 2\n[a]', /The named value 'a' is already defined at line 1, column 10; a named value can be defined only once/, [2, 10]],
+      ['%define: a = [a]\n1', /Undefined named value 'a'/, [1, 15]],
+      ['%define: a = 1 [a]', /Expected a comma or a line break after the directive, found '\['/, [1, 16]],
+      ['%define: a = 1 /*\n*/ [a]', /a line break inside a block comment does not separate items/, [2, 4]],
+      ['%define: a = 1\n', /The document contains only directives/, [2, 1]],
+      ['a: 1\n%define: b = 2', /A directive is permitted only at the top level, before the content of the document/, [2, 1]],
+      ['[%define: b = 2]', /A directive is permitted only at the top level/, [1, 2]],
+      ['1\n%version: 1', /A directive is permitted only at the top level/, [2, 1]],
+      ['%version: 1\n%version: xtjson = 2\n{}', /The version of the specification is already stated \(%version: v and %version: xtjson = v are the same\)/, [2, 11]],
+      ["%version: s = 1\n%version: s = '1'\n{}", /The version 's' is already stated; each version may be stated only once/, [2, 11]],
+      ['%version: 1k\n{}', /The value of %version must be a string or a number without suffix/, [1, 11]],
+      ['%version: 1n\n{}', /must be a string or a number without suffix/, [1, 11]],
+      ['%version: nil\n{}', /must be a string or a number without suffix/, [1, 11]],
+      ['%version: [1]\n{}', /must be a string or a number without suffix/, [1, 11]],
+    ];
+    for (const [text, pattern, [line, column]] of cases) {
+      const e = error(text);
+      assert.match(e.message, pattern, text);
+      assert.deepEqual([e.line, e.column], [line, column], text);
     }
+  });
+});
+
+describe('options', () => {
+  test('Options is immutable', () => {
+    const init = { ijson: true };
+    const options = new Options(init);
+    init.ijson = false;
+    assert.equal(options.ijson, true);
+    assert.ok(Object.isFrozen(options));
+  });
+
+  test('an Options instance can be used as init', () => {
+    const copy = new Options(new Options({ ijson: true, maxExpansion: 7 }));
+    assert.equal(copy.ijson, true);
+    assert.equal(copy.maxExpansion, 7);
+  });
+
+  test('the application cannot define named values or suffixes', () => {
+    assert.throws(() => new Options({ namedValues: { nil: null } }),
+      /Unknown XTJSON option "namedValues"; named values are defined in the document with %define, not by the application/);
+    assert.throws(() => new Options({ suffixes: { q: Math.abs } }), /Unknown XTJSON option "suffixes"\./);
+    assert.equal('namedValues' in new Options(), false);
   });
 
   test('unknown options are a TypeError', () => {
-    assert.throws(() => new Options({ suffixes: { q: Math.abs } }), /Unknown XTJSON option "suffixes"\./);
     assert.throws(() => parse('1', { ijosn: true }),
-      /Unknown XTJSON option "ijosn"\. The options are "namedValues", "ijson", "maxDepth", "writeNumberSuffixes" and "writeSingleQuotes"/);
-    assert.deepEqual(parse('1', { namedValues: undefined, ijson: undefined, maxDepth: undefined }), 1);
+      /Unknown XTJSON option "ijosn"\. The options are "ijson", "maxDepth", "maxExpansion", "writeNumberSuffixes" and "writeSingleQuotes"/);
+    assert.deepEqual(parse('1', { ijson: undefined, maxDepth: undefined, maxExpansion: undefined }), 1);
   });
 
   test('invalid options throw TypeError', () => {
     const cases = [
-      [{ namedValues: [['a', 1], ['a', 2]] }, /defined more than once/],
-      [{ namedValues: { x: undefined } }, /undefined/],
-      [{ namedValues: { x: () => 1 } }, /function/],
-      [{ namedValues: { x: 1n } }, /bigint/],
-      [{ namedValues: { x: Infinity } }, /not a JSON number/],
-      [{ namedValues: { x: NaN } }, /not a JSON number/],
-      [{ namedValues: 'abc' }, /must be an object/],
-      [{ namedValues: [1, 2] }, /pairs/],
+      [{ maxExpansion: 0 }, /"maxExpansion" must be a positive integer/],
+      [{ maxExpansion: 1.5 }, /"maxExpansion" must be a positive integer/],
+      [{ maxExpansion: '10' }, /"maxExpansion" must be a positive integer/],
+      [{ maxExpansion: Infinity }, /"maxExpansion" must be a positive integer/],
       ['abc', /must be an object/],
     ];
-    for (const [defs, pattern] of cases) {
-      assert.throws(() => new Options(defs), (e) => e instanceof TypeError && pattern.test(e.message));
-      assert.throws(() => parse('1', null, defs), TypeError);
+    for (const [options, pattern] of cases) {
+      assert.throws(() => new Options(options), (e) => e instanceof TypeError && pattern.test(e.message));
+      assert.throws(() => parse('1', null, options), TypeError);
     }
   });
 });
@@ -265,18 +309,15 @@ describe('I-JSON mode', () => {
     assert.equal(parse(String.raw`"﷏ﷰ�\u{1FFFD}\u{10000}"`, ijson).length, 7);
   });
 
-  test('values of named values count as well', () => {
-    const defs = new Options({
-      ijson: true,
-      namedValues: { bad: 'ok' + String.fromCharCode(0xffff), lone: '\uD800', good: 'b' },
-    });
-    assert.deepEqual(parse('[good]', defs), ['b']);
-    const e = error('x: 1\ny: [good, bad]', defs);
-    assert.match(e.message, /The value of the named value 'bad' contains the noncharacter U\+FFFF/);
-    assert.deepEqual([e.line, e.column], [2, 11]);
-    assert.match(error('lone', defs).message, /unpaired surrogate U\+D800/);
-    // outside the I-JSON mode the same definitions are fine
-    assert.equal(parse('lone', { namedValues: { lone: '\uD800' } }), '\uD800');
+  test('values of directives count as well, even if they are not used', () => {
+    assert.deepEqual(parse('%define: good = "b"\n[good]', ijson), ['b']);
+    const e = error('%define: bad = "ok\\uFFFF"\n1', ijson);
+    assert.match(e.message, /noncharacter U\+FFFF/);
+    assert.deepEqual([e.line, e.column], [1, 16]);
+    assert.match(error('%define: lone = "\\uD800"\n[lone]', ijson).message, /unpaired surrogate U\+D800/);
+    assert.match(error('%version: "\\uD800"\n1', ijson).message, /unpaired surrogate U\+D800/);
+    // outside the I-JSON mode the same document is fine
+    assert.deepEqual(parse('%define: lone = "\\uD800"\n[lone]'), ['\uD800']);
   });
 
   test('large numbers are not rejected (only a SHOULD in section 12)', () => {
@@ -480,6 +521,35 @@ describe('limits', () => {
     for (const maxDepth of [0, -1, 1.5, Infinity, NaN, '10', 2 ** 53, true]) {
       assert.throws(() => new Options({ maxDepth }), /"maxDepth" must be a positive integer/, String(maxDepth));
     }
+  });
+
+  test('maxExpansion limits the size after replacing named values (11, 13)', () => {
+    // each level multiplies the size by ten
+    let bomb = '%define: s0 = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1]\n';
+    for (let i = 1; i < 12; i++) bomb += `%define: s${i} = [${Array(10).fill(`s${i - 1}`).join(', ')}]\n`;
+    bomb += 's11';
+    const e = error(bomb);
+    assert.match(e.message, /Replacing named values produces more than 1000000 values \(option maxExpansion\)/);
+    // a: 3 values; b = [a, a]: 6 replaced, 7 values; [b, b]: 14 replaced; 20 in all
+    const small = '%define: a = [1, 1]\n%define: b = [a, a]\n[b, b]';
+    assert.equal(parse(small, { maxExpansion: 20 }).length, 2);
+    assert.match(error(small, { maxExpansion: 19 }).message, /more than 19 values/);
+    assert.deepEqual(parse('%define: a = 1\n[a, a, a]', { maxExpansion: 3 }), [1, 1, 1]);
+    assert.equal(new Options().maxExpansion, 1000000);
+  });
+
+  test('maxDepth also applies to the values of named values', () => {
+    const text = '%define: a = [[1]]\n%define: b = [a]\n{x: b}';
+    assert.deepEqual(parse(text, { maxDepth: 4 }), { x: [[[1]]] });
+    const e = error(text, { maxDepth: 3 });
+    assert.match(e.message, /Nesting depth exceeds the limit of 3 \(option maxDepth\) when the named value 'b' is replaced/);
+    assert.deepEqual([e.line, e.column], [3, 5]);
+    // a long chain of definitions cannot nest deeper than maxDepth; d999 has depth 1000
+    let chain = '%define: d0 = []\n';
+    for (let i = 1; i <= 999; i++) chain += `%define: d${i} = [d${i - 1}]\n`;
+    assert.equal(parse(chain + 'd999').length, 1);
+    assert.match(error(chain + '[d999]').message, /limit of 1000 \(option maxDepth\) when the named value 'd999' is replaced/);
+    assert.match(error(chain + '%define: d1000 = [d999]\n1').message, /limit of 1000/);
   });
 
   test('a maxDepth beyond the call stack is reported as an error of the document', () => {

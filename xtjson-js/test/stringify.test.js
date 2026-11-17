@@ -65,30 +65,30 @@ describe('API', () => {
   });
 
   test('call forms are told apart by type', () => {
-    const value = { a: null, list: [1, 2] };
-    const options = new Options({ namedValues: { nil: null } });
+    const value = { a: 'x', list: [1, 2] };
+    const options = new Options({ writeSingleQuotes: true });
     const upper = (k, v) => (typeof v === 'number' ? v * 10 : v);
-    assert.equal(stringify(value), 'a:null,list:[1,2]');
-    assert.equal(stringify(value, options), 'a:nil,list:[1,2]');
-    assert.equal(stringify(value, { namedValues: { nil: null } }), 'a:nil,list:[1,2]');
-    assert.equal(stringify(value, 1, options), 'a: nil\nlist: [\n 1\n 2\n]');
-    assert.equal(stringify(value, '\t', options), 'a: nil\nlist: [\n\t1\n\t2\n]');
-    assert.equal(stringify(value, null, 1, options), 'a: nil\nlist: [\n 1\n 2\n]');
-    assert.equal(stringify(value, upper, options), 'a:nil,list:[10,20]');
-    assert.equal(stringify(value, upper, 1), 'a: null\nlist: [\n 10\n 20\n]');
+    assert.equal(stringify(value), 'a:"x",list:[1,2]');
+    assert.equal(stringify(value, options), "a:'x',list:[1,2]");
+    assert.equal(stringify(value, { writeSingleQuotes: true }), "a:'x',list:[1,2]");
+    assert.equal(stringify(value, 1, options), "a: 'x'\nlist: [\n 1\n 2\n]");
+    assert.equal(stringify(value, '\t', options), "a: 'x'\nlist: [\n\t1\n\t2\n]");
+    assert.equal(stringify(value, null, 1, options), "a: 'x'\nlist: [\n 1\n 2\n]");
+    assert.equal(stringify(value, upper, options), "a:'x',list:[10,20]");
+    assert.equal(stringify(value, upper, 1), 'a: "x"\nlist: [\n 10\n 20\n]');
     assert.equal(stringify(value, ['list'], undefined, options), 'list:[1,2]');
-    assert.equal(stringify(value, undefined, null, null), 'a:null,list:[1,2]');
+    assert.equal(stringify(value, undefined, null, null), 'a:"x",list:[1,2]');
   });
 
   test('invalid arguments are a TypeError', () => {
-    const options = { namedValues: {} };
+    const options = {};
     assert.throws(() => stringify(1, options, 2), /the space is in the wrong position/);
     assert.throws(() => stringify(1, 2, 4), /the space is given twice/);
     assert.throws(() => stringify(1, options, options), /the options is given twice/);
     assert.throws(() => stringify(1, 2, () => 1), /the replacer is in the wrong position/);
     assert.throws(() => stringify(1, true), /unexpected argument of type boolean/);
     assert.throws(() => stringify(1, null, 2, 'x'), /unexpected argument of type string|the space is given twice/);
-    assert.throws(() => stringify(1, { namedValues: { true: 1 } }), /predefined/);
+    assert.throws(() => stringify(1, { namedValues: { nil: null } }), /named values are defined in the document with %define/);
   });
 
   test('space: numbers and strings as in JSON.stringify', () => {
@@ -294,34 +294,10 @@ describe('output format', () => {
 });
 
 describe('named values', () => {
-  test('primitive values are written as named values', () => {
-    const options = new Options({
-      namedValues: { nil: null, yes: true, no: false, zero: 0, unknown: 'not specified' },
-    });
-    const value = { a: null, b: true, c: false, d: 0, e: -0, f: 'not specified', g: [1], h: { a: 1 }, nil: 'x' };
-    const text = stringify(value, options);
-    assert.equal(text, 'a:nil,b:yes,c:no,d:zero,e:zero,f:unknown,g:[1],h:{a:1},nil:"x"');
-    assert.deepEqual(parse(text, options), { ...value, e: 0 });
-  });
-
-  test('the named value defined last wins; predefined ones only if none matches', () => {
-    const options = new Options({ namedValues: [['nil', null], ['none', null], ['one', 1], ['uno', 1]] });
-    assert.equal(stringify([null, 1, true], options), '[none,uno,true]');
-    assert.equal(stringify([null], { namedValues: { nil: null } }), '[nil]');
-    assert.equal(stringify([null]), '[null]');
-  });
-
-  test('values that JSON writes as null use the named value for null', () => {
-    const options = { namedValues: { nil: null } };
-    assert.equal(stringify([NaN, undefined, () => 1], options), '[nil,nil,nil]');
-  });
-
-  test('named values for numbers come before suffixes', () => {
-    assert.equal(stringify([1000, 2000], { namedValues: { thousand: 1000 }, writeNumberSuffixes: true }), '[thousand,2k]');
-  });
-
-  test('a string that equals a named value is not written across several lines', () => {
-    assert.equal(stringify(['a\nb'], 2, { namedValues: { ab: 'a\nb' } }), '[\n  ab\n]');
+  test('are never written; values are written as JSON writes them', () => {
+    const value = { a: null, b: true, c: false, d: 0, e: 'nil', nil: 'x', f: NaN, g: [undefined] };
+    assert.equal(stringify(value), 'a:null,b:true,c:false,d:0,e:"nil",nil:"x",f:null,g:[null]');
+    assert.deepEqual(parse(stringify(value)), JSON.parse(JSON.stringify(value)));
   });
 });
 
@@ -500,12 +476,10 @@ describe('round trip', () => {
 
   test('parse(stringify(v)) equals JSON.parse(JSON.stringify(v))', () => {
     const rnd = random(12345);
-    const namedValues = [['nil', null], ['one', 1], ['empty', ''], ['nl', '\n'], ['kilo', 1000], ['yes', true]];
     const variants = [
-      new Options({ namedValues }),
+      new Options({ writeNumberSuffixes: true }),
       new Options({ writeNumberSuffixes: true, writeSingleQuotes: true }),
-      new Options({ namedValues, writeNumberSuffixes: true }),
-      new Options({ namedValues, writeSingleQuotes: true }),
+      new Options({ writeSingleQuotes: true }),
     ];
     for (let i = 0; i < 2000; i++) {
       const value = randomValue(rnd, 0);

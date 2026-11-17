@@ -1,7 +1,7 @@
 /**
  * XTJSON generator: `Generator` and `stringify()`.
  *
- * Implements the XTJSON specification, draft 0.5 (docs/xtjson-spec-en.md).
+ * Implements the XTJSON specification, draft 0.6 (docs/xtjson-spec-en.md).
  *
  * Design notes:
  * - Serialization as in `JSON.stringify` (ECMA-262 SerializeJSONProperty),
@@ -228,8 +228,6 @@ export class Generator {
   // Configuration, fixed when the generator is created
   /** @type {import('./shared.js').OptionsState} */
   #state;
-  /** @type {Map<unknown, string> | undefined} undefined without custom named values, which saves the lookups */
-  #names;
   #ijson = false;
   #maxDepth = 0;
   #writeNumberSuffixes = false;
@@ -251,9 +249,9 @@ export class Generator {
   #busy = false;
 
   /**
-   * @param {import('./shared.js').Options | object | null} [options] named
-   *   values, the I-JSON mode, the maximum nesting depth, number suffixes and
-   *   quotation marks
+   * @param {import('./shared.js').Options | object | null} [options] the
+   *   I-JSON mode, the maximum nesting depth, number suffixes and quotation
+   *   marks
    * @throws {TypeError} if the options are invalid
    */
   constructor(options) {
@@ -264,7 +262,6 @@ export class Generator {
 
   #configure(state) {
     this.#state = state;
-    this.#names = state.names.size > 0 ? state.names : undefined;
     this.#ijson = state.ijson;
     this.#maxDepth = state.maxDepth;
     this.#writeNumberSuffixes = state.writeNumberSuffixes;
@@ -372,18 +369,14 @@ export class Generator {
       case 'string':
         return this.#string(value, indent);
       case 'number':
-        if (!Number.isFinite(value)) return this.#literal(null); // as JSON
-        if (this.#names !== undefined) {
-          const name = this.#names.get(value);
-          if (name !== undefined) return name;
-        }
+        if (!Number.isFinite(value)) return 'null'; // as JSON
         return formatNumber(value, this.#writeNumberSuffixes);
       case 'boolean':
-        return this.#literal(value);
+        return String(value);
       case 'bigint':
         return formatBigInt(value); // always with the suffix n, so it reads back as a BigInt
       case 'object':
-        if (value === null) return this.#literal(null);
+        if (value === null) return 'null';
         if (this.#isRawJSON(value)) return value.rawJSON;
         return Array.isArray(value) ? this.#array(value, indent) : this.#object(value, indent);
       default:
@@ -391,17 +384,8 @@ export class Generator {
     }
   }
 
-  /** `true`, `false` or `null`, or a custom named value for it. */
-  #literal(value) {
-    return this.#names?.get(value) ?? String(value);
-  }
-
   #string(value, indent) {
     if (this.#ijson) this.#checkIJSON(value, 'a string');
-    if (this.#names !== undefined) {
-      const name = this.#names.get(value);
-      if (name !== undefined) return name;
-    }
     if (this.#gap !== '' && value.includes('\n')) return stringAcrossLines(value, indent + this.#gap, this.#quote);
     return this.#quoted(value);
   }
@@ -482,7 +466,7 @@ export class Generator {
       let item = value[i];
       const type = typeof item;
       if (always || type === 'object' || type === 'bigint') item = this.#prepare(value, i, item);
-      const text = this.#write(item, inner) ?? this.#literal(null);
+      const text = this.#write(item, inner) ?? 'null';
       out = i === 0 ? text : out + separator + text;
     }
     this.#leave();
@@ -532,9 +516,7 @@ let defaultGenerator;
  * multiples of 1048576, 1024, 1000, 3600 or 60 get the suffix `mb`, `kb`,
  * `k`, `h` or `min`, and fractions between -1 and 1 the suffix `pct` or `ms`
  * where they fit; BigInt values are written with the suffix `n`; with the
- * option `writeSingleQuotes`, strings are written in `'`; primitive
- * values for which a named value is defined are written as that named
- * value.
+ * option `writeSingleQuotes`, strings are written in `'`.
  *
  * The optional arguments are told apart by their type:
  *
@@ -549,9 +531,9 @@ let defaultGenerator;
  * @param {number | string | import('./shared.js').Options | object | null} [space]
  *   indentation: a number of spaces (at most 10) or a string of spaces and
  *   tabs
- * @param {import('./shared.js').Options | object | null} [options] named
- *   values, the I-JSON mode, the maximum nesting depth, number suffixes and
- *   quotation marks
+ * @param {import('./shared.js').Options | object | null} [options] the
+ *   I-JSON mode, the maximum nesting depth, number suffixes and quotation
+ *   marks
  * @returns {string | undefined} undefined if the value cannot be written
  *   (undefined, a function or a symbol), as in `JSON.stringify`
  * @throws {TypeError} for circular references, nesting deeper than

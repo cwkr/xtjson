@@ -3,7 +3,7 @@
 XTJSON parser and generator for JavaScript. XTJSON is a syntactic superset of
 JSON for files that are written and maintained by people, such as
 configuration files. See the specification in
-[`docs/xtjson-spec-en.md`](../docs/xtjson-spec-en.md) (draft 0.5).
+[`docs/xtjson-spec-en.md`](../docs/xtjson-spec-en.md) (draft 0.6).
 
 - ES modules in plain JavaScript, with TypeScript declarations. Importing
   them has no side effects.
@@ -16,19 +16,23 @@ import { parse, stringify } from '@cwkr/xtjson';
 
 const config = parse(`
 # Service configuration
+%define: any_host = "0.0.0.0"
+
 name: 'demo-service'
+host: any_host
 port: 8080            // a line break replaces the comma
 cache: 64mb
 motd: "
   Welcome.
   "
 `);
-// { name: 'demo-service', port: 8080, cache: 67108864, motd: 'Welcome.\n' }
+// { name: 'demo-service', host: '0.0.0.0', port: 8080, cache: 67108864, motd: 'Welcome.\n' }
 
 stringify(config, 2);
 // name: "demo-service"
+// host: "0.0.0.0"
 // port: 8080
-// cache: 64mb
+// cache: 67_108_864
 // motd: "
 //   Welcome.
 //   "
@@ -44,8 +48,7 @@ Parses an XTJSON document and returns its value.
   string. It must be decoded text; when reading bytes, decode them as UTF-8
   first (for example with `new TextDecoder('utf-8', { fatal: true })`).
 - `reviver`: optional, works exactly as in `JSON.parse`.
-- `options`: optional named values, I-JSON mode and nesting limit, see
-  [Options](#options).
+- `options`: optional I-JSON mode and limits, see [Options](#options).
 
 ```js
 parse(text, options);              // options only
@@ -62,6 +65,57 @@ exceeds the range of a JavaScript number (`1e400`) are an error instead of
 If a name occurs more than once in an object, the member that comes last in
 the document applies, as with `JSON.parse`. In I-JSON mode it is an error
 instead.
+
+### Directives and named values
+
+A document can begin with directives (section 6.5). `%define` defines a
+named value (6.6); its value can be any value, including an object or an
+array, and can use the named values defined before it. Every position where
+a named value is used gets a copy of its own. `%version` states the version
+of the specification, or with an identifier the version of something else
+(6.7).
+
+```js
+parse(`
+%version: '0.6'
+%define: nil = null
+%define: address = { city: 'Köln', zip: nil }
+
+home: address
+work: address
+`);
+// { home: { city: 'Köln', zip: null }, work: { city: 'Köln', zip: null } }
+```
+
+- Named values are defined only in the document. The application cannot
+  define named values, directives or number suffixes; there are no options
+  for them.
+- A named value can be defined only once, `true`, `false` and `null` cannot
+  be redefined, and a named value can be used only after its definition.
+- Directives other than `%define` and `%version`, and directives after the
+  start of the content or inside objects and arrays, are errors.
+- Definitions that use one another can multiply the size of the value. The
+  option `maxExpansion` limits the number of values that replacing named
+  values produces, `maxDepth` also limits their nesting.
+
+### `parseDocument(text, reviver?, options?)`
+
+Like `parse`, but returns the value together with the version statements of
+the `%version` directives, as a `Map` from identifier to value. The version
+of the specification is stored under `xtjson`. The versions are not checked;
+the application decides what to do with them.
+
+```js
+import { parseDocument } from '@cwkr/xtjson';
+
+const { value, versions } = parseDocument(`
+%version: '0.6'
+%version: schema = '2026.05.01b'
+port: 8080
+`);
+// value: { port: 8080 }
+// versions: Map { 'xtjson' => '0.6', 'schema' => '2026.05.01b' }
+```
 
 ### `stringify(value, replacer?, space?, options?)`
 
@@ -120,40 +174,21 @@ The output differs from `JSON.stringify` in these points:
   `0.25` as `25pct`; enable the option only where that fits the data. `s`,
   `px` and `L` do not change the value and are never written; `n` only for
   BigInt values.
-- **Named values.** A string, number, `true`, `false` or `null` is written as
-  a named value if one has exactly this value. If several match, the one
-  defined last wins; the predefined `true`, `false` and `null` are used only
-  if no custom named value matches. With `namedValues: { nil: null }`, `null` is
-  always written as `nil`. Names are never replaced.
-
-A document that uses custom named values can only be read with the same
-options. The specification (section 11) recommends this only if the
-recipient is certain to use the same definitions.
+- **Named values and directives** are not written. `true`, `false` and
+  `null` are written as such, all other values as strings, numbers, objects
+  and arrays.
 
 ### Options
-
-Without options, only the predefined named values `true`, `false` and `null`
-are active. An application can define further named values:
 
 ```js
 import { parse, stringify, Options } from '@cwkr/xtjson';
 
-const options = new Options({
-  namedValues: { nil: null, unknown: 'not specified' },
-});
+const options = new Options({ ijson: true, writeSingleQuotes: true });
 
-parse('ratio: 50pct\nowner: unknown\nboss: nil', options);
-// { ratio: 0.5, owner: 'not specified', boss: null }
-
-stringify({ owner: 'not specified', boss: null }, options);
-// 'owner:unknown,boss:nil'
+parse('ratio: 50pct\nowner: "me"', options);   // { ratio: 0.5, owner: 'me' }
+stringify({ owner: 'me' }, options);            // "owner:'me'"
 ```
 
-- `namedValues` maps identifiers to a string, a number, `true`, `false` or
-  `null` (section 6.4); objects and arrays are not permitted. The order of
-  the named values is fixed: it is the order in which they are given. They
-  can be given as a plain object, a `Map` or an iterable of `[key, value]`
-  pairs.
 - `ijson`: `true` for the I-JSON mode, see below. Default `false`.
 - `maxDepth`: the maximum nesting depth of objects and arrays, a positive
   integer. Default `1000`. An implicit root object counts as a level, so
@@ -161,16 +196,23 @@ stringify({ owner: 'not specified', boss: null }, options);
   `ParserError`, `stringify` a deeper value as a `TypeError`. A very large
   limit can exceed the call stack of the JavaScript engine (with Node.js at
   a depth of a few thousand); `parse` then reports a `ParserError` too.
+  The values of named values count with the depth at which they are used.
+- `maxExpansion`: the maximum number of values that replacing named values
+  may produce in one document, a positive integer. Default `1000000`. Every
+  object, array and other value counts as one, at every position where a
+  named value is used. `parse` reports a document that exceeds it as a
+  `ParserError`.
 - `writeNumberSuffixes`: `true` lets `stringify` write number suffixes, see
   above. Default `false`. `parse` ignores it.
 - `writeSingleQuotes`: `true` lets `stringify` write strings and quoted names in
   `'`. Default `false`. `parse` ignores it.
 
 Other properties are a `TypeError`, so that a misspelt option is not
-silently ignored.
+silently ignored. This includes `namedValues` of earlier versions: named
+values are defined in the document with `%define`.
 
-The application cannot define number suffixes. The suffixes are fixed by
-section 9.5 and always active when parsing: `k`, `K` (times 1000), `kb`,
+The application cannot define named values, directives or number suffixes.
+The suffixes are fixed by section 9.5 and always active when parsing: `k`, `K` (times 1000), `kb`,
 `Kb`, `kB`, `KB` (times 1024), `mb`, `Mb`, `mB`, `MB` (times 1048576), `ms`
 (divided by 1000), `s`, `min` (times 60), `h` (times 3600), `pct` (divided
 by 100), `px`, `L` and `n`. `s`, `px`, `L` and `n` leave the value
@@ -188,7 +230,8 @@ Formats an XTJSON document and returns the text. `space` works as in
 line, indented by `space` per level, a space after each `:`, and empty
 objects and arrays as `{}` and `[]`. Unlike `stringify`, `format` keeps
 comments, the notation of names, strings and numbers (quotation marks,
-suffixes, hexadecimal numbers, ...) and the commas of the text; a line break
+suffixes, hexadecimal numbers, ...) and the commas of the text; directives
+are laid out like members, with a space before and after `=`; a line break
 that separates two items stays a line break. At most one blank line between
 items is kept. Strings across several lines that begin with an empty line
 are indented anew, which does not change their value; line continuations
@@ -246,8 +289,10 @@ prohibitions of section 12 (I-JSON, RFC 7493):
   (`a`, `"a"` and `'\u0061'` are the same name);
 - a name or string value that contains an unpaired surrogate (for example
   `"\uDEAD"`) or a Unicode noncharacter (U+FDD0 to U+FDEF and every code point
-  ending in FFFE or FFFF), written directly or as an escape sequence. This
-  also applies to the values of named values that the document uses.
+  ending in FFFE or FFFF), written directly or as an escape sequence.
+
+Both also apply to the values of `%define` and `%version`, even if a named
+value is not used.
 
 `stringify` throws a `TypeError` for names and strings that contain such
 characters. The recommendations of section 12 (numbers within the range of
@@ -259,48 +304,48 @@ including texts with duplicate names.
 
 - An invalid document throws a `ParserError`, a subclass of `SyntaxError`.
   Its message names the violated rule and the position, for example
-  `Undefined named value 'ture'; text without quotation marks is not a string, write "ture" for a string (line 3, column 9)`.
+  `Undefined named value 'ture'; text without quotation marks is not a string, write "ture" for a string or define 'ture' with %define before it is used (line 3, column 9)`.
   The properties `reason`, `line`, `column` (both 1-based; columns count
   Unicode code points) and `offset` (0-based, in UTF-16 code units) give the
   details.
 - Errors of the application throw a `TypeError`: invalid options (for
-  example an attempt to redefine `true`, an invalid identifier, an object or
-  array as a named value, an unknown option), invalid arguments, and
-  values that `stringify` cannot write.
+  example an unknown option or a limit that is not a positive integer),
+  invalid arguments, and values that `stringify` cannot write.
 
 ### Parser and generator
 
 ```js
 import { Parser, Generator, Options } from '@cwkr/xtjson';
 
-const options = new Options({ namedValues: { nil: null } });
+const options = new Options({ ijson: true });
 const parser = new Parser(options);
 const generator = new Generator(options);
 
-parser.parse('owner: nil');                       // { owner: null }
+parser.parse('%define: nil = null\nowner: nil');  // { owner: null }
 parser.parse(text, reviver);
-generator.stringify({ owner: null });             // 'owner:nil'
+parser.parseDocument(text);                       // { value, versions }
+generator.stringify({ owner: null });             // 'owner:null'
 generator.stringify(value, replacer, 2);
 ```
 
 - `new Parser(options?)` and `new Generator(options?)` take an `Options`
   instance or a plain object with the same properties and validate it once.
   An instance can be reused for any number of calls.
-- `parser.parse(text, reviver?)` and
-  `generator.stringify(value, replacer?, space?)` work like `parse` and
-  `stringify` with these options. The arguments are positional: a reviver
+- `parser.parse(text, reviver?)`, `parser.parseDocument(text, reviver?)` and
+  `generator.stringify(value, replacer?, space?)` work like `parse`,
+  `parseDocument` and `stringify` with these options. The arguments are positional: a reviver
   must be a function, a replacer a function or an array, `space` a number or
   a string; `null` and `undefined` mean none. Anything else is a `TypeError`.
 - The configuration and the state of a call are private. A call that starts
   while the same instance is still busy, for example from a `toJSON` method
   or a replacer, is carried out by a separate instance with the same options.
 
-`parse` and `stringify` use such an instance internally.
+`parse`, `parseDocument` and `stringify` use such an instance internally.
 
 ### Exports
 
-The package has only named exports: `parse`, `stringify`, `format`,
-`Parser`, `Generator`, `Options` and `ParserError`. There is no default export.
+The package has only named exports: `parse`, `parseDocument`, `stringify`,
+`format`, `Parser`, `Generator`, `Options` and `ParserError`. There is no default export.
 
 ## Numbers
 
@@ -332,7 +377,7 @@ The source consists of five modules:
 | File | Contents |
 |---|---|
 | `xtjson.js` | entry point of the package; only re-exports |
-| `parser.js` | `Parser`, `ParserError`, `parse` |
+| `parser.js` | `Parser`, `ParserError`, `parse`, `parseDocument` |
 | `generator.js` | `Generator`, `stringify` |
 | `formatter.js` | `format` |
 | `shared.js` | `Options`, the character tables, the I-JSON check for strings and the assignment of optional arguments; used by the other modules |
@@ -366,13 +411,11 @@ dependencies to install. The tests also run with `bun test` and
   python3 scripts/export_corpus.py --check   # fails if it is out of date
   ```
 
-  Of the rejected definitions in `tests_definitionen.py` only those that can
-  be written as JSON are exported; the others (`NaN`, sets, other objects)
-  are written again in `corpus.test.js`.
-- `test/parse.test.js` tests the API of `parse` and `Parser`, the I-JSON
-  mode, error messages and positions, numbers and limits.
+- `test/parse.test.js` tests the API of `parse`, `parseDocument` and
+  `Parser`, directives and named values, the I-JSON mode, error messages and
+  positions, numbers and limits.
 - `test/stringify.test.js` tests `stringify` and `Generator`: the call forms, the behaviour
-  of `JSON.stringify`, the output format, named values, strings across several lines,
+  of `JSON.stringify`, the output format, strings across several lines,
   and a round trip of random values through `stringify` and `parse`.
 - `test/format.test.js` tests `format`: the layout, and that every valid text
   of the corpus and the specification keeps its value and is formatted

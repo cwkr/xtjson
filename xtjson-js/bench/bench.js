@@ -73,7 +73,11 @@ function mixedData() {
 
 /** A configuration file as a person would write it: all extensions in use. */
 function configText(sections) {
-  const lines = ['# Service configuration', '/* generated for the benchmark,', '   not written by hand */', ''];
+  const lines = [
+    '# Service configuration', '/* generated for the benchmark,', '   not written by hand */',
+    "%version: '0.6'", '%define: nil = null', "%define: unknown = 'not specified'",
+    '%define: limits = { soft: 10k, hard: 2h, window: 5min }', '',
+  ];
   for (let i = 0; i < sections; i++) {
     lines.push(
       `// section ${i}`,
@@ -82,7 +86,7 @@ function configText(sections) {
       `  host: "host${i}.example.org"`,
       `  port: ${8000 + i}`,
       `  enabled: ${i % 3 === 0 ? 'false' : 'true'}`,
-      `  owner: null`,
+      `  owner: ${i % 2 === 0 ? 'nil' : 'unknown'}`,
       `  cache: ${1 + (i % 64)}mb`,
       `  timeout: ${100 + i}ms`,
       `  ratio: ${(i % 100) + 0.5}pct`,
@@ -101,7 +105,7 @@ function configText(sections) {
       `    Last line.`,
       `    "`,
       `  "quoted name": 'it\\'s \\u{1F600} \\x41\\u0042'`,
-      `  limits: { soft: 10k, hard: 2h, window: 5min }`,
+      `  limits: limits`,
       `}`,
       '',
     );
@@ -155,7 +159,7 @@ const escapedStrings = stringArray(['line\nbreak and\ttab', 'quote " and backsla
 const plainStringsText = JSON.stringify(plainStrings);
 const escapedStringsText = JSON.stringify(escapedStrings);
 const numbers = numberText();
-const options = new Options({ namedValues: { nil: null, unknown: 'not specified' }, ijson: true });
+const options = new Options({ ijson: true });
 const suffixOptions = new Options({ writeNumberSuffixes: true, writeSingleQuotes: true });
 
 /** [name, size of the document in characters, function] */
@@ -166,7 +170,7 @@ const CASES = [
   ['parse  JSON indented (JSON.parse)', mixedIndented.length, () => JSON.parse(mixedIndented)],
   ['parse  XTJSON generated', mixedXT.length, () => parse(mixedXT)],
   ['parse  XTJSON config', config.length, () => parse(config)],
-  ['parse  XTJSON config, I-JSON + named values', config.length, () => parse(config, options)],
+  ['parse  XTJSON config, I-JSON', config.length, () => parse(config, options)],
   ['parse  small document', SMALL.length, () => parse(SMALL)],
   ['parse  plain strings', plainStringsText.length, () => parse(plainStringsText)],
   ['parse  escaped strings', escapedStringsText.length, () => parse(escapedStringsText)],

@@ -18,36 +18,20 @@ export type JSONValue =
   | JSONValue[]
   | { [name: string]: JSONValue };
 
-/** The value of a named value (6.4): a string, a number, a boolean or null. */
-export type NamedValue = string | number | boolean | null;
-
 /**
- * Definitions given as a plain object, a `Map` or an iterable of
- * `[key, value]` pairs. The order of the entries is kept.
+ * Options for `parse` and `stringify`.
+ *
+ * There are no options for named values, directives or number suffixes:
+ * named values are defined in the document with `%define` (6.6), directives
+ * and suffixes are fixed by the specification (6.5, 9.5). Unknown properties
+ * are a `TypeError`.
  */
-export type DefinitionEntries<T> =
-  | Readonly<Record<string, T>>
-  | ReadonlyMap<string, T>
-  | Iterable<readonly [string, T]>;
-
-/** Options for `parse` and `stringify`. */
 export interface OptionsInit {
   /**
-   * Named values (6.4): identifier → string, number, boolean or `null`, in
-   * a fixed order; objects and arrays are not permitted. `true`, `false`
-   * and `null` are predefined and cannot be redefined.
-   * `stringify` writes a value as a named value if one has exactly this
-   * value; if several have it, the one defined last wins, and the predefined
-   * ones are used only if no custom one matches.
-   *
-   * There is no option for number suffixes: they are fixed by section 9.5.
-   * Unknown properties are a `TypeError`.
-   */
-  namedValues?: DefinitionEntries<NamedValue>;
-  /**
    * I-JSON mode (section 12). `parse` rejects a document in which an object
-   * contains a name twice, or in which a name or string value (also from a
-   * named value) contains an unpaired surrogate or a Unicode noncharacter.
+   * contains a name twice, or in which a name or string value contains an
+   * unpaired surrogate or a Unicode noncharacter; this also applies to the
+   * values of `%define` and `%version`, even if they are not used.
    * `stringify` throws a `TypeError` for such names and strings.
    * Default: false; then the member that comes last applies.
    */
@@ -60,6 +44,14 @@ export interface OptionsInit {
    * stack of the engine; `parse` then also throws a `ParserError`.
    */
   maxDepth?: number;
+  /**
+   * Maximum number of JSON values that replacing named values may produce
+   * in one document, a positive integer; every object, array and other
+   * value counts as one. Definitions that use one another can multiply the
+   * size of the value (section 13). `parse` reports a document that
+   * exceeds the limit as a `ParserError`. Default: 1000000.
+   */
+  maxExpansion?: number;
   /**
    * `stringify` writes number suffixes: integers that are a multiple of the
    * factor with `mb`, `kb`, `k`, `h` or `min`, fractions between -1 and 1
@@ -80,12 +72,12 @@ export interface OptionsInit {
  * call; plain `OptionsInit` objects are validated again on each call.
  */
 export class Options implements OptionsInit {
-  /** @throws {TypeError} if an option is unknown or invalid, or a definition violates section 6.4. */
+  /** @throws {TypeError} if an option is unknown or invalid. */
   constructor(init?: OptionsInit | null);
-  /** The named values in their defined order (a new Map). */
-  get namedValues(): Map<string, NamedValue>;
   /** The maximum nesting depth of objects and arrays. */
   get maxDepth(): number;
+  /** The maximum number of JSON values that replacing named values may produce. */
+  get maxExpansion(): number;
   /** True for the I-JSON mode. */
   get ijson(): boolean;
   /** True if `stringify` writes number suffixes. */
@@ -114,6 +106,18 @@ export type Reviver = (this: any, key: string, value: any) => any;
 /** Replacer function as in `JSON.stringify`. */
 export type Replacer = (this: any, key: string, value: any) => any;
 
+/** The value of a document together with its version statements. */
+export interface ParsedDocument {
+  /** The value of the document, as returned by `parse`. */
+  value: any;
+  /**
+   * The version statements of the `%version` directives (6.7), identifier
+   * → value, in the order of the document. The version of the specification
+   * is stored under `xtjson`. The versions are not checked.
+   */
+  versions: Map<string, string | number>;
+}
+
 /**
  * Parses an XTJSON document and returns its value. Numbers become `number`;
  * a number with the suffix `n` and without a fraction part becomes a
@@ -122,13 +126,28 @@ export type Replacer = (this: any, key: string, value: any) => any;
  * @param text the document
  * @param reviver transforms the result, as in `JSON.parse`; `null` or
  *   `undefined` for none
- * @param options named values, the I-JSON mode and the maximum nesting depth
+ * @param options the I-JSON mode and the limits
  * @throws {ParserError} if the text is not a valid XTJSON document
  * @throws {TypeError} if the arguments or the options are invalid
  */
 export function parse(text: string, reviver?: Reviver | null, options?: Options | OptionsInit | null): any;
 /** Parses an XTJSON document with options. */
 export function parse(text: string, options: Options | OptionsInit): any;
+
+/**
+ * Parses an XTJSON document and returns its value together with the version
+ * statements of its `%version` directives. The arguments are the same as for
+ * `parse`.
+ *
+ * @example
+ * parseDocument('%version: "0.6"\nport: 8080');
+ * // { value: { port: 8080 }, versions: Map { 'xtjson' => '0.6' } }
+ * @throws {ParserError} if the text is not a valid XTJSON document
+ * @throws {TypeError} if the arguments or the options are invalid
+ */
+export function parseDocument(text: string, reviver?: Reviver | null, options?: Options | OptionsInit | null): ParsedDocument;
+/** Parses an XTJSON document with options and returns its value and versions. */
+export function parseDocument(text: string, options: Options | OptionsInit): ParsedDocument;
 
 /**
  * Writes a value as an XTJSON document, like `JSON.stringify`.
@@ -138,15 +157,14 @@ export function parse(text: string, options: Options | OptionsInit): any;
  * commas and strings with line breaks across several lines; numbers of
  * 10000 or more grouped with `_`; number suffixes only with
  * `writeNumberSuffixes`; `bigint` values with the suffix `n`; strings in `"`, or in `'` with
- * `writeSingleQuotes`; strings, numbers, booleans and `null` as named values
- * where defined.
+ * `writeSingleQuotes`. Named values and directives are not written.
  *
  * @param value the value
  * @param replacer a function or an array of names, as in `JSON.stringify`
  * @param space indentation: a number of spaces (at most 10) or a string of
  *   at most 10 spaces and tabs
- * @param options named values, the I-JSON mode, the maximum nesting depth,
- *   number suffixes and quotation marks
+ * @param options the I-JSON mode, the maximum nesting depth, number
+ *   suffixes and quotation marks
  * @returns the document, or `undefined` for `undefined`, functions and symbols
  * @throws {TypeError} for circular references, nesting deeper than
  *   `maxDepth`, invalid arguments or options, and strings not permitted in
@@ -185,8 +203,8 @@ export function format(text: string, space?: string | number | null): string;
  * can be reused for many documents. Its state is private.
  *
  * @example
- * const parser = new Parser({ namedValues: { nil: null } });
- * const value = parser.parse('owner: nil');
+ * const parser = new Parser({ ijson: true });
+ * const value = parser.parse('%define: nil = null\nowner: nil');
  */
 export class Parser {
   /** @throws {TypeError} if the options are invalid */
@@ -197,6 +215,13 @@ export class Parser {
    * @throws {TypeError} if the reviver is not a function
    */
   parse(text: string, reviver?: Reviver | null): any;
+  /**
+   * Parses an XTJSON document and returns its value and version statements,
+   * see `parseDocument`.
+   * @throws {ParserError} if the text is not a valid XTJSON document
+   * @throws {TypeError} if the reviver is not a function
+   */
+  parseDocument(text: string, reviver?: Reviver | null): ParsedDocument;
 }
 
 /**

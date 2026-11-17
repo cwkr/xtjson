@@ -1,14 +1,15 @@
 /**
  * XTJSON parser and generator for JavaScript.
  *
- * Implements the XTJSON specification, draft 0.5 (docs/xtjson-spec-en.md).
+ * Implements the XTJSON specification, draft 0.6 (docs/xtjson-spec-en.md).
  *
  *     import { parse, stringify } from '@cwkr/xtjson';
  *     const value = parse(text, reviver, options);
+ *     const { value, versions } = parseDocument(text, reviver, options);
  *     const text = stringify(value, replacer, space, options);
  *
  *     import { Parser, Generator, Options } from '@cwkr/xtjson';
- *     const options = new Options({ namedValues: { nil: null } });
+ *     const options = new Options({ ijson: true });
  *     const value = new Parser(options).parse(text);
  *     const text = new Generator(options).stringify(value, null, 2);
  *
@@ -20,7 +21,7 @@
  * shared.js. No module has side effects when it is imported.
  */
 
-export { parse, Parser, ParserError } from './parser.js';
+export { parse, parseDocument, Parser, ParserError } from './parser.js';
 export { stringify, Generator } from './generator.js';
 export { format } from './formatter.js';
 export { Options } from './shared.js';

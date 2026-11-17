@@ -1,8 +1,8 @@
 /**
  * Code shared by the parser (parser.js) and the generator (generator.js):
- * character codes and classes, the options (named values, section 6.4, and
- * the I-JSON mode, section 12), the I-JSON check for strings and the
- * assignment of optional arguments.
+ * character codes and classes, the options (the I-JSON mode, section 12,
+ * limits, section 11, and the output format), the I-JSON check for strings
+ * and the assignment of optional arguments.
  *
  * The module has no side effects when it is imported: at the top level there
  * are only declarations and literals. Tables are built on first use.
@@ -16,6 +16,12 @@
 
 /** Default for the option `maxDepth`: maximum nesting depth of objects and arrays. */
 export const DEFAULT_MAX_DEPTH = 1000;
+
+/**
+ * Default for the option `maxExpansion`: maximum number of JSON values that
+ * replacing named values may produce in one document (sections 11 and 13).
+ */
+export const DEFAULT_MAX_EXPANSION = 1000000;
 
 // ---------------------------------------------------------------------------
 // Character classes
@@ -113,37 +119,32 @@ export function ijsonStringIssue(s) {
 }
 
 // ---------------------------------------------------------------------------
-// Options: named values (6.4) and I-JSON mode (12)
+// Options: I-JSON mode (12), limits (11) and output format
 
-const OPTION_NAMES = ['namedValues', 'ijson', 'maxDepth', 'writeNumberSuffixes', 'writeSingleQuotes'];
-const OPTION_LIST = '"namedValues", "ijson", "maxDepth", "writeNumberSuffixes" and "writeSingleQuotes"';
-const IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
+const OPTION_NAMES = ['ijson', 'maxDepth', 'maxExpansion', 'writeNumberSuffixes', 'writeSingleQuotes'];
+const OPTION_LIST = '"ijson", "maxDepth", "maxExpansion", "writeNumberSuffixes" and "writeSingleQuotes"';
 
 /**
  * Internal state of an `Options` instance, read by parser and generator.
  * @typedef {object} OptionsState
- * @property {Map<string, string | number | boolean | null>} values named values
  * @property {boolean} ijson
  * @property {number} maxDepth
+ * @property {number} maxExpansion
  * @property {boolean} writeNumberSuffixes
  * @property {boolean} writeSingleQuotes
- * @property {Map<string, string>} ijsonIssues named values whose value is
- *   not I-JSON conforming, with the reason
- * @property {Map<unknown, string>} names value -> identifier, for stringify;
- *   the last definition wins
  */
 
 /** Set in the static block of `Options`; see `resolveOptions`. */
 let resolve;
 
 /**
- * Validated, immutable options for `parse()` and `stringify()`: custom named
- * values (6.4) and the I-JSON mode (12). The number suffixes are fixed by
- * section 9.5 and cannot be changed.
+ * Validated, immutable options for `parse()` and `stringify()`: the I-JSON
+ * mode (12), limits (11) and the output format of `stringify`.
  *
- * Named values keep the order in which they are given. When several named
- * values have the same value, `stringify` writes the one defined last.
- * Validate once and reuse the instance for many calls.
+ * Named values are defined only in the document, with `%define` (6.6); the
+ * directives and the number suffixes are fixed by sections 6.5 and 9.5. None
+ * of them can be defined by the application. Validate once and reuse the
+ * instance for many calls.
  */
 export class Options {
   /** @type {OptionsState} */
@@ -163,16 +164,15 @@ export class Options {
   }
 
   /**
-   * @param {{namedValues?: object, ijson?: boolean, maxDepth?: number,
+   * @param {{ijson?: boolean, maxDepth?: number, maxExpansion?: number,
    *   writeNumberSuffixes?: boolean, writeSingleQuotes?: boolean} | Options} [init]
-   *   `namedValues`: identifier -> string, number, boolean or null, as a
-   *   plain object, a `Map` or an iterable of `[key, value]` pairs.
    *   `ijson`: true for the I-JSON mode.
    *   `maxDepth`: maximum nesting depth of objects and arrays (default 1000).
+   *   `maxExpansion`: maximum number of JSON values that replacing named
+   *   values may produce in one document (default 1000000).
    *   `writeNumberSuffixes`: `stringify` writes number suffixes (default false).
    *   `writeSingleQuotes`: `stringify` writes strings in `'` (default false).
-   * @throws {TypeError} if an option is unknown or invalid, or a definition
-   *   violates 6.4
+   * @throws {TypeError} if an option is unknown or invalid
    */
   constructor(init) {
     if (init !== undefined && init !== null) {
@@ -186,39 +186,19 @@ export class Options {
       }
       for (const key of Object.keys(init)) {
         if (!OPTION_NAMES.includes(key)) {
-          throw new TypeError(`Unknown XTJSON option ${quote(key)}. The options are ${OPTION_LIST}`);
+          const hint = key === 'namedValues'
+            ? '; named values are defined in the document with %define, not by the application'
+            : '';
+          throw new TypeError(`Unknown XTJSON option ${quote(key)}${hint}. The options are ${OPTION_LIST}`);
         }
       }
     }
     const ijson = Options.#booleanOption(init, 'ijson');
     const writeNumberSuffixes = Options.#booleanOption(init, 'writeNumberSuffixes');
     const writeSingleQuotes = Options.#booleanOption(init, 'writeSingleQuotes');
-    const maxDepth = init?.maxDepth ?? DEFAULT_MAX_DEPTH;
-    if (!Number.isSafeInteger(maxDepth) || maxDepth < 1) {
-      throw new TypeError(`Invalid XTJSON option: "maxDepth" must be a positive integer, not ${quote(maxDepth)}`);
-    }
-    const values = new Map();
-    const ijsonIssues = new Map();
-    const names = new Map();
-    for (const [id, value] of Options.#entries(init?.namedValues, 'namedValues')) {
-      if (typeof id !== 'string' || !IDENTIFIER.test(id)) {
-        throw new TypeError(`Invalid XTJSON definition: ${quote(id)} is not an identifier (ASCII letters, digits, "_" and "$", not beginning with a digit)`);
-      }
-      if (isPredefined(id)) {
-        throw new TypeError(`Invalid XTJSON definition: the named value '${id}' is predefined and cannot be redefined`);
-      }
-      if (values.has(id)) {
-        throw new TypeError(`Invalid XTJSON definition: the named value '${id}' is defined more than once`);
-      }
-      Options.#checkNamedValue(value, id);
-      values.set(id, value);
-      if (typeof value === 'string') {
-        const issue = ijsonStringIssue(value);
-        if (issue !== undefined) ijsonIssues.set(id, issue);
-      }
-      names.set(value, id);
-    }
-    this.#state = { values, ijson, maxDepth, writeNumberSuffixes, writeSingleQuotes, ijsonIssues, names };
+    const maxDepth = Options.#limitOption(init, 'maxDepth', DEFAULT_MAX_DEPTH);
+    const maxExpansion = Options.#limitOption(init, 'maxExpansion', DEFAULT_MAX_EXPANSION);
+    this.#state = { ijson, maxDepth, maxExpansion, writeNumberSuffixes, writeSingleQuotes };
     Object.freeze(this);
   }
 
@@ -232,20 +212,22 @@ export class Options {
   }
 
   /**
-   * The custom named values in their defined order. Returns a new `Map`.
-   * @returns {Map<string, string | number | boolean | null>}
-   */
-  get namedValues() {
-    return new Map(this.#state.values);
-  }
-
-  /**
    * Maximum nesting depth of objects and arrays, for `parse` and
    * `stringify`. An implicit root object counts as a level.
    * @returns {number}
    */
   get maxDepth() {
     return this.#state.maxDepth;
+  }
+
+  /**
+   * Maximum number of JSON values that replacing named values may produce
+   * in one document, for `parse`. Every object, array and other value
+   * counts as one.
+   * @returns {number}
+   */
+  get maxExpansion() {
+    return this.#state.maxExpansion;
   }
 
   /**
@@ -279,42 +261,13 @@ export class Options {
     return value;
   }
 
-  /** Entries of a plain object, a Map or an iterable of pairs. */
-  static #entries(source, what) {
-    if (source === undefined || source === null) return [];
-    if (typeof source !== 'object') {
-      throw new TypeError(`Invalid XTJSON definition: "${what}" must be an object, a Map or an iterable of [key, value] pairs`);
+  /** A limit: a positive safe integer; `fallback` if not given. */
+  static #limitOption(init, name, fallback) {
+    const value = init?.[name] ?? fallback;
+    if (!Number.isSafeInteger(value) || value < 1) {
+      throw new TypeError(`Invalid XTJSON option: "${name}" must be a positive integer, not ${quote(value)}`);
     }
-    if (typeof source[Symbol.iterator] !== 'function') return Object.entries(source);
-    const result = [];
-    for (const entry of source) {
-      if (entry === null || typeof entry !== 'object' || typeof entry[Symbol.iterator] !== 'function') {
-        throw new TypeError(`Invalid XTJSON definition: the entries of "${what}" must be [key, value] pairs`);
-      }
-      const [key, value] = entry;
-      result.push([key, value]);
-    }
-    return result;
-  }
-
-  /**
-   * Validates the value of the named value `id` (6.4): a string, a finite
-   * number, true, false or null. Objects and arrays are not permitted.
-   */
-  static #checkNamedValue(value, id) {
-    switch (typeof value) {
-      case 'string':
-      case 'boolean':
-        return;
-      case 'number':
-        if (Number.isFinite(value)) return;
-        throw new TypeError(`Invalid XTJSON definition: the named value '${id}' is ${value}, which is not a JSON number`);
-      case 'object':
-        if (value === null) return;
-        throw new TypeError(`Invalid XTJSON definition: the named value '${id}' is ${Array.isArray(value) ? 'an array' : 'an object'}; a named value must be a string, a number, true, false or null`);
-      default:
-        throw new TypeError(`Invalid XTJSON definition: the named value '${id}' is ${typeof value === 'undefined' ? 'undefined' : 'a ' + typeof value}; a named value must be a string, a number, true, false or null`);
-    }
+    return value;
   }
 }
 
