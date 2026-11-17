@@ -24,7 +24,7 @@ describe('API', () => {
   });
 
   test('Parser keeps its options and hides its state', () => {
-    const parser = new Parser({ ijson: true });
+    const parser = new Parser({ strict: true });
     assert.deepEqual(parser.parse('%define: nil = null\na: nil'), { a: null });
     assert.deepEqual(parser.parse('[1, 2]'), [1, 2]);
     assert.throws(() => parser.parse('{a: 1, a: 2}'), /Duplicate name/);
@@ -108,7 +108,7 @@ describe('reviver', () => {
 });
 
 describe('call forms', () => {
-  const init = { ijson: true };
+  const init = { strict: true };
   const defs = new Options(init);
   const text = '%define: nil = null\n[nil, 50pct, 1]';
   const expected = [null, 0.5, 1];
@@ -181,14 +181,22 @@ describe('directives and named values', () => {
     assert.deepEqual([...parseDocument('{}').versions], []);
     assert.deepEqual([...parseDocument('%version: xtjson = 1.5\n{}').versions], [['xtjson', 1.5]]);
     assert.deepEqual(parseDocument('[1]', (k, v) => (v === 1 ? 2 : v)).value, [2]);
-    assert.deepEqual(new Parser({ ijson: true }).parseDocument('%version: 1\n1').value, 1);
+    assert.deepEqual(new Parser({ strict: true }).parseDocument('%version: 1\n[1]').value, [1]);
+  });
+
+  test('a version can be a number with a suffix or a named value', () => {
+    const text = "%version: windows = 2k\n%define: v = '1.4.0'\n%version: app = v\n%version: 10n\nversion: v";
+    const { value, versions } = parseDocument(text);
+    assert.deepEqual(value, { version: '1.4.0' });
+    assert.deepEqual([...versions], [['windows', 2000], ['app', '1.4.0'], ['xtjson', 10n]]);
   });
 
   test('error messages for directives', () => {
     const cases = [
       ['% define: a = 1\n[a]', /The name of a directive must follow '%' directly/, [1, 2]],
       ['%Define: a = 1\n[a]', /Unknown directive '%Define'; did you mean '%define'\? Directives are case-sensitive/, [1, 1]],
-      ['%import: x = "a"\n{}', /Unknown directive '%import'\. The directives are %define and %version/, [1, 1]],
+      ['%import: x = "a"\n{}', /Unknown directive '%import'\. The directives are %define, %version and %strict/, [1, 1]],
+      ['%STRICT: true\n{}', /Unknown directive '%STRICT'; did you mean '%strict'\?/, [1, 1]],
       ['%define a = 1\n[a]', /expected ':' after '%define'/, [1, 9]],
       ['%define: "x"\n{}', /%define needs an identifier and '=' before the value/, [1, 10]],
       ['%define: null = 1\n1', /The named value 'null' is predefined and cannot be redefined/, [1, 10]],
@@ -202,10 +210,13 @@ describe('directives and named values', () => {
       ['1\n%version: 1', /A directive is permitted only at the top level/, [2, 1]],
       ['%version: 1\n%version: xtjson = 2\n{}', /The version of the specification is already stated \(%version: v and %version: xtjson = v are the same\)/, [2, 11]],
       ["%version: s = 1\n%version: s = '1'\n{}", /The version 's' is already stated; each version may be stated only once/, [2, 11]],
-      ['%version: 1k\n{}', /The value of %version must be a string or a number without suffix/, [1, 11]],
-      ['%version: 1n\n{}', /must be a string or a number without suffix/, [1, 11]],
-      ['%version: nil\n{}', /must be a string or a number without suffix/, [1, 11]],
-      ['%version: [1]\n{}', /must be a string or a number without suffix/, [1, 11]],
+      ['%version: nil\n{}', /Undefined named value 'nil'/, [1, 11]],
+      ['%version: [1]\n{}', /The value of %version must be a string or a number, or a named value whose value is a string or a number/, [1, 11]],
+      ['%define: t = true\n%version: t\n{}', /The value of %version must be a string or a number/, [2, 11]],
+      ['%strict: s = true\n{}', /%strict has no identifier; write '%strict: true' or '%strict: false'/, [1, 10]],
+      ['%strict: true\n%strict: true\n{}', /%strict is already stated at line 1, column 1; %strict may occur only once/, [2, 1]],
+      ['%strict: 1\n{}', /The value of %strict must be true or false, or a named value whose value is true or false/, [1, 10]],
+      ['%define: on = "true"\n%strict: on\n{}', /The value of %strict must be true or false/, [2, 10]],
     ];
     for (const [text, pattern, [line, column]] of cases) {
       const e = error(text);
@@ -217,16 +228,16 @@ describe('directives and named values', () => {
 
 describe('options', () => {
   test('Options is immutable', () => {
-    const init = { ijson: true };
+    const init = { strict: true };
     const options = new Options(init);
-    init.ijson = false;
-    assert.equal(options.ijson, true);
+    init.strict = false;
+    assert.equal(options.strict, true);
     assert.ok(Object.isFrozen(options));
   });
 
   test('an Options instance can be used as init', () => {
-    const copy = new Options(new Options({ ijson: true, maxExpansion: 7 }));
-    assert.equal(copy.ijson, true);
+    const copy = new Options(new Options({ strict: true, maxExpansion: 7 }));
+    assert.equal(copy.strict, true);
     assert.equal(copy.maxExpansion, 7);
   });
 
@@ -238,9 +249,10 @@ describe('options', () => {
   });
 
   test('unknown options are a TypeError', () => {
-    assert.throws(() => parse('1', { ijosn: true }),
-      /Unknown XTJSON option "ijosn"\. The options are "ijson", "maxDepth", "maxExpansion", "writeNumberSuffixes" and "writeSingleQuotes"/);
-    assert.deepEqual(parse('1', { ijson: undefined, maxDepth: undefined, maxExpansion: undefined }), 1);
+    assert.throws(() => parse('1', { strcit: true }),
+      /Unknown XTJSON option "strcit"\. The options are "maxDepth", "maxExpansion", "strict", "writeNumberSuffixes" and "writeSingleQuotes"/);
+    assert.throws(() => parse('1', { ijson: true }), /Unknown XTJSON option "ijson"; the I-JSON mode is strict mode, option "strict"/);
+    assert.deepEqual(parse('1', { strict: undefined, maxDepth: undefined, maxExpansion: undefined }), 1);
   });
 
   test('invalid options throw TypeError', () => {
@@ -258,70 +270,109 @@ describe('options', () => {
   });
 });
 
-describe('I-JSON mode', () => {
-  const ijson = new Options({ ijson: true });
+describe('strict mode', () => {
+  const strict = new Options({ strict: true });
 
   test('is off by default and can be read back', () => {
-    assert.equal(new Options().ijson, false);
-    assert.equal(ijson.ijson, true);
-    assert.equal(new Options(ijson).ijson, true);
+    assert.equal(new Options().strict, false);
+    assert.equal(strict.strict, true);
+    assert.equal(new Options(strict).strict, true);
     assert.deepEqual(parse('{"a": 1, "a": 2}'), { a: 2 });
   });
 
-  test('"ijson" must be a boolean', () => {
+  test('"strict" must be a boolean', () => {
     for (const value of [1, 'true', null, {}]) {
       if (value === null) continue; // null means "not given"
-      assert.throws(() => new Options({ ijson: value }), /"ijson" must be true or false/);
+      assert.throws(() => new Options({ strict: value }), /"strict" must be true or false/);
     }
   });
 
   test('duplicate names are an error, independent of their notation', () => {
-    const e = error('{\n  a: 1\n  "\\u0061": 2\n}', ijson);
-    assert.match(e.message, /Duplicate name "a"; names must be unique in I-JSON mode \(first occurrence at line 2, column 3\)/);
+    const e = error('{\n  a: 1\n  "\\u0061": 2\n}', strict);
+    assert.match(e.message, /Duplicate name "a"; names must be unique in strict mode \(first occurrence at line 2, column 3\)/);
     assert.deepEqual([e.line, e.column], [3, 3]);
-    assert.match(error("a: 1\nb: 2\n'a': 3", ijson).message, /first occurrence at line 1, column 1/);
-    assert.match(error('[{x: 1}, {y: {z: 1, z: 2}}]', ijson).message, /Duplicate name "z"/);
-    assert.match(error('{"__proto__": 1, __proto__: 2}', ijson).message, /Duplicate name "__proto__"/);
+    assert.match(error("a: 1\nb: 2\n'a': 3", strict).message, /first occurrence at line 1, column 1/);
+    assert.match(error('[{x: 1}, {y: {z: 1, z: 2}}]', strict).message, /Duplicate name "z"/);
+    assert.match(error('{"__proto__": 1, __proto__: 2}', strict).message, /Duplicate name "__proto__"/);
   });
 
   test('the same name in different objects is permitted', () => {
-    assert.deepEqual(parse('a: {a: {a: 1}}\nb: [{a: 1}, {a: 2}]', ijson),
+    assert.deepEqual(parse('a: {a: {a: 1}}\nb: [{a: 1}, {a: 2}]', strict),
       { a: { a: { a: 1 } }, b: [{ a: 1 }, { a: 2 }] });
   });
 
   test('unpaired surrogates in strings and names are an error', () => {
     for (const text of [String.raw`"\uDEAD"`, String.raw`"\uD83D"`, String.raw`["\uDE00\uD83D"]`,
       String.raw`{"\uD800": 1}`, "'x\t\\uDC00'", String.raw`a: "\uD83Dx"`]) {
-      assert.match(error(text, ijson).message, /unpaired surrogate U\+D[89A-F][0-9A-F]{2}, which is not permitted in I-JSON mode/, text);
+      assert.match(error(text, strict).message, /unpaired surrogate U\+D[89A-F][0-9A-F]{2}, which is not permitted in strict mode/, text);
     }
-    assert.equal(parse(String.raw`"😀\u{1F600}"`, ijson), '\u{1F600}\u{1F600}');
+    assert.deepEqual(parse(String.raw`["😀\u{1F600}"]`, strict), ['\u{1F600}\u{1F600}']);
   });
 
   test('noncharacters in strings and names are an error', () => {
     const nonchars = ['\\uFDD0', '\\uFDEF', '\\uFFFE', '\\uFFFF', '\\u{1FFFE}', '\\u{10FFFF}', '\\uD83F\\uDFFF'];
     for (const escape of nonchars) {
-      assert.match(error(`"x${escape}"`, ijson).message, /the noncharacter U\+[0-9A-F]+, which is not permitted/, escape);
-      assert.match(error(`{"${escape}": 1}`, ijson).message, /noncharacter/, escape);
+      assert.match(error(`"x${escape}"`, strict).message, /the noncharacter U\+[0-9A-F]+, which is not permitted/, escape);
+      assert.match(error(`{"${escape}": 1}`, strict).message, /noncharacter/, escape);
     }
     // written directly, not as an escape sequence
-    assert.match(error('"' + String.fromCharCode(0xffff) + '"', ijson).message, /noncharacter U\+FFFF/);
+    assert.match(error('"' + String.fromCharCode(0xffff) + '"', strict).message, /noncharacter U\+FFFF/);
     // the neighbours are permitted
-    assert.equal(parse(String.raw`"﷏ﷰ�\u{1FFFD}\u{10000}"`, ijson).length, 7);
+    assert.equal(parse(String.raw`["﷏ﷰ�\u{1FFFD}\u{10000}"]`, strict)[0].length, 7);
   });
 
   test('values of directives count as well, even if they are not used', () => {
-    assert.deepEqual(parse('%define: good = "b"\n[good]', ijson), ['b']);
-    const e = error('%define: bad = "ok\\uFFFF"\n1', ijson);
+    assert.deepEqual(parse('%define: good = "b"\n[good]', strict), ['b']);
+    const e = error('%define: bad = "ok\\uFFFF"\n1', strict);
     assert.match(e.message, /noncharacter U\+FFFF/);
     assert.deepEqual([e.line, e.column], [1, 16]);
-    assert.match(error('%define: lone = "\\uD800"\n[lone]', ijson).message, /unpaired surrogate U\+D800/);
-    assert.match(error('%version: "\\uD800"\n1', ijson).message, /unpaired surrogate U\+D800/);
-    // outside the I-JSON mode the same document is fine
+    assert.match(error('%define: lone = "\\uD800"\n[lone]', strict).message, /unpaired surrogate U\+D800/);
+    assert.match(error('%version: "\\uD800"\n1', strict).message, /unpaired surrogate U\+D800/);
+    // outside strict mode the same document is fine
     assert.deepEqual(parse('%define: lone = "\\uD800"\n[lone]'), ['\uD800']);
   });
 
   test('large numbers are not rejected (only a SHOULD in section 12)', () => {
-    assert.equal(parse('0xFFFF_FFFF_FFFF_F800', ijson), 2 ** 64 - 2048);
+    assert.deepEqual(parse('[0xFFFF_FFFF_FFFF_F800]', strict), [2 ** 64 - 2048]);
+  });
+
+  test('the root value must be an object or an array', () => {
+    for (const text of ['1', '"x"', 'null', 'true', '10n', '%define: a = 1\na', '  \n\n  "x" // k']) {
+      const e = error(text, strict);
+      assert.match(e.message, /In strict mode the root value must be an object or an array/, text);
+    }
+    assert.deepEqual([error('\n  "x"', strict).line, error('\n  "x"', strict).column], [2, 3]);
+    assert.deepEqual(parse('a: 1', strict), { a: 1 });
+    assert.deepEqual(parse('%define: a = [1]\na', strict), [1]);
+  });
+
+  test('%strict: true requests strict mode for the document', () => {
+    assert.deepEqual(parse('%strict: true\n{a: 1}'), { a: 1 });
+    assert.deepEqual(parse('%define: yes = true, %strict: yes\n[1]'), [1]);
+    assert.match(error('%strict: true\n{a: 1, a: 2}').message, /Duplicate name "a"; names must be unique in strict mode/);
+    assert.match(error('%strict: true\n1').message, /root value must be an object or an array/);
+    assert.match(error('%strict: true\n["\\uFFFF"]').message, /noncharacter U\+FFFF/);
+    // %strict: false and no %strict leave strict mode off
+    assert.deepEqual(parse('%strict: false\n{a: 1, a: 2}'), { a: 2 });
+    assert.equal(parse('%define: no = false\n%strict: no\n1'), 1);
+  });
+
+  test('%strict also applies to the directives before it', () => {
+    const e = error('%define: d = {a: 1, a: 2}\n%define: yes = true\n%strict: yes\n{}');
+    assert.match(e.message, /Duplicate name "a"; names must be unique in strict mode \(first occurrence at line 1, column 15\) \(strict mode is requested by %strict at line 3, column 1\)/);
+    assert.deepEqual([e.line, e.column], [1, 21]);
+    assert.match(error('%version: "\\uD800"\n%strict: true\n{}').message, /unpaired surrogate U\+D800.*requested by %strict at line 2, column 1/);
+    // the first violation is reported
+    assert.match(error('%define: s = "\\uFFFF"\n%define: d = {a: 1, a: 2}\n%strict: true\n{}').message, /noncharacter U\+FFFF/);
+    assert.deepEqual(parse('%define: d = {a: 1, a: 2}\n%strict: false\n[d]'), [{ a: 2 }]);
+  });
+
+  test('%strict: false contradicts strict mode of the application', () => {
+    const e = error('%version: 1\n%strict: false\n{}', strict);
+    assert.match(e.message, /%strict: false contradicts strict mode, which the application requests with the option strict/);
+    assert.deepEqual([e.line, e.column], [2, 1]);
+    assert.match(error('%define: no = false\n%strict: no\n[1]', strict).message, /contradicts strict mode/);
+    assert.deepEqual(parse('%strict: true\n[1]', strict), [1]);
   });
 });
 

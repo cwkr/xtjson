@@ -48,7 +48,7 @@ Parses an XTJSON document and returns its value.
   string. It must be decoded text; when reading bytes, decode them as UTF-8
   first (for example with `new TextDecoder('utf-8', { fatal: true })`).
 - `reviver`: optional, works exactly as in `JSON.parse`.
-- `options`: optional I-JSON mode and limits, see [Options](#options).
+- `options`: optional strict mode and limits, see [Options](#options).
 
 ```js
 parse(text, options);              // options only
@@ -63,8 +63,8 @@ exceeds the range of a JavaScript number (`1e400`) are an error instead of
 (see `maxDepth`).
 
 If a name occurs more than once in an object, the member that comes last in
-the document applies, as with `JSON.parse`. In I-JSON mode it is an error
-instead.
+the document applies, as with `JSON.parse`. In [strict mode](#strict-mode)
+it is an error instead.
 
 ### Directives and named values
 
@@ -73,7 +73,8 @@ named value (6.6); its value can be any value, including an object or an
 array, and can use the named values defined before it. Every position where
 a named value is used gets a copy of its own. `%version` states the version
 of the specification, or with an identifier the version of something else
-(6.7).
+(6.7). `%strict: true` makes the parser read the document in
+[strict mode](#strict-mode) (6.8).
 
 ```js
 parse(`
@@ -92,8 +93,13 @@ work: address
   for them.
 - A named value can be defined only once, `true`, `false` and `null` cannot
   be redefined, and a named value can be used only after its definition.
-- Directives other than `%define` and `%version`, and directives after the
-  start of the content or inside objects and arrays, are errors.
+- Directives other than `%define`, `%version` and `%strict`, and directives
+  after the start of the content or inside objects and arrays, are errors.
+- The value of `%version` is a string or a number, also with a suffix or as
+  a named value whose value is a string or a number: `%version: windows = 2k`
+  states the version `2000`. Each version is stated at most once.
+- The value of `%strict` is `true` or `false`, also as a named value, and
+  `%strict` occurs at most once.
 - Definitions that use one another can multiply the size of the value. The
   option `maxExpansion` limits the number of values that replacing named
   values produces, `maxDepth` also limits their nesting.
@@ -101,9 +107,10 @@ work: address
 ### `parseDocument(text, reviver?, options?)`
 
 Like `parse`, but returns the value together with the version statements of
-the `%version` directives, as a `Map` from identifier to value. The version
-of the specification is stored under `xtjson`. The versions are not checked;
-the application decides what to do with them.
+the `%version` directives, as a `Map` from identifier to value (a string, a
+number, or a BigInt for a number with the suffix `n`). The version of the
+specification is stored under `xtjson`. The versions are not checked; the
+application decides what to do with them.
 
 ```js
 import { parseDocument } from '@cwkr/xtjson';
@@ -183,13 +190,12 @@ The output differs from `JSON.stringify` in these points:
 ```js
 import { parse, stringify, Options } from '@cwkr/xtjson';
 
-const options = new Options({ ijson: true, writeSingleQuotes: true });
+const options = new Options({ strict: true, writeSingleQuotes: true });
 
 parse('ratio: 50pct\nowner: "me"', options);   // { ratio: 0.5, owner: 'me' }
 stringify({ owner: 'me' }, options);            // "owner:'me'"
 ```
 
-- `ijson`: `true` for the I-JSON mode, see below. Default `false`.
 - `maxDepth`: the maximum nesting depth of objects and arrays, a positive
   integer. Default `1000`. An implicit root object counts as a level, so
   `a: [1]` has depth 2. `parse` reports a deeper document as an
@@ -202,14 +208,17 @@ stringify({ owner: 'me' }, options);            // "owner:'me'"
   object, array and other value counts as one, at every position where a
   named value is used. `parse` reports a document that exceeds it as a
   `ParserError`.
+- `strict`: `true` for strict mode, see [below](#strict-mode). Default
+  `false`.
 - `writeNumberSuffixes`: `true` lets `stringify` write number suffixes, see
   above. Default `false`. `parse` ignores it.
 - `writeSingleQuotes`: `true` lets `stringify` write strings and quoted names in
   `'`. Default `false`. `parse` ignores it.
 
 Other properties are a `TypeError`, so that a misspelt option is not
-silently ignored. This includes `namedValues` of earlier versions: named
-values are defined in the document with `%define`.
+silently ignored. This includes `namedValues` and `ijson` of earlier
+versions: named values are defined in the document with `%define`, and the
+I-JSON mode is now strict mode, option `strict`.
 
 The application cannot define named values, directives or number suffixes.
 The suffixes are fixed by section 9.5 and always active when parsing: `k`, `K` (times 1000), `kb`,
@@ -275,30 +284,48 @@ are skipped.
 Anything else, an argument given twice and arguments in the wrong order
 throw a `TypeError`.
 
-### I-JSON mode
+### Strict mode
 
 ```js
-parse(text, { ijson: true });
-stringify(value, 2, { ijson: true });
+parse(text, { strict: true });
+stringify(value, 2, { strict: true });
 ```
 
-With `ijson: true` the parser rejects documents that violate one of the two
-prohibitions of section 12 (I-JSON, RFC 7493):
+In strict mode (section 12) the parser rejects documents that violate one of
+its prohibitions:
 
 - an object that contains a name more than once, independent of its notation
   (`a`, `"a"` and `'\u0061'` are the same name);
 - a name or string value that contains an unpaired surrogate (for example
   `"\uDEAD"`) or a Unicode noncharacter (U+FDD0 to U+FDEF and every code point
-  ending in FFFE or FFFF), written directly or as an escape sequence.
+  ending in FFFE or FFFF), written directly or as an escape sequence;
+- a root value that is not an object or an array.
 
-Both also apply to the values of `%define` and `%version`, even if a named
-value is not used.
+The prohibitions also apply to the values of all directives, even if a named
+value is not used. The JSON equivalent of a document that is valid in strict
+mode is an I-JSON message (RFC 7493), provided its numbers stay within the
+range of IEEE 754 binary64; that range is a recommendation and is not
+enforced.
+
+Strict mode applies if the application requests it with `strict: true` or if
+the document contains `%strict: true` (6.8). `%strict` can come after other
+directives, for example to use a named value; its effect still covers the
+whole document, including the directives before it. With `strict: true`, a
+document with `%strict: false` is an error, because it contradicts the
+application.
+
+```js
+parse('%strict: true\n{a: 1, a: 2}');
+// ParserError: Duplicate name "a"; names must be unique in strict mode ...
+parse('%strict: false\n{a: 1}', { strict: true });
+// ParserError: %strict: false contradicts strict mode, which the application requests ...
+```
 
 `stringify` throws a `TypeError` for names and strings that contain such
-characters. The recommendations of section 12 (numbers within the range of
-IEEE 754 binary64, an object or array as the root value) are not enforced.
-The mode is off by default, because without it every JSON text is accepted,
-including texts with duplicate names.
+characters, and for a root value that is not an object or an array. The
+option is off by default, because without it every JSON text is accepted,
+including texts with duplicate names and a string or number as the root
+value.
 
 ### Errors
 
@@ -317,7 +344,7 @@ including texts with duplicate names.
 ```js
 import { Parser, Generator, Options } from '@cwkr/xtjson';
 
-const options = new Options({ ijson: true });
+const options = new Options({ strict: true });
 const parser = new Parser(options);
 const generator = new Generator(options);
 
@@ -367,7 +394,7 @@ The package has only named exports: `parse`, `parseDocument`, `stringify`,
 
 ## Not yet implemented
 
-- Warnings about duplicate names outside the I-JSON mode (section 7.2, a
+- Warnings about duplicate names outside strict mode (section 7.2, a
   SHOULD).
 
 ## Development
@@ -380,7 +407,7 @@ The source consists of five modules:
 | `parser.js` | `Parser`, `ParserError`, `parse`, `parseDocument` |
 | `generator.js` | `Generator`, `stringify` |
 | `formatter.js` | `format` |
-| `shared.js` | `Options`, the character tables, the I-JSON check for strings and the assignment of optional arguments; used by the other modules |
+| `shared.js` | `Options`, the character tables, the strict mode check for strings and the assignment of optional arguments; used by the other modules |
 
 Rules for the modules:
 
@@ -412,7 +439,7 @@ dependencies to install. The tests also run with `bun test` and
   ```
 
 - `test/parse.test.js` tests the API of `parse`, `parseDocument` and
-  `Parser`, directives and named values, the I-JSON mode, error messages and
+  `Parser`, directives and named values, strict mode, error messages and
   positions, numbers and limits.
 - `test/stringify.test.js` tests `stringify` and `Generator`: the call forms, the behaviour
   of `JSON.stringify`, the output format, strings across several lines,

@@ -9,7 +9,7 @@
  *     const text = stringify(value, replacer, space, options);
  *
  *     import { Parser, Generator, Options } from '@cwkr/xtjson';
- *     const options = new Options({ ijson: true });
+ *     const options = new Options({ strict: true });
  *     const value = new Parser(options).parse(text);
  *     const text = new Generator(options).stringify(value, null, 2);
  *

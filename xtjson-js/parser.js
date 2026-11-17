@@ -16,7 +16,7 @@
  */
 
 import {
-  CharacterTables, hex4, ID_PART, ID_START, ijsonStringIssue, isDigit, isFunction, isOptions,
+  CharacterTables, hex4, ID_PART, ID_START, strictStringIssue, isDigit, isFunction, isOptions,
   isPredefined, readArguments, resolveOptions, SUFFIX_FIRST,
 } from './shared.js';
 
@@ -71,9 +71,8 @@ const SUFFIX_LIST = 'k, K, kb, Kb, kB, KB, mb, Mb, mB, MB, ms, s, min, h, pct, p
 const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
 
 /** The first character of a number suffix (9.5); none occurs in a number without suffix. */
-const SUFFIX_START = /[g-np-wyzG-NP-WYZ$]/;
 
-const DIRECTIVE_LIST = '%define and %version';
+const DIRECTIVE_LIST = '%define, %version and %strict';
 
 /** True for `c` (a code unit, NaN or EOF) with one of the given flags in `flags`. */
 function hasFlag(flags, c, flag) {
@@ -208,7 +207,7 @@ function copyValue(value) {
  * Parser for XTJSON documents with fixed options. Validates the options once;
  * reuse the instance for many documents.
  *
- *     const parser = new Parser({ ijson: true });
+ *     const parser = new Parser({ strict: true });
  *     const value = parser.parse(text);
  *     const { value, versions } = parser.parseDocument(text);
  */
@@ -216,7 +215,8 @@ export class Parser {
   // Configuration, fixed when the parser is created
   /** @type {import('./shared.js').OptionsState} */
   #state;
-  #ijson = false;
+  /** Strict mode requested by the application (12). */
+  #strict = false;
   #maxDepth = 0;
   #maxExpansion = 0;
   /** @type {Uint8Array} */
@@ -238,10 +238,21 @@ export class Parser {
    * @type {Map<string, {value: unknown, size: number, depth: number, offset: number}>}
    */
   #defined = new Map();
-  /** @type {Map<string, string | number>} version statements of `%version` (6.7) */
+  /** @type {Map<string, string | number | bigint>} version statements of `%version` (6.7) */
   #versions = new Map();
   /** Number of JSON values produced so far by replacing named values. */
   #expanded = 0;
+  /**
+   * Strict mode checks (12): 0 off, 1 record the first violation (in the
+   * directives, before `%strict` is known), 2 report every violation.
+   */
+  #check = 0;
+  /** @type {{reason: string, offset: number} | undefined} first violation recorded in the directives */
+  #violation;
+  /** @type {boolean | undefined} the value of `%strict` (6.8) */
+  #docStrict;
+  /** Offset of the `%strict` directive. */
+  #docStrictOffset = 0;
 
   /**
    * The number suffixes of 9.5, built on first use; the table is exhaustive.
@@ -253,8 +264,8 @@ export class Parser {
   static #suffixTable;
 
   /**
-   * @param {import('./shared.js').Options | object | null} [options] the
-   *   I-JSON mode and the limits
+   * @param {import('./shared.js').Options | object | null} [options] strict
+   *   mode and the limits
    * @throws {TypeError} if the options are invalid
    */
   constructor(options) {
@@ -273,7 +284,7 @@ export class Parser {
 
   #configure(state) {
     this.#state = state;
-    this.#ijson = state.ijson;
+    this.#strict = state.strict;
     this.#maxDepth = state.maxDepth;
     this.#maxExpansion = state.maxExpansion;
   }
@@ -302,7 +313,7 @@ export class Parser {
    * @param {string} text the document; converted to a string as in
    *   `JSON.parse`
    * @param {Function | null} [reviver] transforms the value, as in `JSON.parse`
-   * @returns {{value: any, versions: Map<string, string | number>}}
+   * @returns {{value: any, versions: Map<string, string | number | bigint>}}
    * @throws {ParserError} if the text is not a valid XTJSON document
    * @throws {TypeError} if the reviver is not a function
    */
@@ -330,6 +341,9 @@ export class Parser {
     this.#depth = 0;
     this.#expanded = 0;
     this.#versions = versions;
+    this.#check = this.#strict ? 2 : 1;
+    this.#violation = undefined;
+    this.#docStrict = undefined;
     try {
       if (typeof source.isWellFormed === 'function' ? !source.isWellFormed() : LONE_SURROGATE.test(source)) {
         const offset = source.search(LONE_SURROGATE);
@@ -350,6 +364,7 @@ export class Parser {
       this.#len = 0;
       this.#defined.clear();
       this.#versions = new Map();
+      this.#violation = undefined;
     }
     if (reviver !== undefined && reviver !== null) value = internalize({ '': value }, '', reviver);
     return { value, versions };
@@ -459,6 +474,19 @@ export class Parser {
       this.#fail('The document is empty; expected a value or at least one member');
     }
     this.#parseDirectives();
+    // Strict mode (12): with %strict: true, a violation in the values of the
+    // directives is an error as well.
+    if (this.#check === 1) {
+      if (this.#docStrict === true) {
+        if (this.#violation !== undefined) {
+          const { line, column } = locate(this.#text, this.#docStrictOffset);
+          this.#fail(`${this.#violation.reason} (strict mode is requested by %strict at line ${line}, column ${column})`, this.#violation.offset);
+        }
+        this.#check = 2;
+      } else {
+        this.#check = 0;
+      }
+    }
     const start = this.#pos;
     const c = this.#peek();
 
@@ -481,6 +509,9 @@ export class Parser {
       value = this.#parseValue();
     }
 
+    if (this.#check === 2 && (value === null || typeof value !== 'object')) {
+      this.#fail('In strict mode the root value must be an object or an array', start);
+    }
     const end = this.#pos;
     this.#skipSpace();
     if (this.#pos < this.#len) {
@@ -491,7 +522,7 @@ export class Parser {
     return value;
   }
 
-  // ----- Directives (6.5 to 6.7) ------------------------------------------
+  // ----- Directives (6.5 to 6.8) ------------------------------------------
 
   /** Reads the directives at the start of the document, each with the separator after it. */
   #parseDirectives() {
@@ -527,9 +558,9 @@ export class Parser {
       this.#fail(`The name of a directive must follow '%' directly, without white space or comments; the directives are ${DIRECTIVE_LIST}`);
     }
     const name = this.#readIdentifier();
-    if (name !== 'define' && name !== 'version') {
+    if (name !== 'define' && name !== 'version' && name !== 'strict') {
       const lower = name.toLowerCase();
-      const hint = lower === 'define' || lower === 'version'
+      const hint = lower === 'define' || lower === 'version' || lower === 'strict'
         ? `; did you mean '%${lower}'? Directives are case-sensitive`
         : '';
       this.#fail(`Unknown directive '%${name}'${hint}. The directives are ${DIRECTIVE_LIST}`, start);
@@ -553,7 +584,8 @@ export class Parser {
       }
     }
     if (name === 'define') this.#define(id, idStart);
-    else this.#version(id, idStart);
+    else if (name === 'version') this.#version(id, idStart);
+    else this.#strictDirective(id, idStart, start);
   }
 
   /** `%define` (6.6): defines the named value `id`. */
@@ -583,18 +615,39 @@ export class Parser {
       this.#fail(`The version ${which} is already stated${forms}; each version may be stated only once`, idStart);
     }
     const valueStart = this.#pos;
-    const c = this.#peek();
-    let value;
-    if (c === DQUOTE || c === SQUOTE) {
-      value = this.#readString(c);
-    } else if (c === MINUS || isDigit(c)) {
-      value = this.#parseNumber();
-      if (SUFFIX_START.test(this.#text.slice(valueStart, this.#pos))) value = undefined;
-    }
-    if (value === undefined) {
-      this.#fail('The value of %version must be a string or a number without suffix', valueStart);
+    const value = this.#parseValue();
+    const type = typeof value;
+    if (type !== 'string' && type !== 'number' && type !== 'bigint') {
+      this.#fail('The value of %version must be a string or a number, or a named value whose value is a string or a number', valueStart);
     }
     this.#versions.set(key, value);
+  }
+
+  /** `%strict` (6.8): strict mode for the document; `start` is the offset of the '%'. */
+  #strictDirective(id, idStart, start) {
+    if (id !== undefined) {
+      this.#fail("%strict has no identifier; write '%strict: true' or '%strict: false'", idStart);
+    }
+    if (this.#docStrict !== undefined) {
+      const { line, column } = locate(this.#text, this.#docStrictOffset);
+      this.#fail(`%strict is already stated at line ${line}, column ${column}; %strict may occur only once`, start);
+    }
+    const valueStart = this.#pos;
+    const value = this.#parseValue();
+    if (typeof value !== 'boolean') {
+      this.#fail('The value of %strict must be true or false, or a named value whose value is true or false', valueStart);
+    }
+    if (!value && this.#strict) {
+      this.#fail('%strict: false contradicts strict mode, which the application requests with the option strict', start);
+    }
+    this.#docStrict = value;
+    this.#docStrictOffset = start;
+  }
+
+  /** A violation of strict mode (12): reported, or recorded while the directives are read. */
+  #strictViolation(reason, offset) {
+    if (this.#check === 2) this.#fail(reason, offset);
+    this.#violation ??= { reason, offset };
   }
 
   #failDirectivePosition(offset = this.#pos) {
@@ -641,7 +694,7 @@ export class Parser {
         return null;
     }
     // Named values defined by %define (6.6). Their strings and names were
-    // checked for the I-JSON mode when the definition was read (12).
+    // checked for strict mode when the definition was read (12).
     const definition = this.#defined.get(id);
     if (definition !== undefined) {
       if (this.#depth + definition.depth > this.#maxDepth) {
@@ -708,8 +761,8 @@ export class Parser {
    * name has already been read and the position is on the ':'.
    */
   #parseMembers(obj, closer, start, name) {
-    // I-JSON mode: offset of each name, to report duplicates (12).
-    const seen = this.#ijson ? new Map() : undefined;
+    // Strict mode: offset of each name, to report duplicates (12).
+    const seen = this.#check !== 0 ? new Map() : undefined;
     let nameStart = start;
     for (;;) {
       if (name === undefined) {
@@ -718,17 +771,18 @@ export class Parser {
       }
       if (seen !== undefined) {
         const first = seen.get(name);
-        if (first !== undefined) {
+        if (first === undefined) {
+          seen.set(name, nameStart);
+        } else {
           const { line, column } = locate(this.#text, first);
-          this.#fail(`Duplicate name ${JSON.stringify(name)}; names must be unique in I-JSON mode (first occurrence at line ${line}, column ${column})`, nameStart);
+          this.#strictViolation(`Duplicate name ${JSON.stringify(name)}; names must be unique in strict mode (first occurrence at line ${line}, column ${column})`, nameStart);
         }
-        seen.set(name, nameStart);
       }
       this.#skipSpace();
       if (this.#peek() !== COLON) this.#failUnexpected(`':' after the name ${JSON.stringify(name)}`);
       this.#pos++;
       this.#skipSpace();
-      // Duplicate names outside the I-JSON mode: the last member applies (7.2).
+      // Duplicate names outside strict mode: the last member applies (7.2).
       setMember(obj, name, this.#parseValue());
       if (!this.#separator(closer, start)) return;
       name = undefined;
@@ -833,7 +887,7 @@ export class Parser {
         }
         this.#pos = pos + 1;
         const value = chunk === start + 1 ? text.slice(chunk, pos) : out + text.slice(chunk, pos);
-        if (this.#ijson) this.#checkIJSONString(value, start);
+        if (this.#check !== 0) this.#checkStrictString(value, start);
         return value;
       }
       if (c === BACKSLASH) {
@@ -945,15 +999,15 @@ export class Parser {
   /** String with a line break, a tab or a line continuation (8.3); `start` is the offset of its delimiter. */
   #readStringLines(q, start) {
     const value = this.#stringLinesValue(q, start);
-    if (this.#ijson) this.#checkIJSONString(value, start);
+    if (this.#check !== 0) this.#checkStrictString(value, start);
     return value;
   }
 
-  /** I-JSON (12): no unpaired surrogates and no noncharacters in strings. */
-  #checkIJSONString(value, start) {
-    const issue = ijsonStringIssue(value);
+  /** Strict mode (12): no unpaired surrogates and no noncharacters in strings. */
+  #checkStrictString(value, start) {
+    const issue = strictStringIssue(value);
     if (issue !== undefined) {
-      this.#fail(`The string contains ${issue}, which is not permitted in I-JSON mode`, start);
+      this.#strictViolation(`The string contains ${issue}, which is not permitted in strict mode`, start);
     }
   }
 
@@ -1422,7 +1476,7 @@ let defaultParser;
  *   a function transforms the result, as in `JSON.parse`; an object are the
  *   options
  * @param {import('./shared.js').Options | object | null} [options] the
- *   I-JSON mode and the limits
+ *   strict mode and the limits
  * @returns {any} the value; a number with the suffix `n` and without a
  *   fraction part becomes a BigInt if its value is an integer
  * @throws {ParserError} if the text is not a valid XTJSON document
@@ -1445,7 +1499,7 @@ export function parse(text, reviver, options) {
  * @param {string} text the document
  * @param {Function | import('./shared.js').Options | object | null} [reviver]
  * @param {import('./shared.js').Options | object | null} [options]
- * @returns {{value: any, versions: Map<string, string | number>}}
+ * @returns {{value: any, versions: Map<string, string | number | bigint>}}
  * @throws {ParserError} if the text is not a valid XTJSON document
  * @throws {TypeError} if the arguments or the options are invalid
  */

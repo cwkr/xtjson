@@ -15,7 +15,7 @@
  */
 
 import {
-  CharacterTables, ID_PART, ID_START, ijsonStringIssue, indentation, isDigit, isOptions, isReplacer, isSpace,
+  CharacterTables, ID_PART, ID_START, strictStringIssue, indentation, isDigit, isOptions, isReplacer, isSpace,
   readArguments, resolveOptions,
 } from './shared.js';
 
@@ -228,7 +228,7 @@ export class Generator {
   // Configuration, fixed when the generator is created
   /** @type {import('./shared.js').OptionsState} */
   #state;
-  #ijson = false;
+  #strict = false;
   #maxDepth = 0;
   #writeNumberSuffixes = false;
   #quote = DQUOTE;
@@ -250,7 +250,7 @@ export class Generator {
 
   /**
    * @param {import('./shared.js').Options | object | null} [options] the
-   *   I-JSON mode, the maximum nesting depth, number suffixes and quotation
+   *   strict mode, the maximum nesting depth, number suffixes and quotation
    *   marks
    * @throws {TypeError} if the options are invalid
    */
@@ -262,7 +262,7 @@ export class Generator {
 
   #configure(state) {
     this.#state = state;
-    this.#ijson = state.ijson;
+    this.#strict = state.strict;
     this.#maxDepth = state.maxDepth;
     this.#writeNumberSuffixes = state.writeNumberSuffixes;
     this.#quote = state.writeSingleQuotes ? SQUOTE : DQUOTE;
@@ -279,7 +279,8 @@ export class Generator {
    * @returns {string | undefined} undefined if the value cannot be written
    *   (undefined, a function or a symbol), as in `JSON.stringify`
    * @throws {TypeError} for circular references, nesting deeper than
-   *   maxDepth, invalid arguments, and strings not permitted in I-JSON mode
+   *   maxDepth, invalid arguments, strings not permitted in strict mode and,
+   *   in strict mode, a root value that is not an object or an array
    */
   stringify(value, replacer, space) {
     if (replacer !== undefined && replacer !== null && !isReplacer(replacer)) {
@@ -337,7 +338,11 @@ export class Generator {
       this.#leave();
       return members === '' ? '{}' : members;
     }
-    return this.#write(root, '');
+    const text = this.#write(root, '');
+    if (this.#strict && text !== undefined && !Array.isArray(root)) {
+      throw new TypeError('stringify: in strict mode the root value must be an object or an array');
+    }
+    return text;
   }
 
   /**
@@ -385,14 +390,14 @@ export class Generator {
   }
 
   #string(value, indent) {
-    if (this.#ijson) this.#checkIJSON(value, 'a string');
+    if (this.#strict) this.#checkStrict(value, 'a string');
     if (this.#gap !== '' && value.includes('\n')) return stringAcrossLines(value, indent + this.#gap, this.#quote);
     return this.#quoted(value);
   }
 
   /** A name (7.2): an identifier if possible, otherwise a string. */
   #name(key) {
-    if (this.#ijson) this.#checkIJSON(key, 'the name');
+    if (this.#strict) this.#checkStrict(key, 'the name');
     return this.#isIdentifier(key) ? key : this.#quoted(key);
   }
 
@@ -401,10 +406,10 @@ export class Generator {
     return this.#quote === SQUOTE ? singleQuoteString(value) : quoteString(value);
   }
 
-  #checkIJSON(value, what) {
-    const issue = ijsonStringIssue(value);
+  #checkStrict(value, what) {
+    const issue = strictStringIssue(value);
     if (issue !== undefined) {
-      throw new TypeError(`stringify: ${what} ${quoteString(value)} contains ${issue}, which is not permitted in I-JSON mode`);
+      throw new TypeError(`stringify: ${what} ${quoteString(value)} contains ${issue}, which is not permitted in strict mode`);
     }
   }
 
@@ -532,13 +537,13 @@ let defaultGenerator;
  *   indentation: a number of spaces (at most 10) or a string of spaces and
  *   tabs
  * @param {import('./shared.js').Options | object | null} [options] the
- *   I-JSON mode, the maximum nesting depth, number suffixes and quotation
+ *   strict mode, the maximum nesting depth, number suffixes and quotation
  *   marks
  * @returns {string | undefined} undefined if the value cannot be written
  *   (undefined, a function or a symbol), as in `JSON.stringify`
  * @throws {TypeError} for circular references, nesting deeper than
- *   maxDepth, invalid arguments or options, and strings not permitted in
- *   I-JSON mode
+ *   maxDepth, invalid arguments or options, and strings and a root value
+ *   not permitted in strict mode
  */
 export function stringify(value, replacer, space, options) {
   if (replacer !== undefined || space !== undefined || options !== undefined) {

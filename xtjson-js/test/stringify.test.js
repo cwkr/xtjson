@@ -365,20 +365,31 @@ describe('strings across several lines', () => {
   });
 });
 
-describe('I-JSON mode', () => {
-  const ijson = { ijson: true };
+describe('strict mode', () => {
+  const strict = { strict: true };
 
   test('unpaired surrogates and noncharacters are a TypeError', () => {
-    assert.throws(() => stringify(ch(0xdead), ijson), /unpaired surrogate U\+DEAD/);
-    assert.throws(() => stringify({ a: ['x' + ch(0xffff)] }, ijson), /noncharacter U\+FFFF/);
-    assert.throws(() => stringify({ [ch(0xfdd0)]: 1 }, ijson), /the name .* noncharacter U\+FDD0/);
-    assert.throws(() => stringify({ a: ch(0xd83f, 0xdfff) }, 2, ijson), /noncharacter U\+1FFFF/);
+    assert.throws(() => stringify(ch(0xdead), strict), /unpaired surrogate U\+DEAD/);
+    assert.throws(() => stringify({ a: ['x' + ch(0xffff)] }, strict), /noncharacter U\+FFFF/);
+    assert.throws(() => stringify({ [ch(0xfdd0)]: 1 }, strict), /the name .* noncharacter U\+FDD0/);
+    assert.throws(() => stringify({ a: ch(0xd83f, 0xdfff) }, 2, strict), /noncharacter U\+1FFFF/);
   });
 
   test('valid strings are written unchanged', () => {
     const value = { s: ch(0xd83d, 0xde00), t: 'a\nb' };
-    assert.equal(stringify(value, ijson), stringify(value));
+    assert.equal(stringify(value, strict), stringify(value));
     assert.equal(stringify(ch(0xdead)), '"\\udead"');
+  });
+
+  test('the root value must be an object or an array', () => {
+    for (const value of [1, 'x', null, true, 10n, new Date(0)]) {
+      assert.throws(() => stringify(value, strict), /in strict mode the root value must be an object or an array/, String(value));
+    }
+    assert.equal(stringify([1], strict), '[1]');
+    assert.equal(stringify({}, strict), '{}');
+    assert.equal(stringify({ toJSON: () => [2] }, strict), '[2]');
+    assert.equal(stringify(undefined, strict), undefined);
+    assert.equal(stringify(() => 1, strict), undefined);
   });
 });
 

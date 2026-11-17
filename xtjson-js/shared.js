@@ -1,8 +1,8 @@
 /**
  * Code shared by the parser (parser.js) and the generator (generator.js):
- * character codes and classes, the options (the I-JSON mode, section 12,
- * limits, section 11, and the output format), the I-JSON check for strings
- * and the assignment of optional arguments.
+ * character codes and classes, the options (strict mode, section 12,
+ * limits, section 11, and the output format), the strict mode check for
+ * strings and the assignment of optional arguments.
  *
  * The module has no side effects when it is imported: at the top level there
  * are only declarations and literals. Tables are built on first use.
@@ -93,13 +93,13 @@ export function isPredefined(id) {
 }
 
 // ---------------------------------------------------------------------------
-// I-JSON (12)
+// Strict mode (12)
 
 /**
- * Why a name or string value is not permitted in I-JSON: it contains an
+ * Why a name or string value is not permitted in strict mode: it contains an
  * unpaired surrogate or a noncharacter. Returns undefined if it is permitted.
  */
-export function ijsonStringIssue(s) {
+export function strictStringIssue(s) {
   for (let i = 0; i < s.length; i++) {
     const c = s.charCodeAt(i);
     if (c < 0xd800) continue;
@@ -119,17 +119,17 @@ export function ijsonStringIssue(s) {
 }
 
 // ---------------------------------------------------------------------------
-// Options: I-JSON mode (12), limits (11) and output format
+// Options: strict mode (12), limits (11) and output format
 
-const OPTION_NAMES = ['ijson', 'maxDepth', 'maxExpansion', 'writeNumberSuffixes', 'writeSingleQuotes'];
-const OPTION_LIST = '"ijson", "maxDepth", "maxExpansion", "writeNumberSuffixes" and "writeSingleQuotes"';
+const OPTION_NAMES = ['maxDepth', 'maxExpansion', 'strict', 'writeNumberSuffixes', 'writeSingleQuotes'];
+const OPTION_LIST = '"maxDepth", "maxExpansion", "strict", "writeNumberSuffixes" and "writeSingleQuotes"';
 
 /**
  * Internal state of an `Options` instance, read by parser and generator.
  * @typedef {object} OptionsState
- * @property {boolean} ijson
  * @property {number} maxDepth
  * @property {number} maxExpansion
+ * @property {boolean} strict
  * @property {boolean} writeNumberSuffixes
  * @property {boolean} writeSingleQuotes
  */
@@ -138,8 +138,8 @@ const OPTION_LIST = '"ijson", "maxDepth", "maxExpansion", "writeNumberSuffixes" 
 let resolve;
 
 /**
- * Validated, immutable options for `parse()` and `stringify()`: the I-JSON
- * mode (12), limits (11) and the output format of `stringify`.
+ * Validated, immutable options for `parse()` and `stringify()`: strict mode
+ * (12), limits (11) and the output format of `stringify`.
  *
  * Named values are defined only in the document, with `%define` (6.6); the
  * directives and the number suffixes are fixed by sections 6.5 and 9.5. None
@@ -164,12 +164,12 @@ export class Options {
   }
 
   /**
-   * @param {{ijson?: boolean, maxDepth?: number, maxExpansion?: number,
+   * @param {{maxDepth?: number, maxExpansion?: number, strict?: boolean,
    *   writeNumberSuffixes?: boolean, writeSingleQuotes?: boolean} | Options} [init]
-   *   `ijson`: true for the I-JSON mode.
    *   `maxDepth`: maximum nesting depth of objects and arrays (default 1000).
    *   `maxExpansion`: maximum number of JSON values that replacing named
    *   values may produce in one document (default 1000000).
+   *   `strict`: true for strict mode (default false).
    *   `writeNumberSuffixes`: `stringify` writes number suffixes (default false).
    *   `writeSingleQuotes`: `stringify` writes strings in `'` (default false).
    * @throws {TypeError} if an option is unknown or invalid
@@ -188,27 +188,18 @@ export class Options {
         if (!OPTION_NAMES.includes(key)) {
           const hint = key === 'namedValues'
             ? '; named values are defined in the document with %define, not by the application'
-            : '';
+            : key === 'ijson' ? '; the I-JSON mode is strict mode, option "strict"' : '';
           throw new TypeError(`Unknown XTJSON option ${quote(key)}${hint}. The options are ${OPTION_LIST}`);
         }
       }
     }
-    const ijson = Options.#booleanOption(init, 'ijson');
+    const strict = Options.#booleanOption(init, 'strict');
     const writeNumberSuffixes = Options.#booleanOption(init, 'writeNumberSuffixes');
     const writeSingleQuotes = Options.#booleanOption(init, 'writeSingleQuotes');
     const maxDepth = Options.#limitOption(init, 'maxDepth', DEFAULT_MAX_DEPTH);
     const maxExpansion = Options.#limitOption(init, 'maxExpansion', DEFAULT_MAX_EXPANSION);
-    this.#state = { ijson, maxDepth, maxExpansion, writeNumberSuffixes, writeSingleQuotes };
+    this.#state = { maxDepth, maxExpansion, strict, writeNumberSuffixes, writeSingleQuotes };
     Object.freeze(this);
-  }
-
-  /**
-   * True for the I-JSON mode (section 12): duplicate names, unpaired
-   * surrogates and noncharacters in names and strings are errors.
-   * @returns {boolean}
-   */
-  get ijson() {
-    return this.#state.ijson;
   }
 
   /**
@@ -228,6 +219,17 @@ export class Options {
    */
   get maxExpansion() {
     return this.#state.maxExpansion;
+  }
+
+  /**
+   * True for strict mode (section 12): duplicate names, unpaired surrogates
+   * and noncharacters in names and strings, and a root value that is not an
+   * object or an array are errors. A document can also request strict mode
+   * with `%strict: true`; with this option, `%strict: false` is an error.
+   * @returns {boolean}
+   */
+  get strict() {
+    return this.#state.strict;
   }
 
   /**

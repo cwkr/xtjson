@@ -159,7 +159,7 @@ const escapedStrings = stringArray(['line\nbreak and\ttab', 'quote " and backsla
 const plainStringsText = JSON.stringify(plainStrings);
 const escapedStringsText = JSON.stringify(escapedStrings);
 const numbers = numberText();
-const options = new Options({ ijson: true });
+const options = new Options({ strict: true });
 const suffixOptions = new Options({ writeNumberSuffixes: true, writeSingleQuotes: true });
 
 /** [name, size of the document in characters, function] */
@@ -170,7 +170,7 @@ const CASES = [
   ['parse  JSON indented (JSON.parse)', mixedIndented.length, () => JSON.parse(mixedIndented)],
   ['parse  XTJSON generated', mixedXT.length, () => parse(mixedXT)],
   ['parse  XTJSON config', config.length, () => parse(config)],
-  ['parse  XTJSON config, I-JSON', config.length, () => parse(config, options)],
+  ['parse  XTJSON config, strict', config.length, () => parse(config, options)],
   ['parse  small document', SMALL.length, () => parse(SMALL)],
   ['parse  plain strings', plainStringsText.length, () => parse(plainStringsText)],
   ['parse  escaped strings', escapedStringsText.length, () => parse(escapedStringsText)],

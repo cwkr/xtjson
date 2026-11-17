@@ -68,18 +68,26 @@ test('xtjson_ref.py: JSON texts give the same value as JSON.parse', () => {
   }
 });
 
-test('xtjson_ref.py: duplicate names are rejected only in I-JSON mode', () => {
-  for (const text of ['{a: 1, "a": 2}', "a: 1\n'\\u0061': 2"]) {
-    assert.deepEqual(parse(text), { a: 2 });
-    assert.throws(() => parse(text, { ijson: true }), /Duplicate name "a"/);
+test('tests_direktiven.py: strict mode of the application, valid texts', () => {
+  for (const [text, expected] of corpus.d_strict_valid) {
+    let actual;
+    try {
+      actual = parse(text, { strict: true });
+    } catch (error) {
+      assert.fail(`should be valid in strict mode: ${show(text)} (${error.message})`);
+    }
+    assert.deepEqual(actual, expected, show(text));
   }
-  // also in the value of a directive that is not used (12)
-  const text = '%define: d = {a: 1, a: 2}\n1';
-  assert.equal(parse(text), 1);
-  assert.throws(() => parse(text, { ijson: true }), /Duplicate name "a"/);
 });
 
-test('I-JSON mode: valid texts give the same value or an I-JSON error', () => {
+test('tests_direktiven.py: strict mode of the application, invalid texts', () => {
+  for (const text of corpus.d_strict_invalid) {
+    assert.doesNotThrow(() => parse(text), `should be valid without strict mode: ${show(text)}`);
+    assert.throws(() => parse(text, { strict: true }), ParserError, `should be invalid in strict mode: ${show(text)}`);
+  }
+});
+
+test('strict mode: valid texts give the same value or a strict mode error', () => {
   const all = [
     ...corpus.ref_valid, ...corpus.a_valid, ...corpus.b_valid, ...corpus.c_valid, ...corpus.d_valid,
     ...corpus.ref_json_samples.map((t) => [t, JSON.parse(t)]),
@@ -88,15 +96,16 @@ test('I-JSON mode: valid texts give the same value or an I-JSON error', () => {
   for (const [text, expected] of all) {
     let actual;
     try {
-      actual = parse(text, { ijson: true });
+      actual = parse(text, { strict: true });
     } catch (error) {
-      assert.match(error.message, /I-JSON mode/, show(text));
+      assert.match(error.message, /strict mode/, show(text));
       rejected++;
       continue;
     }
     assert.deepEqual(asNumbers(actual), expected, show(text));
   }
-  assert.ok(rejected > 0 && rejected < 10, `rejected ${rejected}`);
+  // many texts of the corpus have a string or a number as their root value
+  assert.ok(rejected > 0 && rejected < all.length, `rejected ${rejected}`);
 });
 
 test('tests_direktiven.py: version statements', () => {

@@ -28,15 +28,6 @@ export type JSONValue =
  */
 export interface OptionsInit {
   /**
-   * I-JSON mode (section 12). `parse` rejects a document in which an object
-   * contains a name twice, or in which a name or string value contains an
-   * unpaired surrogate or a Unicode noncharacter; this also applies to the
-   * values of `%define` and `%version`, even if they are not used.
-   * `stringify` throws a `TypeError` for such names and strings.
-   * Default: false; then the member that comes last applies.
-   */
-  ijson?: boolean;
-  /**
    * Maximum nesting depth of objects and arrays, a positive integer; an
    * implicit root object counts as a level. `parse` reports a deeper
    * document as a `ParserError`, `stringify` a deeper value as a
@@ -52,6 +43,18 @@ export interface OptionsInit {
    * exceeds the limit as a `ParserError`. Default: 1000000.
    */
   maxExpansion?: number;
+  /**
+   * Strict mode (section 12). `parse` rejects a document in which an object
+   * contains a name twice, in which a name or string value contains an
+   * unpaired surrogate or a Unicode noncharacter, or whose root value is not
+   * an object or an array; this also applies to the values of directives,
+   * even if they are not used. A document with `%strict: false` is an error.
+   * `stringify` throws a `TypeError` for such names and strings and for a
+   * root value that is not an object or an array.
+   * Default: false; then a document can still request strict mode with
+   * `%strict: true`, and the member that comes last applies.
+   */
+  strict?: boolean;
   /**
    * `stringify` writes number suffixes: integers that are a multiple of the
    * factor with `mb`, `kb`, `k`, `h` or `min`, fractions between -1 and 1
@@ -78,8 +81,8 @@ export class Options implements OptionsInit {
   get maxDepth(): number;
   /** The maximum number of JSON values that replacing named values may produce. */
   get maxExpansion(): number;
-  /** True for the I-JSON mode. */
-  get ijson(): boolean;
+  /** True for strict mode. */
+  get strict(): boolean;
   /** True if `stringify` writes number suffixes. */
   get writeNumberSuffixes(): boolean;
   /** True if `stringify` writes strings in `'`. */
@@ -115,7 +118,7 @@ export interface ParsedDocument {
    * → value, in the order of the document. The version of the specification
    * is stored under `xtjson`. The versions are not checked.
    */
-  versions: Map<string, string | number>;
+  versions: Map<string, string | number | bigint>;
 }
 
 /**
@@ -126,7 +129,7 @@ export interface ParsedDocument {
  * @param text the document
  * @param reviver transforms the result, as in `JSON.parse`; `null` or
  *   `undefined` for none
- * @param options the I-JSON mode and the limits
+ * @param options strict mode and the limits
  * @throws {ParserError} if the text is not a valid XTJSON document
  * @throws {TypeError} if the arguments or the options are invalid
  */
@@ -163,12 +166,12 @@ export function parseDocument(text: string, options: Options | OptionsInit): Par
  * @param replacer a function or an array of names, as in `JSON.stringify`
  * @param space indentation: a number of spaces (at most 10) or a string of
  *   at most 10 spaces and tabs
- * @param options the I-JSON mode, the maximum nesting depth, number
+ * @param options strict mode, the maximum nesting depth, number
  *   suffixes and quotation marks
  * @returns the document, or `undefined` for `undefined`, functions and symbols
  * @throws {TypeError} for circular references, nesting deeper than
  *   `maxDepth`, invalid arguments or options, and strings not permitted in
- *   I-JSON mode
+ *   strict mode, and in strict mode a root value that is not an object or array
  */
 export function stringify(
   value: any,
@@ -203,7 +206,7 @@ export function format(text: string, space?: string | number | null): string;
  * can be reused for many documents. Its state is private.
  *
  * @example
- * const parser = new Parser({ ijson: true });
+ * const parser = new Parser({ strict: true });
  * const value = parser.parse('%define: nil = null\nowner: nil');
  */
 export class Parser {
@@ -239,7 +242,7 @@ export class Generator {
    * Writes a value as an XTJSON document, see `stringify`.
    * @returns the document, or `undefined` for `undefined`, functions and symbols
    * @throws {TypeError} for circular references, nesting deeper than
-   *   `maxDepth`, invalid arguments and strings not permitted in I-JSON mode
+   *   `maxDepth`, invalid arguments and strings and a root value not permitted in strict mode
    */
   stringify(
     value: any,
