@@ -28,7 +28,7 @@ function validTexts() {
 }
 
 describe('format', () => {
-  test('lays out objects and arrays like stringify', () => {
+  test('lays out objects and arrays like JSON.stringify', () => {
     assert.equal(format('{"a":[1,2],"b":{}}', 2), '{\n  "a": [\n    1,\n    2\n  ],\n  "b": {}\n}');
     assert.equal(format('a:1\nb:[ ]', '\t'), 'a: 1\nb: []');
     assert.equal(format('{ "a" : [ 1 , 2 ] }'), '{"a":[1,2]}');
@@ -68,7 +68,7 @@ describe('format', () => {
     assert.equal(format('a: "x\ny"\nb: 1'), 'a:"x\ny",b:1');
   });
 
-  test('space works as in stringify', () => {
+  test('space works as in JSON.stringify', () => {
     assert.equal(format('[1]', 20), '[\n          1\n]');
     assert.equal(format('[1]', ''), '[1]');
     assert.throws(() => format('[1]', 'ab'), TypeError);

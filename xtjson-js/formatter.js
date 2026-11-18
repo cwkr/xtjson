@@ -1,7 +1,7 @@
 /**
  * Formatter for XTJSON: lays out a document again with a given indentation,
- * as `stringify` would write it, but keeps comments and the notation of
- * names and values.
+ * as `JSON.stringify` would, but keeps comments and the notation of names
+ * and values.
  *
  * The formatter does not parse or validate the document. It splits the text
  * into simple tokens (brackets, `,`, `:`, `=`, comments, strings and
@@ -9,9 +9,34 @@
  * keeps its value, an invalid one is formatted as far as possible.
  */
 
-import { indentation, isSpace } from './shared.js';
-
 const CLOSING = { '{': '}', '[': ']' };
+
+/**
+ * Indentation from the `space` argument, as in JSON.stringify: at most 10
+ * spaces, or the first 10 characters of a string of spaces and tabs.
+ * @param {unknown} space
+ * @throws {TypeError} if `space` is not a number or a string, or a string
+ *   with characters other than spaces and tabs
+ */
+function indentation(space) {
+  if (space instanceof Number) space = Number(space);
+  else if (space instanceof String) space = String(space);
+  if (typeof space === 'number') {
+    const n = Math.min(10, Math.trunc(space) || 0);
+    return n >= 1 ? ' '.repeat(n) : '';
+  }
+  if (typeof space === 'string') {
+    const gap = space.slice(0, 10);
+    if (!/^[ \t]*$/.test(gap)) {
+      throw new TypeError('format: "space" may only contain spaces and tabs; other characters would make the indentation invalid');
+    }
+    return gap;
+  }
+  if (space !== undefined && space !== null) {
+    throw new TypeError(`format: space must be a number or a string, not ${typeof space}`);
+  }
+  return '';
+}
 
 /**
  * Formats an XTJSON document.
@@ -25,16 +50,13 @@ const CLOSING = { '{': '}', '[': ']' };
  * still ends its line.
  *
  * @param {string} text the document; converted to a string
- * @param {number | string | null} [space] indentation, as in `stringify`: a
+ * @param {number | string | null} [space] indentation, as in `JSON.stringify`: a
  *   number of spaces (at most 10) or a string of spaces and tabs
  * @returns {string} the formatted text, without a line break at the end
  * @throws {TypeError} if `space` is invalid
  */
 export function format(text, space) {
-  if (space !== undefined && space !== null && !isSpace(space)) {
-    throw new TypeError(`format: space must be a number or a string, not ${typeof space}`);
-  }
-  const gap = indentation(space, 'format');
+  const gap = indentation(space);
   const tokens = tokenize(String(text).replace(/\r\n?/g, '\n'));
   const lines = [];
   let line = '';

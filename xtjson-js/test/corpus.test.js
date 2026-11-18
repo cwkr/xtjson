@@ -115,10 +115,10 @@ test('tests_direktiven.py: version statements', () => {
 });
 
 test('tests_definitionen.py: the application cannot define named values or suffixes', () => {
-  assert.throws(() => parse('nil', null, { namedValues: { nil: null } }), (error) => {
+  assert.throws(() => parse('nil', { namedValues: { nil: null } }), (error) => {
     return error instanceof TypeError && /defined in the document with %define/.test(error.message);
   });
-  assert.throws(() => parse('1', null, { suffixes: { q: Math.abs } }), TypeError);
+  assert.throws(() => parse('1', { suffixes: { q: Math.abs } }), TypeError);
 });
 
 // Examples of the specification (as in xtjson_ref.py): every block tagged

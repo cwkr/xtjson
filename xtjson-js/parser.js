@@ -1,5 +1,6 @@
 /**
- * XTJSON parser: `Parser`, `ParserError` and `parse()`.
+ * XTJSON parser: `Parser`, `ParserError`, `Options`, `parse()` and
+ * `parseDocument()`.
  *
  * Implements the XTJSON specification, draft 0.6 (docs/xtjson-spec-en.md).
  *
@@ -15,13 +16,22 @@
  *   first use.
  */
 
-import {
-  CharacterTables, hex4, ID_PART, ID_START, strictStringIssue, isDigit, isFunction, isOptions,
-  isPredefined, readArguments, resolveOptions, SUFFIX_FIRST,
-} from './shared.js';
+// ---------------------------------------------------------------------------
+// Limits (section 11). Hitting a limit is reported as an error.
 
-// Character codes. Declared in this module rather than imported: V8 folds
-// module-local constants, but reads imported bindings at run time.
+/** Default for the option `maxDepth`: maximum nesting depth of objects and arrays. */
+const DEFAULT_MAX_DEPTH = 1000;
+
+/**
+ * Default for the option `maxExpansion`: maximum number of JSON values that
+ * replacing named values may produce in one document (sections 11 and 13).
+ */
+const DEFAULT_MAX_EXPANSION = 1000000;
+
+// ---------------------------------------------------------------------------
+// Characters
+
+// Character codes
 const EOF = -1;
 const TAB = 0x09;
 const LF = 0x0a;
@@ -70,9 +80,82 @@ const SUFFIX_LIST = 'k, K, kb, Kb, kB, KB, mb, Mb, mB, MB, ms, s, min, h, pct, p
 
 const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
 
-/** The first character of a number suffix (9.5); none occurs in a number without suffix. */
-
 const DIRECTIVE_LIST = '%define, %version and %strict';
+
+// Flags for ASCII characters in the table `flags` of `characterTables()`
+const ID_START = 1; // ALPHA / "_" / "$"                       (7.2)
+const ID_PART = 2; // ALPHA / DIGIT / "_" / "$"                (7.2)
+const SUFFIX_FIRST = 4; // g-n p-w y z G-N P-W Y Z $            (9.5)
+
+/** @type {{flags: Uint8Array, hex: Int8Array} | undefined} */
+let tables;
+
+/**
+ * Lookup tables for ASCII characters, built on first use and shared by all
+ * parsers. `flags`: the flags `ID_START`, `ID_PART` and `SUFFIX_FIRST` of
+ * each ASCII character. `hex`: the value of a hexadecimal digit, or -1.
+ * @returns {{flags: Uint8Array, hex: Int8Array}}
+ */
+function characterTables() {
+  if (tables === undefined) {
+    const flags = new Uint8Array(128);
+    const hex = new Int8Array(128).fill(-1);
+    for (let c = 0; c < 128; c++) {
+      const ch = String.fromCharCode(c);
+      let f = 0;
+      if (/[A-Za-z_$]/.test(ch)) f |= ID_START | ID_PART;
+      if (/[0-9]/.test(ch)) f |= ID_PART;
+      if (/[g-np-wyzG-NP-WYZ$]/.test(ch)) f |= SUFFIX_FIRST;
+      flags[c] = f;
+      if (/[0-9A-Fa-f]/.test(ch)) hex[c] = parseInt(ch, 16);
+    }
+    tables = { flags, hex };
+  }
+  return tables;
+}
+
+function isDigit(c) {
+  return c >= DIGIT_0 && c <= DIGIT_9;
+}
+
+/** `U+XXXX` for a code point, for messages. */
+function hex4(c) {
+  return 'U+' + c.toString(16).toUpperCase().padStart(4, '0');
+}
+
+/** A value for messages: strings in quotation marks. */
+function quote(x) {
+  return typeof x === 'string' ? JSON.stringify(x) : String(x);
+}
+
+/** True for the predefined named values `true`, `false` and `null` (6.4). */
+function isPredefined(id) {
+  return id === 'true' || id === 'false' || id === 'null';
+}
+
+/**
+ * Why a name or string value is not permitted in strict mode (12): it
+ * contains an unpaired surrogate or a noncharacter. Returns undefined if it
+ * is permitted.
+ */
+function strictStringIssue(s) {
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    if (c < 0xd800) continue;
+    if (c <= 0xdbff) {
+      const d = s.charCodeAt(i + 1);
+      if (!(d >= 0xdc00 && d <= 0xdfff)) return `the unpaired surrogate ${hex4(c)}`;
+      const cp = 0x10000 + ((c - 0xd800) << 10) + (d - 0xdc00);
+      if ((cp & 0xfffe) === 0xfffe) return `the noncharacter ${hex4(cp)}`;
+      i++;
+    } else if (c <= 0xdfff) {
+      return `the unpaired surrogate ${hex4(c)}`;
+    } else if ((c >= 0xfdd0 && c <= 0xfdef) || c >= 0xfffe) {
+      return `the noncharacter ${hex4(c)}`;
+    }
+  }
+  return undefined;
+}
 
 /** True for `c` (a code unit, NaN or EOF) with one of the given flags in `flags`. */
 function hasFlag(flags, c, flag) {
@@ -201,6 +284,139 @@ function copyValue(value) {
 }
 
 // ---------------------------------------------------------------------------
+// Options: strict mode (12) and limits (11)
+
+const OPTION_NAMES = ['maxDepth', 'maxExpansion', 'strict'];
+const OPTION_LIST = '"maxDepth", "maxExpansion" and "strict"';
+
+/**
+ * Internal state of an `Options` instance, read by the parser.
+ * @typedef {object} OptionsState
+ * @property {number} maxDepth
+ * @property {number} maxExpansion
+ * @property {boolean} strict
+ */
+
+/** Set in the static block of `Options`; see `resolveOptions`. */
+let resolve;
+
+/**
+ * Validated, immutable options for `parse()`: strict mode (12) and limits
+ * (11).
+ *
+ * Named values are defined only in the document, with `%define` (6.6); the
+ * directives and the number suffixes are fixed by sections 6.5 and 9.5. None
+ * of them can be defined by the application. Validate once and reuse the
+ * instance for many calls.
+ */
+export class Options {
+  /** @type {OptionsState} */
+  #state;
+
+  /** @type {OptionsState | undefined} State without options, created on first use. */
+  static #defaultState;
+
+  static {
+    resolve = (options) => {
+      if (options === undefined || options === null) {
+        return (Options.#defaultState ??= new Options().#state);
+      }
+      if (typeof options === 'object' && #state in options) return options.#state;
+      return new Options(options).#state;
+    };
+  }
+
+  /**
+   * @param {{maxDepth?: number, maxExpansion?: number, strict?: boolean} | Options} [init]
+   *   `maxDepth`: maximum nesting depth of objects and arrays (default 1000).
+   *   `maxExpansion`: maximum number of JSON values that replacing named
+   *   values may produce in one document (default 1000000).
+   *   `strict`: true for strict mode (default false).
+   * @throws {TypeError} if an option is unknown or invalid
+   */
+  constructor(init) {
+    if (init !== undefined && init !== null) {
+      if (typeof init !== 'object' || Array.isArray(init)) {
+        throw new TypeError(`XTJSON options must be an object with the properties ${OPTION_LIST}`);
+      }
+      if (#state in init) {
+        this.#state = init.#state; // immutable, so it can be shared
+        Object.freeze(this);
+        return;
+      }
+      for (const key of Object.keys(init)) {
+        if (!OPTION_NAMES.includes(key)) {
+          const hint = key === 'namedValues'
+            ? '; named values are defined in the document with %define, not by the application'
+            : key === 'ijson' ? '; the I-JSON mode is strict mode, option "strict"' : '';
+          throw new TypeError(`Unknown XTJSON option ${quote(key)}${hint}. The options are ${OPTION_LIST}`);
+        }
+      }
+    }
+    const strict = init?.strict ?? false;
+    if (typeof strict !== 'boolean') {
+      throw new TypeError(`Invalid XTJSON option: "strict" must be true or false, not ${quote(strict)}`);
+    }
+    const maxDepth = Options.#limitOption(init, 'maxDepth', DEFAULT_MAX_DEPTH);
+    const maxExpansion = Options.#limitOption(init, 'maxExpansion', DEFAULT_MAX_EXPANSION);
+    this.#state = { maxDepth, maxExpansion, strict };
+    Object.freeze(this);
+  }
+
+  /**
+   * Maximum nesting depth of objects and arrays. An implicit root object
+   * counts as a level.
+   * @returns {number}
+   */
+  get maxDepth() {
+    return this.#state.maxDepth;
+  }
+
+  /**
+   * Maximum number of JSON values that replacing named values may produce
+   * in one document. Every object, array and other value counts as one.
+   * @returns {number}
+   */
+  get maxExpansion() {
+    return this.#state.maxExpansion;
+  }
+
+  /**
+   * True for strict mode (section 12): duplicate names, unpaired surrogates
+   * and noncharacters in names and strings, and a root value that is not an
+   * object or an array are errors. A document can also request strict mode
+   * with `%strict: true`; with this option, `%strict: false` is an error.
+   * @returns {boolean}
+   */
+  get strict() {
+    return this.#state.strict;
+  }
+
+  get [Symbol.toStringTag]() {
+    return 'Options';
+  }
+
+  /** A limit: a positive safe integer; `fallback` if not given. */
+  static #limitOption(init, name, fallback) {
+    const value = init?.[name] ?? fallback;
+    if (!Number.isSafeInteger(value) || value < 1) {
+      throw new TypeError(`Invalid XTJSON option: "${name}" must be a positive integer, not ${quote(value)}`);
+    }
+    return value;
+  }
+}
+
+/**
+ * The internal state for an `options` argument: an `Options` instance, a
+ * plain object (validated now) or null/undefined for the defaults.
+ * @returns {OptionsState}
+ * @throws {TypeError} if the options are invalid
+ */
+function resolveOptions(options) {
+  return resolve(options);
+}
+
+// ---------------------------------------------------------------------------
 // Parser
 
 /**
@@ -213,8 +429,6 @@ function copyValue(value) {
  */
 export class Parser {
   // Configuration, fixed when the parser is created
-  /** @type {import('./shared.js').OptionsState} */
-  #state;
   /** Strict mode requested by the application (12). */
   #strict = false;
   #maxDepth = 0;
@@ -231,7 +445,6 @@ export class Parser {
   #len = 0;
   #pos = 0;
   #depth = 0;
-  #busy = false;
   /**
    * Named values defined by `%define` (6.6): value, size and depth as by
    * `measure`, and the offset of the identifier.
@@ -265,13 +478,15 @@ export class Parser {
   static #suffixTable;
 
   /**
-   * @param {import('./shared.js').Options | object | null} [options] strict
-   *   mode and the limits
+   * @param {Options | object | null} [options] strict mode and the limits
    * @throws {TypeError} if the options are invalid
    */
   constructor(options) {
-    this.#configure(resolveOptions(options));
-    const tables = CharacterTables.get();
+    const state = resolveOptions(options);
+    this.#strict = state.strict;
+    this.#maxDepth = state.maxDepth;
+    this.#maxExpansion = state.maxExpansion;
+    const tables = characterTables();
     this.#flags = tables.flags;
     this.#hex = tables.hex;
     this.#suffixes = (Parser.#suffixTable ??= new Map([
@@ -283,26 +498,17 @@ export class Parser {
     ]));
   }
 
-  #configure(state) {
-    this.#state = state;
-    this.#strict = state.strict;
-    this.#maxDepth = state.maxDepth;
-    this.#maxExpansion = state.maxExpansion;
-  }
-
   /**
    * Parses an XTJSON document and returns its value.
    *
    * @param {string} text the document; converted to a string as in
    *   `JSON.parse`
-   * @param {Function | null} [reviver] transforms the result, as in `JSON.parse`
    * @returns {any} the value; a number with the suffix `n` and without a
    *   fraction part becomes a BigInt if its value is an integer
    * @throws {ParserError} if the text is not a valid XTJSON document
-   * @throws {TypeError} if the reviver is not a function
    */
-  parse(text, reviver) {
-    return this.#run('parse', text, reviver).value;
+  parse(text) {
+    return this.parseDocument(text).value;
   }
 
   /**
@@ -313,29 +519,13 @@ export class Parser {
    *
    * @param {string} text the document; converted to a string as in
    *   `JSON.parse`
-   * @param {Function | null} [reviver] transforms the value, as in `JSON.parse`
    * @returns {{value: any, versions: Map<string, string | number | bigint>}}
    * @throws {ParserError} if the text is not a valid XTJSON document
-   * @throws {TypeError} if the reviver is not a function
    */
-  parseDocument(text, reviver) {
-    return this.#run('parseDocument', text, reviver);
-  }
-
-  #run(caller, text, reviver) {
-    if (reviver !== undefined && reviver !== null && typeof reviver !== 'function') {
-      throw new TypeError(`Parser.${caller}: the reviver must be a function, not ${typeof reviver}`);
-    }
+  parseDocument(text) {
     const source = String(text);
-    if (this.#busy) {
-      // Called again during a run: use a parser of its own.
-      const parser = new Parser();
-      parser.#configure(this.#state);
-      return parser.#run(caller, source, reviver);
-    }
     let value;
     const versions = new Map();
-    this.#busy = true;
     this.#text = source;
     this.#len = source.length;
     this.#pos = 0;
@@ -360,13 +550,11 @@ export class Parser {
       }
       throw error;
     } finally {
-      this.#busy = false;
       this.#text = '';
       this.#len = 0;
       this.#defined.clear();
       this.#versions = new Map();
     }
-    if (reviver !== undefined && reviver !== null) value = internalize({ '': value }, '', reviver);
     return { value, versions };
   }
 
@@ -1417,64 +1605,28 @@ function scaledDecimal(sign, digits, exponent) {
 }
 
 // ---------------------------------------------------------------------------
-// Reviver (as in JSON.parse, ECMA-262 InternalizeJSONProperty)
-
-function internalize(holder, key, reviver) {
-  const value = holder[key];
-  if (value !== null && typeof value === 'object') {
-    if (Array.isArray(value)) {
-      const length = value.length;
-      for (let i = 0; i < length; i++) reviveMember(value, String(i), reviver);
-    } else {
-      for (const k of Object.keys(value)) reviveMember(value, k, reviver);
-    }
-  }
-  return reviver.call(holder, key, value);
-}
-
-function reviveMember(obj, key, reviver) {
-  const value = internalize(obj, key, reviver);
-  // Like JSON.parse: failures (e.g. a frozen object) are ignored.
-  if (value === undefined) Reflect.deleteProperty(obj, key);
-  else Reflect.defineProperty(obj, key, { value, writable: true, enumerable: true, configurable: true });
-}
-
-// ---------------------------------------------------------------------------
-// parse()
-
-const PARSE_ARGUMENTS = [
-  { name: 'reviver', description: 'a reviver (a function)', test: isFunction },
-  { name: 'options', description: 'options (an object)', test: isOptions },
-];
+// parse() and parseDocument()
 
 /** Parser without options, created on first use. */
 let defaultParser;
 
+/** The parser for the options of parse() or parseDocument(). */
+function parserFor(options) {
+  return options === undefined || options === null ? (defaultParser ??= new Parser()) : new Parser(options);
+}
+
 /**
  * Parses an XTJSON document and returns its value.
  *
- * The optional arguments are told apart by their type:
- *
- *     parse(text)
- *     parse(text, reviver)            // a function
- *     parse(text, reviver, options)
- *     parse(text, null, options)
- *     parse(text, options)            // an object
- *
  * @param {string} text the document
- * @param {Function | import('./shared.js').Options | object | null} [reviver]
- *   a function transforms the result, as in `JSON.parse`; an object are the
- *   options
- * @param {import('./shared.js').Options | object | null} [options] the
- *   strict mode and the limits
+ * @param {Options | object | null} [options] strict mode and the limits
  * @returns {any} the value; a number with the suffix `n` and without a
  *   fraction part becomes a BigInt if its value is an integer
  * @throws {ParserError} if the text is not a valid XTJSON document
- * @throws {TypeError} if the arguments or the options are invalid
+ * @throws {TypeError} if the options are invalid
  */
-export function parse(text, reviver, options) {
-  const [parser, fn] = parserFor('parse', reviver, options);
-  return parser.parse(text, fn);
+export function parse(text, options) {
+  return parserFor(options).parse(text);
 }
 
 /**
@@ -1487,27 +1639,11 @@ export function parse(text, reviver, options) {
  *     // { value: { port: 8080 }, versions: Map { 'xtjson' => '0.6' } }
  *
  * @param {string} text the document
- * @param {Function | import('./shared.js').Options | object | null} [reviver]
- * @param {import('./shared.js').Options | object | null} [options]
+ * @param {Options | object | null} [options] strict mode and the limits
  * @returns {{value: any, versions: Map<string, string | number | bigint>}}
  * @throws {ParserError} if the text is not a valid XTJSON document
- * @throws {TypeError} if the arguments or the options are invalid
+ * @throws {TypeError} if the options are invalid
  */
-export function parseDocument(text, reviver, options) {
-  const [parser, fn] = parserFor('parseDocument', reviver, options);
-  return parser.parseDocument(text, fn);
-}
-
-/**
- * Assigns the optional arguments of parse() or parseDocument() and returns
- * the parser for the options together with the reviver.
- */
-function parserFor(caller, reviver, options) {
-  if (reviver !== undefined || options !== undefined) {
-    const args = readArguments(caller, [reviver, options], PARSE_ARGUMENTS);
-    reviver = args[0];
-    options = args[1];
-  }
-  const parser = options === undefined ? (defaultParser ??= new Parser()) : new Parser(options);
-  return [parser, reviver];
+export function parseDocument(text, options) {
+  return parserFor(options).parseDocument(text);
 }

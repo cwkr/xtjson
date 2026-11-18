@@ -1,12 +1,12 @@
 /**
- * XTJSON parser and generator for JavaScript. `parse` and `stringify` work
- * like the functions of the global `JSON` object; `Parser` and `Generator`
- * keep validated options for many calls.
+ * XTJSON parser for JavaScript. `parse` works like `JSON.parse`; `Parser`
+ * keeps validated options for many calls. `format` lays out a document
+ * again.
  *
  * @example
- * import { parse, stringify } from '@cwkr/xtjson';
+ * import { parse, format } from '@cwkr/xtjson';
  * const config = parse('name: "demo"\nport: 8080');
- * const text = stringify(config, 2);
+ * const text = format('{name: "demo", port: 8080}', 2);
  */
 
 /** A JSON value: the data model of XTJSON. */
@@ -19,7 +19,7 @@ export type JSONValue =
   | { [name: string]: JSONValue };
 
 /**
- * Options for `parse` and `stringify`.
+ * Options for `parse`.
  *
  * There are no options for named values, directives or number suffixes:
  * named values are defined in the document with `%define` (6.6), directives
@@ -30,9 +30,9 @@ export interface OptionsInit {
   /**
    * Maximum nesting depth of objects and arrays, a positive integer; an
    * implicit root object counts as a level. `parse` reports a deeper
-   * document as a `ParserError`, `stringify` a deeper value as a
-   * `TypeError`. Default: 1000. A very large value can exceed the call
-   * stack of the engine; `parse` then also throws a `ParserError`.
+   * document as a `ParserError`. Default: 1000. A very large value can
+   * exceed the call stack of the engine; `parse` then also throws a
+   * `ParserError`.
    */
   maxDepth?: number;
   /**
@@ -50,25 +50,10 @@ export interface OptionsInit {
    * an object or an array. The values of directives are checked for
    * duplicate names, surrogates and noncharacters in any case, also without
    * this option. A document with `%strict: false` is an error.
-   * `stringify` throws a `TypeError` for such names and strings and for a
-   * root value that is not an object or an array.
    * Default: false; then a document can still request strict mode with
    * `%strict: true`, and the member that comes last applies.
    */
   strict?: boolean;
-  /**
-   * `stringify` writes number suffixes: integers that are a multiple of the
-   * factor with `mb`, `kb`, `k`, `h` or `min`, fractions between -1 and 1
-   * that are whole hundredths or thousandths with `pct` or `ms`, the first
-   * in this order that applies. Default: false. BigInt values always get
-   * the suffix `n`.
-   */
-  writeNumberSuffixes?: boolean;
-  /**
-   * `stringify` writes strings and quoted names in `'` instead of `"`.
-   * Default: false.
-   */
-  writeSingleQuotes?: boolean;
 }
 
 /**
@@ -84,10 +69,6 @@ export class Options implements OptionsInit {
   get maxExpansion(): number;
   /** True for strict mode. */
   get strict(): boolean;
-  /** True if `stringify` writes number suffixes. */
-  get writeNumberSuffixes(): boolean;
-  /** True if `stringify` writes strings in `'`. */
-  get writeSingleQuotes(): boolean;
   get [Symbol.toStringTag](): 'Options';
 }
 
@@ -103,12 +84,6 @@ export class ParserError extends SyntaxError {
   /** 0-based offset in the text, in UTF-16 code units. */
   readonly offset: number;
 }
-
-/** Reviver as in `JSON.parse`. */
-export type Reviver = (this: any, key: string, value: any) => any;
-
-/** Replacer function as in `JSON.stringify`. */
-export type Replacer = (this: any, key: string, value: any) => any;
 
 /** The value of a document together with its version statements. */
 export interface ParsedDocument {
@@ -128,15 +103,11 @@ export interface ParsedDocument {
  * `bigint` if its value is an integer (`10n`, `0xFFn`, `1e3n`).
  *
  * @param text the document
- * @param reviver transforms the result, as in `JSON.parse`; `null` or
- *   `undefined` for none
  * @param options strict mode and the limits
  * @throws {ParserError} if the text is not a valid XTJSON document
- * @throws {TypeError} if the arguments or the options are invalid
+ * @throws {TypeError} if the options are invalid
  */
-export function parse(text: string, reviver?: Reviver | null, options?: Options | OptionsInit | null): any;
-/** Parses an XTJSON document with options. */
-export function parse(text: string, options: Options | OptionsInit): any;
+export function parse(text: string, options?: Options | OptionsInit | null): any;
 
 /**
  * Parses an XTJSON document and returns its value together with the version
@@ -147,56 +118,20 @@ export function parse(text: string, options: Options | OptionsInit): any;
  * parseDocument('%version: "0.6"\nport: 8080');
  * // { value: { port: 8080 }, versions: Map { 'xtjson' => '0.6' } }
  * @throws {ParserError} if the text is not a valid XTJSON document
- * @throws {TypeError} if the arguments or the options are invalid
+ * @throws {TypeError} if the options are invalid
  */
-export function parseDocument(text: string, reviver?: Reviver | null, options?: Options | OptionsInit | null): ParsedDocument;
-/** Parses an XTJSON document with options and returns its value and versions. */
-export function parseDocument(text: string, options: Options | OptionsInit): ParsedDocument;
+export function parseDocument(text: string, options?: Options | OptionsInit | null): ParsedDocument;
 
 /**
- * Writes a value as an XTJSON document, like `JSON.stringify`.
- *
- * Output: an object at the top level without braces; names without
- * quotation marks where possible; with `space`, one item per line without
- * commas and strings with line breaks across several lines; numbers of
- * 10000 or more grouped with `_`; number suffixes only with
- * `writeNumberSuffixes`; `bigint` values with the suffix `n`; strings in `"`, or in `'` with
- * `writeSingleQuotes`. Named values and directives are not written.
- *
- * @param value the value
- * @param replacer a function or an array of names, as in `JSON.stringify`
- * @param space indentation: a number of spaces (at most 10) or a string of
- *   at most 10 spaces and tabs
- * @param options strict mode, the maximum nesting depth, number
- *   suffixes and quotation marks
- * @returns the document, or `undefined` for `undefined`, functions and symbols
- * @throws {TypeError} for circular references, nesting deeper than
- *   `maxDepth`, invalid arguments or options, and strings not permitted in
- *   strict mode, and in strict mode a root value that is not an object or array
- */
-export function stringify(
-  value: any,
-  replacer?: Replacer | (string | number)[] | null,
-  space?: string | number | null,
-  options?: Options | OptionsInit | null,
-): string;
-/** Writes a value with a replacer and options, without indentation. */
-export function stringify(value: any, replacer: Replacer | (string | number)[] | null, options: Options | OptionsInit): string;
-/** Writes a value with indentation and optional options. */
-export function stringify(value: any, space: string | number, options?: Options | OptionsInit | null): string;
-/** Writes a value with options, without indentation. */
-export function stringify(value: any, options: Options | OptionsInit): string;
-
-/**
- * Formats an XTJSON document with the indentation `space`, as `stringify`
- * would lay it out, keeping comments and the notation of names and values.
- * The text is not parsed or validated; formatting is best effort, and a
- * valid document keeps its value. Without indentation, a line break that
- * separates two items becomes a comma.
+ * Formats an XTJSON document with the indentation `space`, as
+ * `JSON.stringify` would lay it out, keeping comments and the notation of
+ * names and values. The text is not parsed or validated; formatting is best
+ * effort, and a valid document keeps its value. Without indentation, a line
+ * break that separates two items becomes a comma.
  *
  * @param text the document
- * @param space indentation as in `stringify`: a number of spaces (at most
- *   10) or a string of spaces and tabs
+ * @param space indentation as in `JSON.stringify`: a number of spaces (at
+ *   most 10) or a string of spaces and tabs
  * @returns the formatted text, without a line break at the end
  * @throws {TypeError} if `space` is invalid
  */
@@ -216,38 +151,12 @@ export class Parser {
   /**
    * Parses an XTJSON document, see `parse`.
    * @throws {ParserError} if the text is not a valid XTJSON document
-   * @throws {TypeError} if the reviver is not a function
    */
-  parse(text: string, reviver?: Reviver | null): any;
+  parse(text: string): any;
   /**
    * Parses an XTJSON document and returns its value and version statements,
    * see `parseDocument`.
    * @throws {ParserError} if the text is not a valid XTJSON document
-   * @throws {TypeError} if the reviver is not a function
    */
-  parseDocument(text: string, reviver?: Reviver | null): ParsedDocument;
-}
-
-/**
- * Generator with fixed options. The options are validated once; the
- * instance can be reused for many values. Its state is private.
- *
- * @example
- * const generator = new Generator({ writeNumberSuffixes: true });
- * const text = generator.stringify({ cache: 67108864 }, null, 2);
- */
-export class Generator {
-  /** @throws {TypeError} if the options are invalid */
-  constructor(options?: Options | OptionsInit | null);
-  /**
-   * Writes a value as an XTJSON document, see `stringify`.
-   * @returns the document, or `undefined` for `undefined`, functions and symbols
-   * @throws {TypeError} for circular references, nesting deeper than
-   *   `maxDepth`, invalid arguments and strings and a root value not permitted in strict mode
-   */
-  stringify(
-    value: any,
-    replacer?: Replacer | (string | number)[] | null,
-    space?: string | number | null,
-  ): string;
+  parseDocument(text: string): ParsedDocument;
 }

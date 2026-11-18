@@ -9,7 +9,7 @@ import { parse, parseDocument, Parser, Options, ParserError } from '../xtjson.js
 /** Asserts a ParserError and returns it. */
 function error(text, options) {
   try {
-    parse(text, null, options);
+    parse(text, options);
   } catch (e) {
     assert.ok(e instanceof ParserError, `expected ParserError, got ${e}`);
     return e;
@@ -19,7 +19,7 @@ function error(text, options) {
 
 describe('API', () => {
   test('named exports only, no default export', () => {
-    assert.deepEqual(Object.keys(xtjson).sort(), ['Generator', 'Options', 'Parser', 'ParserError', 'format', 'parse', 'parseDocument', 'stringify']);
+    assert.deepEqual(Object.keys(xtjson).sort(), ['Options', 'Parser', 'ParserError', 'format', 'parse', 'parseDocument']);
     assert.equal('default' in xtjson, false);
   });
 
@@ -32,13 +32,10 @@ describe('API', () => {
     assert.deepEqual(Object.getOwnPropertyNames(Parser.prototype).sort(), ['constructor', 'parse', 'parseDocument']);
   });
 
-  test('Parser can be reused after an error and called from a reviver', () => {
+  test('Parser can be reused after an error', () => {
     const parser = new Parser();
     assert.throws(() => parser.parse('[1 2]'), ParserError);
     assert.deepEqual(parser.parse('a: 1'), { a: 1 });
-    const value = parser.parse('a: "b: 2"\nc: 3', (key, v) => (key === 'a' ? parser.parse(v) : v));
-    assert.deepEqual(value, { a: { b: 2 }, c: 3 });
-    assert.throws(() => parser.parse('1', {}), /the reviver must be a function/);
   });
 
   test('text is converted to a string, like JSON.parse', () => {
@@ -71,48 +68,11 @@ describe('API', () => {
   });
 });
 
-describe('reviver', () => {
-  test('is called like in JSON.parse', () => {
-    const calls = [];
-    const v = parse('a: [1, 2]\nb: {c: 3}', function (key, value) {
-      calls.push([key, this === undefined ? undefined : Array.isArray(this) ? 'array' : 'object']);
-      return typeof value === 'number' ? value * 10 : value;
-    });
-    assert.deepEqual(v, { a: [10, 20], b: { c: 30 } });
-    assert.deepEqual(calls.map((c) => c[0]), ['0', '1', 'a', 'c', 'b', '']);
-    assert.deepEqual(calls[0], ['0', 'array']);
-  });
-
-  test('gives the same result as JSON.parse for JSON texts', () => {
-    const text = '{"a":[1,{"b":2}],"c":"x","d":null}';
-    const reviver = (key, value) => (key === 'b' ? undefined : value);
-    assert.deepEqual(parse(text, reviver), JSON.parse(text, reviver));
-  });
-
-  test('undefined removes members and leaves holes in arrays', () => {
-    const v = parse('[1, 2, 3]', (k, x) => (x === 2 ? undefined : x));
-    assert.equal(v.length, 3);
-    assert.ok(!(1 in v));
-  });
-
-  test('null and undefined mean no reviver', () => {
-    assert.deepEqual(parse('[1]', null), [1]);
-    assert.deepEqual(parse('[1]', undefined), [1]);
-  });
-
-  test('other primitive values as second argument are a TypeError', () => {
-    for (const arg of ['not a function', 1, true, 1n, Symbol('s')]) {
-      assert.throws(() => parse('[1]', arg), (e) => e instanceof TypeError && !(e instanceof ParserError));
-    }
-  });
-});
-
-describe('call forms', () => {
+describe('options argument', () => {
   const init = { strict: true };
   const defs = new Options(init);
   const text = '%define: nil = null\n[nil, 50pct, 1]';
   const expected = [null, 0.5, 1];
-  const double = (k, v) => (typeof v === 'number' ? v * 2 : v);
 
   test('options as second argument: instance or plain object', () => {
     assert.deepEqual(parse(text, defs), expected);
@@ -120,24 +80,18 @@ describe('call forms', () => {
     assert.deepEqual(parse('[1, 1k]', {}), [1, 1000]);
   });
 
-  test('options as third argument after a reviver or null', () => {
-    assert.deepEqual(parse(text, null, defs), expected);
-    assert.deepEqual(parse(text, undefined, init), expected);
-    assert.deepEqual(parse(text, double, defs), [null, 1, 2]);
+  test('null and undefined mean no options', () => {
+    assert.deepEqual(parse('[1]', null), [1]);
+    assert.deepEqual(parse('[1]', undefined), [1]);
+    assert.deepEqual(parseDocument('[1]', null).value, [1]);
   });
 
-  test('options given twice are a TypeError', () => {
-    assert.throws(() => parse(text, defs, defs), /given twice/);
-    assert.throws(() => parse(text, init, {}), /given twice/);
-    assert.deepEqual(parse(text, defs, null), expected);
-    assert.deepEqual(parse(text, defs, undefined), expected);
-  });
-
-  test('invalid arguments are a TypeError', () => {
+  test('other values as second argument are a TypeError', () => {
+    for (const arg of [(k, v) => v, [], 'not options', 1, true, 1n, Symbol('s')]) {
+      assert.throws(() => parse('[1]', arg), (e) => e instanceof TypeError && /must be an object/.test(e.message));
+      assert.throws(() => parseDocument('[1]', arg), TypeError);
+    }
     assert.throws(() => parse(text, { namedValues: { nil: null } }), TypeError);
-    assert.throws(() => parse(text, []), /unexpected argument of type object/);
-    assert.throws(() => parse(text, null, 'x'), /unexpected argument of type string/);
-    assert.throws(() => parse(text, defs, () => 1), /the reviver is in the wrong position/);
   });
 });
 
@@ -168,11 +122,6 @@ describe('directives and named values', () => {
     assert.equal(Object.getPrototypeOf(p[1]), Object.prototype);
   });
 
-  test('a reviver sees the copies', () => {
-    const v = parse('%define: a = [1]\nx: a\ny: a', (key, value) => (typeof value === 'number' ? value + 1 : value));
-    assert.deepEqual(v, { x: [2], y: [2] });
-  });
-
   test('parseDocument returns the version statements', () => {
     const { value, versions } = parseDocument("%version: '0.6'\n%version: schema = 20260401\n%define: a = 1\n[a]");
     assert.deepEqual(value, [1]);
@@ -180,7 +129,6 @@ describe('directives and named values', () => {
     assert.deepEqual([...versions], [['xtjson', '0.6'], ['schema', 20260401]]);
     assert.deepEqual([...parseDocument('{}').versions], []);
     assert.deepEqual([...parseDocument('%version: xtjson = 1.5\n{}').versions], [['xtjson', 1.5]]);
-    assert.deepEqual(parseDocument('[1]', (k, v) => (v === 1 ? 2 : v)).value, [2]);
     assert.deepEqual(new Parser({ strict: true }).parseDocument('%version: 1\n[1]').value, [1]);
   });
 
@@ -250,7 +198,7 @@ describe('options', () => {
 
   test('unknown options are a TypeError', () => {
     assert.throws(() => parse('1', { strcit: true }),
-      /Unknown XTJSON option "strcit"\. The options are "maxDepth", "maxExpansion", "strict", "writeNumberSuffixes" and "writeSingleQuotes"/);
+      /Unknown XTJSON option "strcit"\. The options are "maxDepth", "maxExpansion" and "strict"/);
     assert.throws(() => parse('1', { ijson: true }), /Unknown XTJSON option "ijson"; the I-JSON mode is strict mode, option "strict"/);
     assert.deepEqual(parse('1', { strict: undefined, maxDepth: undefined, maxExpansion: undefined }), 1);
   });
@@ -265,7 +213,7 @@ describe('options', () => {
     ];
     for (const [options, pattern] of cases) {
       assert.throws(() => new Options(options), (e) => e instanceof TypeError && pattern.test(e.message));
-      assert.throws(() => parse('1', null, options), TypeError);
+      assert.throws(() => parse('1', options), TypeError);
     }
   });
 });
@@ -473,8 +421,6 @@ describe('numbers', () => {
     ];
     for (const [text, expected] of cases) assert.equal(parse(text), expected, text);
     assert.deepEqual(parse('a: 1n, b: [2n, 3]'), { a: 1n, b: [2n, 3] });
-    // the reviver receives the BigInt
-    assert.equal(parse('[5n]', (k, v) => (typeof v === 'bigint' ? Number(v) * 2 : v))[0], 10);
   });
 
   test('numbers with a fraction part or a non-integer value stay numbers with the suffix n', () => {
