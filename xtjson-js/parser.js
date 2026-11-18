@@ -1,8 +1,7 @@
 /**
- * XTJSON parser: `Parser`, `ParserError`, `Options`, `parse()` and
- * `parseDocument()`.
+ * XTJSON parser: `Parser`, `ParserError`, `Options` and `parse()`.
  *
- * Implements the XTJSON specification, draft 0.6 (docs/xtjson-spec-en.md).
+ * Implements the XTJSON specification, draft 0.7 (docs/xtjson-spec-en.md).
  *
  * Design notes:
  * - Single-pass recursive descent parser working directly on UTF-16 code
@@ -21,12 +20,6 @@
 
 /** Default for the option `maxDepth`: maximum nesting depth of objects and arrays. */
 const DEFAULT_MAX_DEPTH = 1000;
-
-/**
- * Default for the option `maxExpansion`: maximum number of JSON values that
- * replacing named values may produce in one document (sections 11 and 13).
- */
-const DEFAULT_MAX_EXPANSION = 1000000;
 
 // ---------------------------------------------------------------------------
 // Characters
@@ -52,7 +45,6 @@ const SLASH = 0x2f;
 const DIGIT_0 = 0x30;
 const DIGIT_9 = 0x39;
 const COLON = 0x3a;
-const EQUALS = 0x3d;
 const LBRACKET = 0x5b;
 const BACKSLASH = 0x5c;
 const RBRACKET = 0x5d;
@@ -80,7 +72,6 @@ const SUFFIX_NAMES = ['min', 'ms', 'mb', 'm', 'kb', 'k', 's', 'h', 'pct', 'n'];
 
 const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
 
-const DIRECTIVE_LIST = '%define, %version and %strict';
 
 // Flags for ASCII characters in the table `flags` of `characterTables()`
 const ID_START = 1; // ALPHA / "_" / "$"                       (7.2)
@@ -126,9 +117,9 @@ function quote(x) {
   return typeof x === 'string' ? JSON.stringify(x) : String(x);
 }
 
-/** True for the predefined named values `true`, `false` and `null` (6.4). */
-function isPredefined(id) {
-  return id === 'true' || id === 'false' || id === 'null';
+/** True for the literals `true`, `false`, `null` and `nil` (6.4). */
+function isLiteral(id) {
+  return id === 'true' || id === 'false' || id === 'null' || id === 'nil';
 }
 
 /**
@@ -254,44 +245,16 @@ function setMember(obj, name, value) {
   }
 }
 
-/**
- * Size and depth of a value read by the parser: the number of JSON values
- * in it (every object, array and other value counts as one) and the
- * nesting depth of its objects and arrays (0 for other values).
- * @returns {[number, number]}
- */
-function measure(value) {
-  if (value === null || typeof value !== 'object') return [1, 0];
-  let size = 1;
-  let depth = 0;
-  for (const item of Array.isArray(value) ? value : Object.values(value)) {
-    const [s, d] = measure(item);
-    size += s;
-    if (d > depth) depth = d;
-  }
-  return [size, depth + 1];
-}
-
-/** A copy of a value read by the parser; every position of a named value gets its own (6.4). */
-function copyValue(value) {
-  if (value === null || typeof value !== 'object') return value;
-  if (Array.isArray(value)) return value.map(copyValue);
-  const obj = {};
-  for (const name of Object.keys(value)) setMember(obj, name, copyValue(value[name]));
-  return obj;
-}
-
 // ---------------------------------------------------------------------------
 // Options: strict mode (12) and limits (11)
 
-const OPTION_NAMES = ['maxDepth', 'maxExpansion', 'strict'];
-const OPTION_LIST = '"maxDepth", "maxExpansion" and "strict"';
+const OPTION_NAMES = ['maxDepth', 'strict'];
+const OPTION_LIST = '"maxDepth" and "strict"';
 
 /**
  * Internal state of an `Options` instance, read by the parser.
  * @typedef {object} OptionsState
  * @property {number} maxDepth
- * @property {number} maxExpansion
  * @property {boolean} strict
  */
 
@@ -302,10 +265,9 @@ let resolve;
  * Validated, immutable options for `parse()`: strict mode (12) and limits
  * (11).
  *
- * Named values are defined only in the document, with `%define` (6.6); the
- * directives and the number suffixes are fixed by sections 6.5 and 9.5. None
- * of them can be defined by the application. Validate once and reuse the
- * instance for many calls.
+ * The literals, the directive `%strict` and the number suffixes are fixed by
+ * sections 6.4, 6.5 and 9.5; the application can define none of them.
+ * Validate once and reuse the instance for many calls.
  */
 export class Options {
   /** @type {OptionsState} */
@@ -325,10 +287,8 @@ export class Options {
   }
 
   /**
-   * @param {{maxDepth?: number, maxExpansion?: number, strict?: boolean} | Options} [init]
+   * @param {{maxDepth?: number, strict?: boolean} | Options} [init]
    *   `maxDepth`: maximum nesting depth of objects and arrays (default 1000).
-   *   `maxExpansion`: maximum number of JSON values that replacing named
-   *   values may produce in one document (default 1000000).
    *   `strict`: true for strict mode (default false).
    * @throws {TypeError} if an option is unknown or invalid
    */
@@ -345,8 +305,9 @@ export class Options {
       for (const key of Object.keys(init)) {
         if (!OPTION_NAMES.includes(key)) {
           const hint = key === 'namedValues'
-            ? '; named values are defined in the document with %define, not by the application'
-            : key === 'ijson' ? '; the I-JSON mode is strict mode, option "strict"' : '';
+            ? '; there are no named values, only the literals true, false, null and nil'
+            : key === 'maxExpansion' ? '; there are no named values whose replacement could be limited'
+              : key === 'ijson' ? '; the I-JSON mode is strict mode, option "strict"' : '';
           throw new TypeError(`Unknown XTJSON option ${quote(key)}${hint}. The options are ${OPTION_LIST}`);
         }
       }
@@ -356,8 +317,7 @@ export class Options {
       throw new TypeError(`Invalid XTJSON option: "strict" must be true or false, not ${quote(strict)}`);
     }
     const maxDepth = Options.#limitOption(init, 'maxDepth', DEFAULT_MAX_DEPTH);
-    const maxExpansion = Options.#limitOption(init, 'maxExpansion', DEFAULT_MAX_EXPANSION);
-    this.#state = { maxDepth, maxExpansion, strict };
+    this.#state = { maxDepth, strict };
     Object.freeze(this);
   }
 
@@ -368,15 +328,6 @@ export class Options {
    */
   get maxDepth() {
     return this.#state.maxDepth;
-  }
-
-  /**
-   * Maximum number of JSON values that replacing named values may produce
-   * in one document. Every object, array and other value counts as one.
-   * @returns {number}
-   */
-  get maxExpansion() {
-    return this.#state.maxExpansion;
   }
 
   /**
@@ -423,14 +374,12 @@ function resolveOptions(options) {
  *
  *     const parser = new Parser({ strict: true });
  *     const value = parser.parse(text);
- *     const { value, versions } = parser.parseDocument(text);
  */
 export class Parser {
   // Configuration, fixed when the parser is created
   /** Strict mode requested by the application (12). */
   #strict = false;
   #maxDepth = 0;
-  #maxExpansion = 0;
   /** @type {Uint8Array} */
   #flags;
   /** @type {Int8Array} */
@@ -443,28 +392,8 @@ export class Parser {
   #len = 0;
   #pos = 0;
   #depth = 0;
-  /**
-   * Named values defined by `%define` (6.6): value, size and depth as by
-   * `measure`, and the offset of the identifier.
-   * @type {Map<string, {value: unknown, size: number, depth: number, offset: number}>}
-   */
-  #defined = new Map();
-  /** @type {Map<string, string | number | bigint>} version statements of `%version` (6.7) */
-  #versions = new Map();
-  /** Number of JSON values produced so far by replacing named values. */
-  #expanded = 0;
-  /**
-   * True while the prohibitions of section 12 on names, strings and
-   * duplicate names are checked: always in the values of directives (6.5),
-   * in the content only in strict mode.
-   */
+  /** True if the content is read in strict mode (12). */
   #check = false;
-  /** True while the directives are read. */
-  #inDirectives = false;
-  /** @type {boolean | undefined} the value of `%strict` (6.8) */
-  #docStrict;
-  /** Offset of the `%strict` directive. */
-  #docStrictOffset = 0;
 
   /**
    * The number suffixes of 9.5, built on first use; the table is exhaustive.
@@ -483,7 +412,6 @@ export class Parser {
     const state = resolveOptions(options);
     this.#strict = state.strict;
     this.#maxDepth = state.maxDepth;
-    this.#maxExpansion = state.maxExpansion;
     const tables = characterTables();
     this.#flags = tables.flags;
     this.#hex = tables.hex;
@@ -503,33 +431,13 @@ export class Parser {
    * @throws {ParserError} if the text is not a valid XTJSON document
    */
   parse(text) {
-    return this.parseDocument(text).value;
-  }
-
-  /**
-   * Parses an XTJSON document and returns its value together with the
-   * version statements of its `%version` directives (6.7). The version of
-   * the specification is stored under `xtjson`. The versions are not
-   * checked; that is left to the application.
-   *
-   * @param {string} text the document; converted to a string as in
-   *   `JSON.parse`
-   * @returns {{value: any, versions: Map<string, string | number | bigint>}}
-   * @throws {ParserError} if the text is not a valid XTJSON document
-   */
-  parseDocument(text) {
     const source = String(text);
     let value;
-    const versions = new Map();
     this.#text = source;
     this.#len = source.length;
     this.#pos = 0;
     this.#depth = 0;
-    this.#expanded = 0;
-    this.#versions = versions;
-    this.#check = true;
-    this.#inDirectives = true;
-    this.#docStrict = undefined;
+    this.#check = false;
     try {
       if (typeof source.isWellFormed === 'function' ? !source.isWellFormed() : LONE_SURROGATE.test(source)) {
         const offset = source.search(LONE_SURROGATE);
@@ -547,10 +455,8 @@ export class Parser {
     } finally {
       this.#text = '';
       this.#len = 0;
-      this.#defined.clear();
-      this.#versions = new Map();
     }
-    return { value, versions };
+    return value;
   }
 
   // ----- Messages ---------------------------------------------------------
@@ -656,11 +562,10 @@ export class Parser {
     if (this.#peek() === EOF) {
       this.#fail('The document is empty; expected a value or at least one member');
     }
-    this.#parseDirectives();
     // The content is checked in strict mode (12), requested by the
-    // application or by %strict: true (6.8).
-    this.#inDirectives = false;
-    this.#check = this.#strict || this.#docStrict === true;
+    // application or by %strict: true (6.5).
+    this.#check = this.#strict;
+    if (this.#peek() === PERCENT) this.#parseDirective();
     const start = this.#pos;
     const c = this.#peek();
 
@@ -677,7 +582,7 @@ export class Parser {
         this.#parseMembers(value, EOF, start, token);
         this.#depth--;
       } else {
-        value = isIdentifier ? this.#resolveNamedValue(token, start) : token;
+        value = isIdentifier ? this.#literal(token, start) : token;
       }
     } else {
       value = this.#parseValue();
@@ -696,135 +601,64 @@ export class Parser {
     return value;
   }
 
-  // ----- Directives (6.5 to 6.8) ------------------------------------------
+  // ----- Directive (6.5) -------------------------------------------------
 
-  /** Reads the directives at the start of the document, each with the separator after it. */
-  #parseDirectives() {
-    while (this.#peek() === PERCENT) {
-      this.#parseDirective();
-      const before = this.#pos;
-      const newline = this.#skipSpace();
-      const c = this.#peek();
-      if (c === COMMA) {
-        this.#pos++;
-        this.#skipSpace();
-      } else if (!newline && c !== EOF) {
-        let reason = `Expected a comma or a line break after the directive, found ${describeAt(this.#text, this.#pos)}`;
-        const gap = this.#text.slice(before, this.#pos);
-        if (/[\u2028\u2029]/.test(gap)) {
-          reason += '; U+2028 and U+2029 are not line breaks';
-        } else if (/\/\*[^]*[\r\n]/.test(gap)) {
-          reason += '; a line break inside a block comment does not separate items';
-        }
-        this.#fail(reason);
-      }
-      if (this.#peek() === EOF) {
-        this.#fail('The document contains only directives; expected a value or at least one member after them');
-      }
-    }
-  }
-
-  /** A directive (6.5), from the '%' to the end of its value. */
+  /**
+   * The directive `%strict` at the start of the document, with the separator
+   * after it. Its value is the literal `true` or `false`.
+   */
   #parseDirective() {
     const start = this.#pos;
+    const text = this.#text;
     this.#pos++; // '%'
     if (!hasFlag(this.#flags, this.#peek(), ID_START)) {
-      this.#fail(`The name of a directive must follow '%' directly, without white space or comments; the directives are ${DIRECTIVE_LIST}`);
+      this.#fail("'strict' must follow '%' directly, without white space or comments; the only directive is %strict");
     }
     const name = this.#readIdentifier();
-    if (name !== 'define' && name !== 'version' && name !== 'strict') {
-      const lower = name.toLowerCase();
-      const hint = lower === 'define' || lower === 'version' || lower === 'strict'
-        ? `; did you mean '%${lower}'? Directives are case-sensitive`
-        : '';
-      this.#fail(`Unknown directive '%${name}'${hint}. The directives are ${DIRECTIVE_LIST}`, start);
+    if (name !== 'strict') {
+      const hint = name.toLowerCase() === 'strict' ? "; did you mean '%strict'? Directives are case-sensitive" : '';
+      this.#fail(`Unknown directive '%${name}'${hint}. The only directive is %strict`, start);
     }
     this.#skipSpace();
-    if (this.#peek() !== COLON) this.#failUnexpected(`':' after '%${name}'`);
+    if (this.#peek() !== COLON) this.#failUnexpected("':' after '%strict'");
     this.#pos++;
     this.#skipSpace();
-    // An identifier followed by '=' (one token of lookahead), or the value alone.
-    const idStart = this.#pos;
-    let id;
-    if (hasFlag(this.#flags, this.#peek(), ID_START)) {
-      const identifier = this.#readIdentifier();
-      this.#skipSpace();
-      if (this.#peek() === EQUALS) {
-        id = identifier;
-        this.#pos++;
-        this.#skipSpace();
-      } else {
-        this.#pos = idStart;
-      }
-    }
-    if (name === 'define') this.#define(id, idStart);
-    else if (name === 'version') this.#version(id, idStart);
-    else this.#strictDirective(id, idStart, start);
-  }
-
-  /** `%define` (6.6): defines the named value `id`. */
-  #define(id, idStart) {
-    if (id === undefined) {
-      this.#fail("%define needs an identifier and '=' before the value, as in '%define: nil = null'", idStart);
-    }
-    if (isPredefined(id)) {
-      this.#fail(`The named value '${id}' is predefined and cannot be redefined`, idStart);
-    }
-    const earlier = this.#defined.get(id);
-    if (earlier !== undefined) {
-      const { line, column } = locate(this.#text, earlier.offset);
-      this.#fail(`The named value '${id}' is already defined at line ${line}, column ${column}; a named value can be defined only once`, idStart);
-    }
-    const value = this.#parseValue(); // `id` is not yet defined in its own value
-    const [size, depth] = measure(value);
-    this.#defined.set(id, { value, size, depth, offset: idStart });
-  }
-
-  /** `%version` (6.7): records the version statement for `id`, or for the specification. */
-  #version(id, idStart) {
-    const key = id ?? 'xtjson';
-    if (this.#versions.has(key)) {
-      const which = key === 'xtjson' ? 'of the specification' : `'${key}'`;
-      const forms = key === 'xtjson' ? " (%version: v and %version: xtjson = v are the same)" : '';
-      this.#fail(`The version ${which} is already stated${forms}; each version may be stated only once`, idStart);
-    }
     const valueStart = this.#pos;
-    const value = this.#parseValue();
-    const type = typeof value;
-    if (type !== 'string' && type !== 'number' && type !== 'bigint') {
-      this.#fail('The value of %version must be a string or a number, or a named value whose value is a string or a number', valueStart);
+    const word = hasFlag(this.#flags, this.#peek(), ID_START) ? this.#readIdentifier() : undefined;
+    if (word !== 'true' && word !== 'false') {
+      this.#fail("The value of %strict must be the literal true or false", valueStart);
     }
-    this.#versions.set(key, value);
-  }
-
-  /** `%strict` (6.8): strict mode for the document; `start` is the offset of the '%'. */
-  #strictDirective(id, idStart, start) {
-    if (id !== undefined) {
-      this.#fail("%strict has no identifier; write '%strict: true' or '%strict: false'", idStart);
-    }
-    if (this.#docStrict !== undefined) {
-      const { line, column } = locate(this.#text, this.#docStrictOffset);
-      this.#fail(`%strict is already stated at line ${line}, column ${column}; %strict may occur only once`, start);
-    }
-    const valueStart = this.#pos;
-    const value = this.#parseValue();
-    if (typeof value !== 'boolean') {
-      this.#fail('The value of %strict must be true or false, or a named value whose value is true or false', valueStart);
-    }
-    if (!value && this.#strict) {
+    if (word === 'false' && this.#strict) {
       this.#fail('%strict: false contradicts strict mode, which the application requests with the option strict', start);
     }
-    this.#docStrict = value;
-    this.#docStrictOffset = start;
-  }
+    if (word === 'true') this.#check = true;
 
-  /** Where the prohibitions of section 12 are checked, for messages. */
-  #checkedIn() {
-    return this.#inDirectives ? 'in the value of a directive' : 'in strict mode';
+    const before = this.#pos;
+    const newline = this.#skipSpace();
+    const c = this.#peek();
+    if (c === COMMA) {
+      this.#pos++;
+      this.#skipSpace();
+    } else if (!newline && c !== EOF) {
+      let reason = `Expected a comma or a line break after the directive, found ${describeAt(text, this.#pos)}`;
+      const gap = text.slice(before, this.#pos);
+      if (/[\u2028\u2029]/.test(gap)) {
+        reason += '; U+2028 and U+2029 are not line breaks';
+      } else if (/\/\*[^]*[\r\n]/.test(gap)) {
+        reason += '; a line break inside a block comment does not separate items';
+      }
+      this.#fail(reason);
+    }
+    if (this.#peek() === EOF) {
+      this.#fail('The document contains only the directive; expected a value or at least one member after it');
+    }
+    if (this.#peek() === PERCENT) {
+      this.#fail('%strict may occur only once, and there are no other directives');
+    }
   }
 
   #failDirectivePosition(offset = this.#pos) {
-    this.#fail('A directive is permitted only at the top level, before the content of the document', offset);
+    this.#fail('The directive %strict is permitted only at the top level, before the content of the document', offset);
   }
 
   // ----- Values (6.3) -----------------------------------------------------
@@ -847,7 +681,7 @@ export class Parser {
         if (isDigit(c)) return this.#parseNumber();
         if (hasFlag(this.#flags, c, ID_START)) {
           const start = this.#pos;
-          return this.#resolveNamedValue(this.#readIdentifier(), start);
+          return this.#literal(this.#readIdentifier(), start);
         }
         if (c === PLUS || c === DOT) {
           this.#fail(`A number must not begin with '${String.fromCharCode(c)}'`);
@@ -856,40 +690,27 @@ export class Parser {
     }
   }
 
-  /** Value of a named value (6.4); `start` is the offset of the identifier. */
-  #resolveNamedValue(id, start) {
+  /** Value of a literal (6.4); `start` is the offset of the identifier. */
+  #literal(id, start) {
     switch (id) {
       case 'true':
         return true;
       case 'false':
         return false;
       case 'null':
+      case 'nil':
         return null;
     }
-    // Named values defined by %define (6.6). Their strings and names were
-    // checked when the definition was read (6.5).
-    const definition = this.#defined.get(id);
-    if (definition !== undefined) {
-      if (this.#depth + definition.depth > this.#maxDepth) {
-        this.#fail(`Nesting depth exceeds the limit of ${this.#maxDepth} (option maxDepth) when the named value '${id}' is replaced`, start);
-      }
-      this.#expanded += definition.size;
-      if (this.#expanded > this.#maxExpansion) {
-        this.#fail(`Replacing named values produces more than ${this.#maxExpansion} values (option maxExpansion); definitions that use one another multiply the size of the value`, start);
-      }
-      return definition.depth === 0 ? definition.value : copyValue(definition.value);
-    }
-
     let hint;
     const lower = id.toLowerCase();
-    if (isPredefined(lower)) {
-      hint = `; did you mean '${lower}'? Named values are case-sensitive`;
+    if (isLiteral(lower)) {
+      hint = `; did you mean '${lower}'? Literals are case-sensitive`;
     } else if (id === 'NaN' || id === 'Infinity' || id === 'undefined') {
       hint = `; ${id} is not a JSON value`;
     } else {
-      hint = `; text without quotation marks is not a string, write "${id}" for a string or define '${id}' with %define before it is used`;
+      hint = `; text without quotation marks is not a string, write "${id}" for a string`;
     }
-    return this.#fail(`Undefined named value '${id}'${hint}`, start);
+    return this.#fail(`Unexpected identifier '${id}'; the values without quotation marks are true, false, null and nil${hint}`, start);
   }
 
   // ----- Objects and arrays (7) -------------------------------------------
@@ -934,7 +755,7 @@ export class Parser {
    * name has already been read and the position is on the ':'.
    */
   #parseMembers(obj, closer, start, name) {
-    // Offset of each name, to report duplicates (6.5, 12).
+    // Offset of each name, to report duplicates in strict mode (12).
     const seen = this.#check ? new Map() : undefined;
     let nameStart = start;
     for (;;) {
@@ -948,7 +769,7 @@ export class Parser {
           seen.set(name, nameStart);
         } else {
           const { line, column } = locate(this.#text, first);
-          this.#fail(`Duplicate name ${JSON.stringify(name)}; names must be unique ${this.#checkedIn()} (first occurrence at line ${line}, column ${column})`, nameStart);
+          this.#fail(`Duplicate name ${JSON.stringify(name)}; names must be unique in strict mode (first occurrence at line ${line}, column ${column})`, nameStart);
         }
       }
       this.#skipSpace();
@@ -1180,7 +1001,7 @@ export class Parser {
   #checkStrictString(value, start) {
     const issue = strictStringIssue(value);
     if (issue !== undefined) {
-      this.#fail(`The string contains ${issue}, which is not permitted ${this.#checkedIn()}`, start);
+      this.#fail(`The string contains ${issue}, which is not permitted in strict mode`, start);
     }
   }
 
@@ -1576,12 +1397,12 @@ function scaledDecimal(sign, digits, exponent) {
 }
 
 // ---------------------------------------------------------------------------
-// parse() and parseDocument()
+// parse()
 
 /** Parser without options, created on first use. */
 let defaultParser;
 
-/** The parser for the options of parse() or parseDocument(). */
+/** The parser for the options of parse(). */
 function parserFor(options) {
   return options === undefined || options === null ? (defaultParser ??= new Parser()) : new Parser(options);
 }
@@ -1591,30 +1412,10 @@ function parserFor(options) {
  *
  * @param {string} text the document
  * @param {Options | object | null} [options] strict mode and the limits
- * @returns {any} the value; a number with the suffix `n` and without a
- *   fraction part becomes a BigInt if its value is an integer
+ * @returns {any} the value; an integer with the suffix `n` becomes a BigInt
  * @throws {ParserError} if the text is not a valid XTJSON document
  * @throws {TypeError} if the options are invalid
  */
 export function parse(text, options) {
   return parserFor(options).parse(text);
-}
-
-/**
- * Parses an XTJSON document and returns its value together with the version
- * statements of its `%version` directives (6.7), as a `Map` from identifier
- * to value; the version of the specification is stored under `xtjson`. The
- * arguments are the same as for `parse`.
- *
- *     parseDocument('%version: "0.6"\nport: 8080')
- *     // { value: { port: 8080 }, versions: Map { 'xtjson' => '0.6' } }
- *
- * @param {string} text the document
- * @param {Options | object | null} [options] strict mode and the limits
- * @returns {{value: any, versions: Map<string, string | number | bigint>}}
- * @throws {ParserError} if the text is not a valid XTJSON document
- * @throws {TypeError} if the options are invalid
- */
-export function parseDocument(text, options) {
-  return parserFor(options).parseDocument(text);
 }

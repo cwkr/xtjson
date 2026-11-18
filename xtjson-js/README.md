@@ -17,17 +17,18 @@ import { parse, format } from '@cwkr/xtjson';
 
 const config = parse(`
 # Service configuration
-%define: any_host = "0.0.0.0"
+%strict: true
 
 name: 'demo-service'
-host: any_host
+host: "0.0.0.0"
 port: 8080            // a line break replaces the comma
+proxy: nil            // the same as null
 cache: 64mb
 motd: "
   Welcome.
   "
 `);
-// { name: 'demo-service', host: '0.0.0.0', port: 8080, cache: 67108864, motd: 'Welcome.\n' }
+// { name: 'demo-service', host: '0.0.0.0', port: 8080, proxy: null, cache: 67108864, motd: 'Welcome.\n' }
 
 format('{port: 8080, /* MiB */ cache: 64mb}', 2);
 // {
@@ -59,66 +60,34 @@ If a name occurs more than once in an object, the member that comes last in
 the document applies, as with `JSON.parse`. In [strict mode](#strict-mode)
 it is an error instead.
 
-### Directives and named values
+### Literals and the directive `%strict`
 
-A document can begin with directives (section 6.5). `%define` defines a
-named value (6.6); its value can be any value, including an object or an
-array, and can use the named values defined before it. Every position where
-a named value is used gets a copy of its own. `%version` states the version
-of the specification, or with an identifier the version of something else
-(6.7). `%strict: true` makes the parser read the content of the document in
-[strict mode](#strict-mode) (6.8).
+The values without quotation marks are the literals `true`, `false`, `null`
+and `nil` (section 6.4); `nil` is another notation for `null`. They are
+written in lower case. Any other identifier at a value position is an error;
+it is never read as a string. At a name position the literals are ordinary
+names: `{nil: nil}` is `{ nil: null }`.
+
+A document can begin with the directive `%strict` (6.5). `%strict: true`
+makes the parser read the content of the document in
+[strict mode](#strict-mode).
 
 ```js
 parse(`
-%version: '0.7'
-%define: nil = null
-%define: address = { city: 'Köln', zip: nil }
+%strict: true
 
-home: address
-work: address
+owner: nil
+tags: [true, false, null]
 `);
-// { home: { city: 'Köln', zip: null }, work: { city: 'Köln', zip: null } }
+// { owner: null, tags: [true, false, null] }
 ```
 
-- Named values are defined only in the document. The application cannot
-  define named values, directives or number suffixes; there are no options
-  for them.
-- A named value can be defined only once, `true`, `false` and `null` cannot
-  be redefined, and a named value can be used only after its definition.
-- Directives other than `%define`, `%version` and `%strict`, and directives
-  after the start of the content or inside objects and arrays, are errors.
-- The value of `%version` is a string or a number, also with a suffix or as
-  a named value whose value is a string or a number: `%version: windows = 2k`
-  states the version `2000`. Each version is stated at most once.
-- The value of `%strict` is `true` or `false`, also as a named value, and
-  `%strict` occurs at most once.
-- The values of directives must not contain duplicate names, unpaired
-  surrogates or noncharacters, with or without strict mode and even if a
-  named value is not used (6.5). Such a value is an error where it occurs.
-- Definitions that use one another can multiply the size of the value. The
-  option `maxExpansion` limits the number of values that replacing named
-  values produces, `maxDepth` also limits their nesting.
-
-### `parseDocument(text, options?)`
-
-Like `parse`, but returns the value together with the version statements of
-the `%version` directives, as a `Map` from identifier to value (a string, a
-number, or a BigInt for a number with the suffix `n`). The version of the
-specification is stored under `xtjson`. The versions are not checked; the
-application decides what to do with them.
-
-```js
-import { parseDocument } from '@cwkr/xtjson';
-
-const { value, versions } = parseDocument(`
-%version: '0.7'
-%version: schema = '2026.05.01b'
-port: 8080
-`);
-// value: { port: 8080 }
-// versions: Map { 'xtjson' => '0.7', 'schema' => '2026.05.01b' }
-```
+- The value of `%strict` is the literal `true` or `false`, nothing else.
+- `%strict` occurs at most once, only at the start of the document, and is
+  separated from the content by a comma or a line break.
+- There are no other directives, and neither the document nor the
+  application can define values, directives or number suffixes; there are
+  no options for them.
 
 ### Options
 
@@ -136,21 +105,15 @@ parse('ratio: 50pct\nowner: "me"', options);   // { ratio: 0.5, owner: 'me' }
   `ParserError`. A very large
   limit can exceed the call stack of the JavaScript engine (with Node.js at
   a depth of a few thousand); `parse` then reports a `ParserError` too.
-  The values of named values count with the depth at which they are used.
-- `maxExpansion`: the maximum number of values that replacing named values
-  may produce in one document, a positive integer. Default `1000000`. Every
-  object, array and other value counts as one, at every position where a
-  named value is used. `parse` reports a document that exceeds it as a
-  `ParserError`.
 - `strict`: `true` for strict mode, see [below](#strict-mode). Default
   `false`.
 
 Other properties are a `TypeError`, so that a misspelt option is not
-silently ignored. This includes `namedValues` and `ijson` of earlier
-versions: named values are defined in the document with `%define`, and the
-I-JSON mode is now strict mode, option `strict`.
+silently ignored. This includes `namedValues`, `maxExpansion` and `ijson`
+of earlier versions: there are no named values, and the I-JSON mode is now
+strict mode, option `strict`.
 
-The application cannot define named values, directives or number suffixes.
+The application cannot define values, directives or number suffixes.
 The suffixes are fixed by section 9.5 and always active when parsing: `k`
 (times 1000), `kb` (times 1024), `m` (times 1000000), `mb` (times 1048576),
 `ms` (divided by 1000), `s`, `min` (times 60), `h` (times 3600), `pct`
@@ -172,8 +135,8 @@ tabs (other characters would not be valid indentation, so they are a
 per line, indented by `space` per level, a space after each `:`, and empty
 objects and arrays as `{}` and `[]`. Unlike `JSON.stringify`, `format` keeps
 comments, the notation of names, strings and numbers (quotation marks,
-suffixes, hexadecimal numbers, ...) and the commas of the text; directives
-are laid out like members, with a space before and after `=`; a line break
+suffixes, hexadecimal numbers, ...) and the commas of the text; the
+directive is laid out like a member; a line break
 that separates two items stays a line break. At most one blank line between
 items is kept. Strings across several lines that begin with an empty line
 are indented anew, which does not change their value; line continuations
@@ -217,16 +180,14 @@ its prohibitions:
   ending in FFFE or FFFF), written directly or as an escape sequence;
 - a root value that is not an object or an array.
 
-The values of directives are checked for the first two in every case, see
-[Directives and named values](#directives-and-named-values). The JSON equivalent of a document that is valid in strict
+The JSON equivalent of a document that is valid in strict
 mode is an I-JSON message (RFC 7493), provided its numbers stay within the
 range of IEEE 754 binary64; that range is a recommendation and is not
 enforced.
 
 Strict mode applies if the application requests it with `strict: true` or if
-the document contains `%strict: true` (6.8). It applies to the content of
-the document, the part after the directives; `%strict` can therefore come
-after other directives, for example to use a named value. With `strict: true`, a
+the document contains `%strict: true` (6.5). It applies to the content of
+the document, the part after the directive. With `strict: true`, a
 document with `%strict: false` is an error, because it contradicts the
 application.
 
@@ -245,7 +206,7 @@ value.
 
 - An invalid document throws a `ParserError`, a subclass of `SyntaxError`.
   Its message names the violated rule and the position, for example
-  `Undefined named value 'ture'; text without quotation marks is not a string, write "ture" for a string or define 'ture' with %define before it is used (line 3, column 9)`.
+  `Unexpected identifier 'ture'; the values without quotation marks are true, false, null and nil; text without quotation marks is not a string, write "ture" for a string (line 3, column 9)`.
   The properties `reason`, `line`, `column` (both 1-based; columns count
   Unicode code points) and `offset` (0-based, in UTF-16 code units) give the
   details.
@@ -260,22 +221,20 @@ import { Parser, Options } from '@cwkr/xtjson';
 
 const parser = new Parser(new Options({ strict: true }));
 
-parser.parse('%define: nil = null\nowner: nil');  // { owner: null }
-parser.parseDocument(text);                       // { value, versions }
+parser.parse('owner: nil');  // { owner: null }
 ```
 
 - `new Parser(options?)` takes an `Options` instance or a plain object with
   the same properties and validates it once. An instance can be reused for
   any number of documents.
-- `parser.parse(text)` and `parser.parseDocument(text)` work like `parse`
-  and `parseDocument` with these options.
+- `parser.parse(text)` works like `parse` with these options.
 - The configuration and the state of a call are private.
 
-`parse` and `parseDocument` use such an instance internally.
+`parse` uses such an instance internally.
 
 ### Exports
 
-The package has only named exports: `parse`, `parseDocument`, `format`,
+The package has only named exports: `parse`, `format`,
 `Parser`, `Options` and `ParserError`. There is no default export.
 
 ## Numbers
@@ -305,7 +264,7 @@ The source consists of three modules:
 | File | Contents |
 |---|---|
 | `xtjson.js` | entry point of the package; only re-exports |
-| `parser.js` | `Parser`, `ParserError`, `Options`, `parse`, `parseDocument` |
+| `parser.js` | `Parser`, `ParserError`, `Options`, `parse` |
 | `formatter.js` | `format` |
 
 Rules for the modules:
@@ -336,8 +295,8 @@ are the supported test environments; Deno uses the same engine as Node.js
   python3 scripts/export_corpus.py --check   # fails if it is out of date
   ```
 
-- `test/parse.test.js` tests the API of `parse`, `parseDocument` and
-  `Parser`, directives and named values, strict mode, error messages and
+- `test/parse.test.js` tests the API of `parse` and `Parser`, the
+  literals and the directive, strict mode, error messages and
   positions, numbers and limits.
 - `test/format.test.js` tests `format`: the layout, and that every valid text
   of the corpus and the specification keeps its value and is formatted

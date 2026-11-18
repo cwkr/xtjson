@@ -21,10 +21,9 @@ export type JSONValue =
 /**
  * Options for `parse`.
  *
- * There are no options for named values, directives or number suffixes:
- * named values are defined in the document with `%define` (6.6), directives
- * and suffixes are fixed by the specification (6.5, 9.5). Unknown properties
- * are a `TypeError`.
+ * There are no options for values, directives or number suffixes: the
+ * literals, the directive `%strict` and the suffixes are fixed by the
+ * specification (6.4, 6.5, 9.5). Unknown properties are a `TypeError`.
  */
 export interface OptionsInit {
   /**
@@ -36,20 +35,10 @@ export interface OptionsInit {
    */
   maxDepth?: number;
   /**
-   * Maximum number of JSON values that replacing named values may produce
-   * in one document, a positive integer; every object, array and other
-   * value counts as one. Definitions that use one another can multiply the
-   * size of the value (section 13). `parse` reports a document that
-   * exceeds the limit as a `ParserError`. Default: 1000000.
-   */
-  maxExpansion?: number;
-  /**
    * Strict mode (section 12). `parse` rejects a document in which an object
    * contains a name twice, in which a name or string value contains an
    * unpaired surrogate or a Unicode noncharacter, or whose root value is not
-   * an object or an array. The values of directives are checked for
-   * duplicate names, surrogates and noncharacters in any case, also without
-   * this option. A document with `%strict: false` is an error.
+   * an object or an array. A document with `%strict: false` is an error.
    * Default: false; then a document can still request strict mode with
    * `%strict: true`, and the member that comes last applies.
    */
@@ -65,8 +54,6 @@ export class Options implements OptionsInit {
   constructor(init?: OptionsInit | null);
   /** The maximum nesting depth of objects and arrays. */
   get maxDepth(): number;
-  /** The maximum number of JSON values that replacing named values may produce. */
-  get maxExpansion(): number;
   /** True for strict mode. */
   get strict(): boolean;
   get [Symbol.toStringTag](): 'Options';
@@ -85,18 +72,6 @@ export class ParserError extends SyntaxError {
   readonly offset: number;
 }
 
-/** The value of a document together with its version statements. */
-export interface ParsedDocument {
-  /** The value of the document, as returned by `parse`. */
-  value: any;
-  /**
-   * The version statements of the `%version` directives (6.7), identifier
-   * → value, in the order of the document. The version of the specification
-   * is stored under `xtjson`. The versions are not checked.
-   */
-  versions: Map<string, string | number | bigint>;
-}
-
 /**
  * Parses an XTJSON document and returns its value. Numbers become `number`;
  * an integer with the suffix `n` becomes a `bigint` (`10n`, `0xFFn`).
@@ -107,19 +82,6 @@ export interface ParsedDocument {
  * @throws {TypeError} if the options are invalid
  */
 export function parse(text: string, options?: Options | OptionsInit | null): any;
-
-/**
- * Parses an XTJSON document and returns its value together with the version
- * statements of its `%version` directives. The arguments are the same as for
- * `parse`.
- *
- * @example
- * parseDocument('%version: "0.6"\nport: 8080');
- * // { value: { port: 8080 }, versions: Map { 'xtjson' => '0.6' } }
- * @throws {ParserError} if the text is not a valid XTJSON document
- * @throws {TypeError} if the options are invalid
- */
-export function parseDocument(text: string, options?: Options | OptionsInit | null): ParsedDocument;
 
 /**
  * Formats an XTJSON document with the indentation `space`, as
@@ -142,7 +104,7 @@ export function format(text: string, space?: string | number | null): string;
  *
  * @example
  * const parser = new Parser({ strict: true });
- * const value = parser.parse('%define: nil = null\nowner: nil');
+ * const value = parser.parse('owner: nil');
  */
 export class Parser {
   /** @throws {TypeError} if the options are invalid */
@@ -152,10 +114,4 @@ export class Parser {
    * @throws {ParserError} if the text is not a valid XTJSON document
    */
   parse(text: string): any;
-  /**
-   * Parses an XTJSON document and returns its value and version statements,
-   * see `parseDocument`.
-   * @throws {ParserError} if the text is not a valid XTJSON document
-   */
-  parseDocument(text: string): ParsedDocument;
 }

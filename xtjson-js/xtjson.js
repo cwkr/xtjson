@@ -1,11 +1,10 @@
 /**
  * XTJSON parser for JavaScript.
  *
- * Implements the XTJSON specification, draft 0.6 (docs/xtjson-spec-en.md).
+ * Implements the XTJSON specification, draft 0.7 (docs/xtjson-spec-en.md).
  *
- *     import { parse, parseDocument } from '@cwkr/xtjson';
+ *     import { parse } from '@cwkr/xtjson';
  *     const value = parse(text, options);
- *     const { value, versions } = parseDocument(text, options);
  *
  *     import { Parser, Options } from '@cwkr/xtjson';
  *     const options = new Options({ strict: true });
@@ -18,5 +17,5 @@
  * No module has side effects when it is imported.
  */
 
-export { parse, parseDocument, Parser, ParserError, Options } from './parser.js';
+export { parse, Parser, ParserError, Options } from './parser.js';
 export { format } from './formatter.js';

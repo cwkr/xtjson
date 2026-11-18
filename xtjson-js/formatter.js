@@ -43,8 +43,8 @@ function indentation(space) {
  *
  * With indentation, every member and array item is placed on a line of its
  * own, indented by `space` per level, a space follows each `:`, and at most
- * one blank line between items is kept. A directive (`%define: nil = null`)
- * is laid out like a member, with a space before and after its `=`. Without indentation (`space`
+ * one blank line between items is kept. The directive (`%strict: true`) is
+ * laid out like a member. Without indentation (`space`
  * omitted, 0 or ''), line breaks and white space are removed where possible;
  * a line break that separates two items becomes a comma, and a line comment
  * still ends its line.
@@ -82,7 +82,7 @@ export function format(text, space) {
     const separates = breaks > 0 && ended && startsValue;
     if (gap !== '') {
       const keep = startsValue || type === 'comment';
-      if (breaks > 1 && keep && previous !== 'open' && previous !== 'colon' && previous !== 'equals') pending = 2;
+      if (breaks > 1 && keep && previous !== 'open' && previous !== 'colon') pending = 2;
       else if (breaks > 0 && (separates || type === 'comment' || previous === 'comment')) pending = Math.max(pending, 1);
     } else if (separates && pending === 0) {
       put(',', '');
@@ -93,7 +93,7 @@ export function format(text, space) {
     switch (type) {
       case 'open':
       case 'value': {
-        const spaced = ended || previous === 'comment' || ((previous === 'colon' || previous === 'equals') && gap !== '');
+        const spaced = ended || previous === 'comment' || (previous === 'colon' && gap !== '');
         put(gap !== '' ? reindent(s, gap.repeat(depth + 1)) : s, spaced ? ' ' : '');
         ended = type === 'value';
         if (type === 'open') {
@@ -126,11 +126,6 @@ export function format(text, space) {
         put(s, '');
         ended = false;
         break;
-      case 'equals':
-        // In a directive (6.5): '%define: nil = null'.
-        put(s, gap !== '' ? ' ' : '');
-        ended = false;
-        break;
       case 'comment': {
         // A comment on the line of the previous token stays there.
         const after = breaks === 0 ? pending : 0;
@@ -148,7 +143,7 @@ export function format(text, space) {
 
 /**
  * Splits the text into tokens of the types open, close, comma, colon,
- * equals, comment and value (strings and everything else). `breaks` is the number of
+ * comment and value (strings and everything else). `breaks` is the number of
  * line breaks before the token.
  */
 function tokenize(text) {
@@ -171,8 +166,8 @@ function tokenize(text) {
     } else if (c === '}' || c === ']') {
       type = 'close';
       i++;
-    } else if (c === ',' || c === ':' || c === '=') {
-      type = c === ',' ? 'comma' : c === ':' ? 'colon' : 'equals';
+    } else if (c === ',' || c === ':') {
+      type = c === ',' ? 'comma' : 'colon';
       i++;
     } else if (c === '#' || text.startsWith('//', i)) {
       type = 'comment';
@@ -183,7 +178,7 @@ function tokenize(text) {
     } else if (c === '"' || c === "'") {
       i = stringEnd(text, i);
     } else {
-      while (i < text.length && !/[\s{}[\],:="'#]/.test(text[i]) &&
+      while (i < text.length && !/[\s{}[\],:"'#]/.test(text[i]) &&
         !text.startsWith('//', i) && !text.startsWith('/*', i)) i++;
     }
     tokens.push({ type, text: text.slice(start, i), breaks });

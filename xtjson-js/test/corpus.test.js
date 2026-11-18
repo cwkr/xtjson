@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-import { parse, parseDocument, ParserError } from '../xtjson.js';
+import { parse, ParserError } from '../xtjson.js';
 
 const corpus = JSON.parse(readFileSync(new URL('./corpus.json', import.meta.url), 'utf8'));
 
@@ -108,17 +108,12 @@ test('strict mode: valid texts give the same value or a strict mode error', () =
   assert.ok(rejected > 0 && rejected < all.length, `rejected ${rejected}`);
 });
 
-test('tests_direktiven.py: version statements', () => {
-  for (const [text, expected] of corpus.d_versions) {
-    assert.deepEqual(Object.fromEntries(parseDocument(text).versions), expected, show(text));
-  }
-});
-
-test('tests_definitionen.py: the application cannot define named values or suffixes', () => {
+test('tests_definitionen.py: the application cannot define values or suffixes', () => {
   assert.throws(() => parse('nil', { namedValues: { nil: null } }), (error) => {
-    return error instanceof TypeError && /defined in the document with %define/.test(error.message);
+    return error instanceof TypeError && /there are no named values/.test(error.message);
   });
   assert.throws(() => parse('1', { suffixes: { q: Math.abs } }), TypeError);
+  assert.throws(() => parse('1', { maxExpansion: 10 }), TypeError);
 });
 
 // Examples of the specification (as in xtjson_ref.py): every block tagged

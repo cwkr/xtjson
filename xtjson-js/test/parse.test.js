@@ -4,7 +4,7 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import * as xtjson from '../xtjson.js';
-import { parse, parseDocument, Parser, Options, ParserError } from '../xtjson.js';
+import { parse, Parser, Options, ParserError } from '../xtjson.js';
 
 /** Asserts a ParserError and returns it. */
 function error(text, options) {
@@ -19,17 +19,17 @@ function error(text, options) {
 
 describe('API', () => {
   test('named exports only, no default export', () => {
-    assert.deepEqual(Object.keys(xtjson).sort(), ['Options', 'Parser', 'ParserError', 'format', 'parse', 'parseDocument']);
+    assert.deepEqual(Object.keys(xtjson).sort(), ['Options', 'Parser', 'ParserError', 'format', 'parse']);
     assert.equal('default' in xtjson, false);
   });
 
   test('Parser keeps its options and hides its state', () => {
     const parser = new Parser({ strict: true });
-    assert.deepEqual(parser.parse('%define: nil = null\na: nil'), { a: null });
+    assert.deepEqual(parser.parse('a: nil'), { a: null });
     assert.deepEqual(parser.parse('[1, 2]'), [1, 2]);
     assert.throws(() => parser.parse('{a: 1, a: 2}'), /Duplicate name/);
     assert.deepEqual(Object.keys(parser), []);
-    assert.deepEqual(Object.getOwnPropertyNames(Parser.prototype).sort(), ['constructor', 'parse', 'parseDocument']);
+    assert.deepEqual(Object.getOwnPropertyNames(Parser.prototype).sort(), ['constructor', 'parse']);
   });
 
   test('Parser can be reused after an error', () => {
@@ -71,7 +71,7 @@ describe('API', () => {
 describe('options argument', () => {
   const init = { strict: true };
   const defs = new Options(init);
-  const text = '%define: nil = null\n[nil, 50pct, 1]';
+  const text = '[nil, 50pct, 1]';
   const expected = [null, 0.5, 1];
 
   test('options as second argument: instance or plain object', () => {
@@ -83,88 +83,55 @@ describe('options argument', () => {
   test('null and undefined mean no options', () => {
     assert.deepEqual(parse('[1]', null), [1]);
     assert.deepEqual(parse('[1]', undefined), [1]);
-    assert.deepEqual(parseDocument('[1]', null).value, [1]);
   });
 
   test('other values as second argument are a TypeError', () => {
     for (const arg of [(k, v) => v, [], 'not options', 1, true, 1n, Symbol('s')]) {
       assert.throws(() => parse('[1]', arg), (e) => e instanceof TypeError && /must be an object/.test(e.message));
-      assert.throws(() => parseDocument('[1]', arg), TypeError);
     }
     assert.throws(() => parse(text, { namedValues: { nil: null } }), TypeError);
   });
 });
 
-describe('directives and named values', () => {
-  test('named values are defined in the document with %define', () => {
-    const text = '%define: nil = null\n%define: zero = 0, %define: half = 50pct\n[nil, zero, half, true]';
-    assert.deepEqual(parse(text), [null, 0, 0.5, true]);
-    assert.match(error('nil').message, /Undefined named value 'nil'.*define 'nil' with %define before it is used/);
-    assert.equal(parse('10k'), 10000);
+describe('literals and the directive', () => {
+  test('true, false, null and nil (6.4)', () => {
+    assert.deepEqual(parse('[true, false, null, nil]'), [true, false, null, null]);
+    assert.equal(parse('nil'), null);
+    assert.deepEqual(parse('{nil: nil, true: false}'), { nil: null, true: false });
+    assert.deepEqual(parse('nil: 1'), { nil: 1 });
   });
 
-  test('a definition applies only to the document that contains it', () => {
-    const parser = new Parser();
-    assert.deepEqual(parser.parse('%define: a = 1\n[a]'), [1]);
-    assert.throws(() => parser.parse('[a]'), /Undefined named value 'a'/);
-    assert.deepEqual(parser.parse('%define: a = 2\n[a]'), [2]);
+  test('every other identifier at a value position is an error', () => {
+    assert.match(error('[red]').message, /Unexpected identifier 'red'; the values without quotation marks are true, false, null and nil; text without quotation marks is not a string, write "red" for a string/);
+    assert.match(error('a: Nil').message, /did you mean 'nil'\? Literals are case-sensitive/);
+    assert.match(error('[nullable]').message, /Unexpected identifier 'nullable'/);
+    assert.match(error('undefined').message, /undefined is not a JSON value/);
   });
 
-  test('objects and arrays are copied to every position (6.4)', () => {
-    const v = parse('%define: address = {city: "x", lines: [1, 2]}\nhome: address\nwork: address');
-    assert.deepEqual(v.home, { city: 'x', lines: [1, 2] });
-    assert.notEqual(v.home, v.work);
-    assert.notEqual(v.home.lines, v.work.lines);
-    v.home.lines.push(3);
-    assert.deepEqual(v.work.lines, [1, 2]);
-    const p = parse('%define: o = {"__proto__": {"x": 1}}\n[o, o]');
-    assert.deepEqual(Object.keys(p[1]), ['__proto__']);
-    assert.equal(Object.getPrototypeOf(p[1]), Object.prototype);
+  test('%strict: true and %strict: false (6.5)', () => {
+    assert.deepEqual(parse('%strict: true\n{a: 1}'), { a: 1 });
+    assert.deepEqual(parse('%strict: false, [1]'), [1]);
+    assert.deepEqual(parse('# c\n%strict /* k */ :\n  true // k\n\na: nil'), { a: null });
   });
 
-  test('parseDocument returns the version statements', () => {
-    const { value, versions } = parseDocument("%version: '0.6'\n%version: schema = 20260401\n%define: a = 1\n[a]");
-    assert.deepEqual(value, [1]);
-    assert.ok(versions instanceof Map);
-    assert.deepEqual([...versions], [['xtjson', '0.6'], ['schema', 20260401]]);
-    assert.deepEqual([...parseDocument('{}').versions], []);
-    assert.deepEqual([...parseDocument('%version: xtjson = 1.5\n{}').versions], [['xtjson', 1.5]]);
-    assert.deepEqual(new Parser({ strict: true }).parseDocument('%version: 1\n[1]').value, [1]);
-  });
-
-  test('a version can be a number with a suffix or a named value', () => {
-    const text = "%version: windows = 2k\n%define: v = '1.4.0'\n%version: app = v\n%version: 10n\nversion: v";
-    const { value, versions } = parseDocument(text);
-    assert.deepEqual(value, { version: '1.4.0' });
-    assert.deepEqual([...versions], [['windows', 2000], ['app', '1.4.0'], ['xtjson', 10n]]);
-  });
-
-  test('error messages for directives', () => {
+  test('error messages for the directive', () => {
     const cases = [
-      ['% define: a = 1\n[a]', /The name of a directive must follow '%' directly/, [1, 2]],
-      ['%Define: a = 1\n[a]', /Unknown directive '%Define'; did you mean '%define'\? Directives are case-sensitive/, [1, 1]],
-      ['%import: x = "a"\n{}', /Unknown directive '%import'\. The directives are %define, %version and %strict/, [1, 1]],
-      ['%STRICT: true\n{}', /Unknown directive '%STRICT'; did you mean '%strict'\?/, [1, 1]],
-      ['%define a = 1\n[a]', /expected ':' after '%define'/, [1, 9]],
-      ['%define: "x"\n{}', /%define needs an identifier and '=' before the value/, [1, 10]],
-      ['%define: null = 1\n1', /The named value 'null' is predefined and cannot be redefined/, [1, 10]],
-      ['%define: a = 1\n%define: a = 2\n[a]', /The named value 'a' is already defined at line 1, column 10; a named value can be defined only once/, [2, 10]],
-      ['%define: a = [a]\n1', /Undefined named value 'a'/, [1, 15]],
-      ['%define: a = 1 [a]', /Expected a comma or a line break after the directive, found '\['/, [1, 16]],
-      ['%define: a = 1 /*\n*/ [a]', /a line break inside a block comment does not separate items/, [2, 4]],
-      ['%define: a = 1\n', /The document contains only directives/, [2, 1]],
-      ['a: 1\n%define: b = 2', /A directive is permitted only at the top level, before the content of the document/, [2, 1]],
-      ['[%define: b = 2]', /A directive is permitted only at the top level/, [1, 2]],
-      ['1\n%version: 1', /A directive is permitted only at the top level/, [2, 1]],
-      ['%version: 1\n%version: xtjson = 2\n{}', /The version of the specification is already stated \(%version: v and %version: xtjson = v are the same\)/, [2, 11]],
-      ["%version: s = 1\n%version: s = '1'\n{}", /The version 's' is already stated; each version may be stated only once/, [2, 11]],
-      ['%version: nil\n{}', /Undefined named value 'nil'/, [1, 11]],
-      ['%version: [1]\n{}', /The value of %version must be a string or a number, or a named value whose value is a string or a number/, [1, 11]],
-      ['%define: t = true\n%version: t\n{}', /The value of %version must be a string or a number/, [2, 11]],
-      ['%strict: s = true\n{}', /%strict has no identifier; write '%strict: true' or '%strict: false'/, [1, 10]],
-      ['%strict: true\n%strict: true\n{}', /%strict is already stated at line 1, column 1; %strict may occur only once/, [2, 1]],
-      ['%strict: 1\n{}', /The value of %strict must be true or false, or a named value whose value is true or false/, [1, 10]],
-      ['%define: on = "true"\n%strict: on\n{}', /The value of %strict must be true or false/, [2, 10]],
+      ['% strict: true\n{}', /'strict' must follow '%' directly, without white space or comments; the only directive is %strict/, [1, 2]],
+      ['%Strict: true\n{}', /Unknown directive '%Strict'; did you mean '%strict'\? Directives are case-sensitive/, [1, 1]],
+      ['%define: a = 1\n[a]', /Unknown directive '%define'\. The only directive is %strict/, [1, 1]],
+      ["%version: '0.7'\n{}", /Unknown directive '%version'\. The only directive is %strict/, [1, 1]],
+      ['%strict true\n{}', /expected ':' after '%strict'/, [1, 9]],
+      ['%strict: 1\n{}', /The value of %strict must be the literal true or false/, [1, 10]],
+      ["%strict: 'true'\n{}", /The value of %strict must be the literal true or false/, [1, 10]],
+      ['%strict: nil\n{}', /The value of %strict must be the literal true or false/, [1, 10]],
+      ['%strict: s = true\n{}', /The value of %strict must be the literal true or false/, [1, 10]],
+      ['%strict: true [1]', /Expected a comma or a line break after the directive, found '\['/, [1, 15]],
+      ['%strict: true /*\n*/ [1]', /a line break inside a block comment does not separate items/, [2, 4]],
+      ['%strict: true\n', /The document contains only the directive/, [2, 1]],
+      ['%strict: true\n%strict: true\n{}', /%strict may occur only once, and there are no other directives/, [2, 1]],
+      ['a: 1\n%strict: true', /The directive %strict is permitted only at the top level, before the content of the document/, [2, 1]],
+      ['[%strict: true]', /The directive %strict is permitted only at the top level/, [1, 2]],
+      ['1\n%strict: true', /The directive %strict is permitted only at the top level/, [2, 1]],
     ];
     for (const [text, pattern, [line, column]] of cases) {
       const e = error(text);
@@ -184,31 +151,33 @@ describe('options', () => {
   });
 
   test('an Options instance can be used as init', () => {
-    const copy = new Options(new Options({ strict: true, maxExpansion: 7 }));
+    const copy = new Options(new Options({ strict: true, maxDepth: 7 }));
     assert.equal(copy.strict, true);
-    assert.equal(copy.maxExpansion, 7);
+    assert.equal(copy.maxDepth, 7);
   });
 
-  test('the application cannot define named values or suffixes', () => {
+  test('the application cannot define values or suffixes', () => {
     assert.throws(() => new Options({ namedValues: { nil: null } }),
-      /Unknown XTJSON option "namedValues"; named values are defined in the document with %define, not by the application/);
+      /Unknown XTJSON option "namedValues"; there are no named values, only the literals true, false, null and nil/);
     assert.throws(() => new Options({ suffixes: { q: Math.abs } }), /Unknown XTJSON option "suffixes"\./);
+    assert.throws(() => new Options({ maxExpansion: 10 }), /Unknown XTJSON option "maxExpansion"; there are no named values/);
     assert.equal('namedValues' in new Options(), false);
+    assert.equal('maxExpansion' in new Options(), false);
   });
 
   test('unknown options are a TypeError', () => {
     assert.throws(() => parse('1', { strcit: true }),
-      /Unknown XTJSON option "strcit"\. The options are "maxDepth", "maxExpansion" and "strict"/);
+      /Unknown XTJSON option "strcit"\. The options are "maxDepth" and "strict"/);
     assert.throws(() => parse('1', { ijson: true }), /Unknown XTJSON option "ijson"; the I-JSON mode is strict mode, option "strict"/);
-    assert.deepEqual(parse('1', { strict: undefined, maxDepth: undefined, maxExpansion: undefined }), 1);
+    assert.deepEqual(parse('1', { strict: undefined, maxDepth: undefined }), 1);
   });
 
   test('invalid options throw TypeError', () => {
     const cases = [
-      [{ maxExpansion: 0 }, /"maxExpansion" must be a positive integer/],
-      [{ maxExpansion: 1.5 }, /"maxExpansion" must be a positive integer/],
-      [{ maxExpansion: '10' }, /"maxExpansion" must be a positive integer/],
-      [{ maxExpansion: Infinity }, /"maxExpansion" must be a positive integer/],
+      [{ maxDepth: 0 }, /"maxDepth" must be a positive integer/],
+      [{ maxDepth: 1.5 }, /"maxDepth" must be a positive integer/],
+      [{ maxDepth: '10' }, /"maxDepth" must be a positive integer/],
+      [{ maxDepth: Infinity }, /"maxDepth" must be a positive integer/],
       ['abc', /must be an object/],
     ];
     for (const [options, pattern] of cases) {
@@ -269,19 +238,7 @@ describe('strict mode', () => {
     assert.equal(parse(String.raw`["﷏ﷰ�\u{1FFFD}\u{10000}"]`, strict)[0].length, 7);
   });
 
-  test('values of directives are always checked, even if they are not used (6.5)', () => {
-    for (const options of [strict, undefined]) {
-      assert.deepEqual(parse('%define: good = "b"\n[good]', options), ['b']);
-      const e = error('%define: bad = "ok\\uFFFF"\n[1]', options);
-      assert.match(e.message, /The string contains the noncharacter U\+FFFF, which is not permitted in the value of a directive/);
-      assert.deepEqual([e.line, e.column], [1, 16]);
-      assert.match(error('%define: lone = "\\uD800"\n[lone]', options).message, /unpaired surrogate U\+D800, which is not permitted in the value of a directive/);
-      assert.match(error('%version: "\\uD800"\n{}', options).message, /unpaired surrogate U\+D800/);
-      const d = error('%define: d = {a: 1, "\\u0061": 2}\n{}', options);
-      assert.match(d.message, /Duplicate name "a"; names must be unique in the value of a directive \(first occurrence at line 1, column 15\)/);
-      assert.deepEqual([d.line, d.column], [1, 21]);
-    }
-    // in the content, outside strict mode, the same values are fine
+  test('outside strict mode the same values are fine', () => {
     assert.deepEqual(parse('["\\uD800", {a: 1, a: 2}]'), ['\uD800', { a: 2 }]);
   });
 
@@ -290,42 +247,29 @@ describe('strict mode', () => {
   });
 
   test('the root value must be an object or an array', () => {
-    for (const text of ['1', '"x"', 'null', 'true', '10n', '%define: a = 1\na', '  \n\n  "x" // k']) {
+    for (const text of ['1', '"x"', 'null', 'nil', 'true', '10n', '%strict: true, 1', '  \n\n  "x" // k']) {
       const e = error(text, strict);
       assert.match(e.message, /In strict mode the root value must be an object or an array/, text);
     }
     assert.deepEqual([error('\n  "x"', strict).line, error('\n  "x"', strict).column], [2, 3]);
     assert.deepEqual(parse('a: 1', strict), { a: 1 });
-    assert.deepEqual(parse('%define: a = [1]\na', strict), [1]);
   });
 
   test('%strict: true requests strict mode for the document', () => {
     assert.deepEqual(parse('%strict: true\n{a: 1}'), { a: 1 });
-    assert.deepEqual(parse('%define: yes = true, %strict: yes\n[1]'), [1]);
+    assert.deepEqual(parse('%strict: true, [nil]'), [null]);
     assert.match(error('%strict: true\n{a: 1, a: 2}').message, /Duplicate name "a"; names must be unique in strict mode/);
     assert.match(error('%strict: true\n1').message, /root value must be an object or an array/);
     assert.match(error('%strict: true\n["\\uFFFF"]').message, /noncharacter U\+FFFF/);
     // %strict: false and no %strict leave strict mode off
     assert.deepEqual(parse('%strict: false\n{a: 1, a: 2}'), { a: 2 });
-    assert.equal(parse('%define: no = false\n%strict: no\n1'), 1);
-  });
-
-  test('%strict applies to the content, not to the directives', () => {
-    // a violation in a directive is reported where it occurs, before %strict is read
-    const e = error('%define: d = {a: 1, a: 2}\n%strict: false\n{}');
-    assert.match(e.message, /names must be unique in the value of a directive/);
-    assert.deepEqual([e.line, e.column], [1, 21]);
-    assert.match(error('%strict: false\n%define: s = "\\uFFFF"\n[1]').message, /not permitted in the value of a directive/);
-    // the content is checked from the first token after the directives
-    assert.match(error('%strict: true\n%define: a = 1\n{x: a, x: a}').message, /names must be unique in strict mode/);
-    assert.deepEqual(parse('%strict: false\n%define: a = 1\n{x: a, x: a}'), { x: 1 });
+    assert.equal(parse('%strict: false\n1'), 1);
   });
 
   test('%strict: false contradicts strict mode of the application', () => {
-    const e = error('%version: 1\n%strict: false\n{}', strict);
+    const e = error('# c\n%strict: false\n{}', strict);
     assert.match(e.message, /%strict: false contradicts strict mode, which the application requests with the option strict/);
     assert.deepEqual([e.line, e.column], [2, 1]);
-    assert.match(error('%define: no = false\n%strict: no\n[1]', strict).message, /contradicts strict mode/);
     assert.deepEqual(parse('%strict: true\n[1]', strict), [1]);
   });
 });
@@ -520,35 +464,6 @@ describe('limits', () => {
     }
   });
 
-  test('maxExpansion limits the size after replacing named values (11, 13)', () => {
-    // each level multiplies the size by ten
-    let bomb = '%define: s0 = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1]\n';
-    for (let i = 1; i < 12; i++) bomb += `%define: s${i} = [${Array(10).fill(`s${i - 1}`).join(', ')}]\n`;
-    bomb += 's11';
-    const e = error(bomb);
-    assert.match(e.message, /Replacing named values produces more than 1000000 values \(option maxExpansion\)/);
-    // a: 3 values; b = [a, a]: 6 replaced, 7 values; [b, b]: 14 replaced; 20 in all
-    const small = '%define: a = [1, 1]\n%define: b = [a, a]\n[b, b]';
-    assert.equal(parse(small, { maxExpansion: 20 }).length, 2);
-    assert.match(error(small, { maxExpansion: 19 }).message, /more than 19 values/);
-    assert.deepEqual(parse('%define: a = 1\n[a, a, a]', { maxExpansion: 3 }), [1, 1, 1]);
-    assert.equal(new Options().maxExpansion, 1000000);
-  });
-
-  test('maxDepth also applies to the values of named values', () => {
-    const text = '%define: a = [[1]]\n%define: b = [a]\n{x: b}';
-    assert.deepEqual(parse(text, { maxDepth: 4 }), { x: [[[1]]] });
-    const e = error(text, { maxDepth: 3 });
-    assert.match(e.message, /Nesting depth exceeds the limit of 3 \(option maxDepth\) when the named value 'b' is replaced/);
-    assert.deepEqual([e.line, e.column], [3, 5]);
-    // a long chain of definitions cannot nest deeper than maxDepth; d999 has depth 1000
-    let chain = '%define: d0 = []\n';
-    for (let i = 1; i <= 999; i++) chain += `%define: d${i} = [d${i - 1}]\n`;
-    assert.equal(parse(chain + 'd999').length, 1);
-    assert.match(error(chain + '[d999]').message, /limit of 1000 \(option maxDepth\) when the named value 'd999' is replaced/);
-    assert.match(error(chain + '%define: d1000 = [d999]\n1').message, /limit of 1000/);
-  });
-
   test('a maxDepth beyond the call stack is reported as an error of the document', () => {
     const n = 200000;
     const e = error('a: ' + '['.repeat(n) + ']'.repeat(n), { maxDepth: n + 1 });
@@ -571,8 +486,8 @@ describe('error messages', () => {
     ['[1, 2', /Unterminated array: expected '\]' for the array opened at line 1, column 1/, 1, 6],
     ['x: {\n  a: 1\n', /Unterminated object: expected '}' for the object opened at line 1, column 4/, 3, 1],
     ['{a 1}', /expected ':' after the name "a"/, 1, 4],
-    ['[ture]', /Undefined named value 'ture'; text without quotation marks is not a string/, 1, 2],
-    ['[True]', /did you mean 'true'\? Named values are case-sensitive/, 1, 2],
+    ['[ture]', /Unexpected identifier 'ture'; the values without quotation marks are true, false, null and nil; text without quotation marks is not a string/, 1, 2],
+    ['[True]', /did you mean 'true'\? Literals are case-sensitive/, 1, 2],
     ['NaN', /NaN is not a JSON value/, 1, 1],
     ['{2fa: true}', /must begin with a letter/, 1, 2],
     ['{max-age: 1}', /Unexpected '-' in an identifier/, 1, 5],

@@ -75,11 +75,11 @@ describe('format', () => {
     assert.throws(() => format('[1]', true), TypeError);
   });
 
-  test('lays out directives like members', () => {
-    const text = "%version:'0.6',%define:nil=null\n# c\n%define: self = {\n href: 1\n}\n\nid: 1\nself: self";
-    assert.equal(format(text, 2), "%version: '0.6',\n%define: nil = null\n# c\n%define: self = {\n  href: 1\n}\n\nid: 1\nself: self");
-    assert.equal(format(text), "%version:'0.6',%define:nil=null # c\n%define:self={href:1},id:1,self:self");
-    assert.equal(format('%define:\n  a\n  =\n  1\n[a]', 2), '%define: a = 1\n[\n  a\n]');
+  test('lays out the directive like a member', () => {
+    const text = '%strict:true\n# c\n\nid: 1\nproxy: nil';
+    assert.equal(format(text, 2), '%strict: true\n# c\n\nid: 1\nproxy: nil');
+    assert.equal(format(text), '%strict:true # c\nid:1,proxy:nil');
+    assert.equal(format('%strict:\n  true,[1]', 2), '%strict: true,\n[\n  1\n]');
   });
 
   test('valid documents keep their value and formatting is stable', () => {
