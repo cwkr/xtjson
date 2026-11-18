@@ -36,7 +36,7 @@
   <h2>What XTJSON adds to JSON</h2>
   <ul class="features">
     <li><strong>Comments:</strong> <code>// …</code>, <code># …</code> and <code>/* … */</code>.</li>
-    <li><strong>Names without quotation marks:</strong> <code>port: 8080</code>.</li>
+    <li><strong>Names without quotation marks:</strong> <code>port: 8080</code>, also with letters such as <code>ö</code> or <code>é</code>.</li>
     <li><strong>Line breaks as separators:</strong> a line break can take the place of a comma.</li>
     <li><strong>Trailing commas</strong> in objects and arrays.</li>
     <li><strong>Optional braces</strong> around the object at the top level.</li>
@@ -47,7 +47,7 @@
     <li><strong>Digit grouping</strong> with <code>_</code>: <code>1_000_000</code>.</li>
     <li><strong>Number suffixes:</strong> <code>10k</code>, <code>64mb</code>, <code>250ms</code>.</li>
     <li><strong><code>nil</code></strong> as another notation for <code>null</code>.</li>
-    <li><strong>The directive <code>%strict</code></strong> at the start of the document, for strict mode.</li>
+    <li><strong>Directives</strong> at the start of the document: <code>%strict</code> for strict mode and <code>%extends</code> to extend a base value.</li>
     <li><strong>More white space characters:</strong> all white space characters of ECMAScript.</li>
   </ul>
 </section>
@@ -73,14 +73,15 @@
 
   <section class="form" id="document">
     <h3>document</h3>
-    <p>A <dfn>document</dfn> begins with an optional <a href="#directive">directive</a>. It is followed either by a single <a href="#value">value</a>, as in JSON, or by a sequence of <a href="#members">members</a> without enclosing braces. The second form denotes the object that contains exactly these members and needs at least one member. It exists only at the top level; an empty object is written as <code>{}</code>.</p>
+    <p>A <dfn>document</dfn> begins with optional <a href="#directive">directives</a>. They are followed either by a single <a href="#value">value</a>, as in JSON, or by a sequence of <a href="#members">members</a> without enclosing braces. The second form denotes the object that contains exactly these members and needs at least one member. It exists only at the top level; an empty object is written as <code>{}</code>.</p>
     <div class="diagram">{{rr:document}}</div>
   </section>
 
   <section class="form" id="directive">
     <h3>directive</h3>
-    <p>The only <dfn>directive</dfn> is <code>%strict</code>, a statement at the start of the document. It is written in lower case, without white space after the <code>%</code>, occurs at most once and is separated from the content like an item. Any other directive is an error.</p>
+    <p>A <dfn>directive</dfn> is a statement at the start of the document. There are two, <code>%strict</code> and <code>%extends</code>. They are written in lower case, without white space after the <code>%</code>, in either order and each at most once, and are separated from each other and from the content like items. Any other directive is an error.</p>
     <p><code>%strict: true</code> makes the parser read the content of the document in <a href="#strict-mode">strict mode</a>. The value is <code>true</code> or <code>false</code>. If the application has requested strict mode, <code>%strict: false</code> is an error.</p>
+    <p><code>%extends: './defaults.json'</code> makes the document extend a base value according to <a href="https://www.rfc-editor.org/rfc/rfc7396">JSON Merge Patch</a>: members of the document replace or add members of the base, objects are merged at any depth, and a member with the value <code>null</code> or <code>nil</code> removes the member of the base. The string is passed to a resolver of the application, which returns the base value; a URI is recommended. The base need not be an XTJSON document. Support for <code>%extends</code> is optional, and without a resolver a document with <code>%extends</code> is an error.</p>
     <div class="diagram">{{rr:directive}}</div>
   </section>
 
@@ -110,26 +111,15 @@
 
   <section class="form" id="value">
     <h3>value</h3>
-    <p>A <dfn>value</dfn> can be an <a href="#object">object</a>, an <a href="#array">array</a>, a <a href="#string">string</a>, a <a href="#number">number</a> or a <a href="#literal">literal</a>. These structures can be nested.</p>
+    <p>A <dfn>value</dfn> can be an <a href="#object">object</a>, an <a href="#array">array</a>, a <a href="#string">string</a>, a <a href="#number">number</a>, or <code>true</code>, <code>false</code> or <code>null</code> as in JSON, or <code>nil</code>, another notation for <code>null</code>. These structures can be nested. The four values without quotation marks are written in lower case and cannot be changed; any other word without quotation marks at a value position is an error and is never read as a string.</p>
     <div class="diagram">{{rr:value}}</div>
-  </section>
-
-  <section class="form" id="literal">
-    <h3>literal</h3>
-    <p>There are exactly four <dfn>literals</dfn>: <code>true</code>, <code>false</code> and <code>null</code> as in JSON, and <code>nil</code>, another notation for <code>null</code>. They are written in lower case and cannot be changed. Any other <a href="#identifier">identifier</a> at a value position is an error; it is never read as a string. At a name position the literals are ordinary names.</p>
-    <div class="diagram">{{rr:literal}}</div>
   </section>
 
   <section class="form" id="name">
     <h3>name</h3>
-    <p>A <dfn>name</dfn> is a <a href="#string">string</a> or an <a href="#identifier">identifier</a>. The notation does not matter for the identity of a name: <code>a</code>, <code>"a"</code> and <code>'a'</code> denote the same name. At a name position an identifier is always a name, so <code>{null: null}</code> has the name <code>"null"</code>.</p>
+    <p>A <dfn>name</dfn> is a <a href="#string">string</a> or is written without quotation marks. A name without quotation marks begins with an ASCII letter, <code>_</code>, <code>$</code> or a letter of Latin-1 Supplement, such as <code>ä</code>, <code>é</code>, <code>ß</code> or <code>µ</code>; <code>ª</code>, <code>º</code>, <code>·</code>, <code>×</code> and <code>÷</code> are not permitted. Digits may follow. Every other name must be written in quotation marks, for example names with spaces, hyphens, dots or other characters. Names are not normalized.</p>
+    <p>The notation does not matter for the identity of a name: <code>a</code>, <code>"a"</code> and <code>'a'</code> denote the same name. At a name position a word is always a name, so <code>{null: null}</code> has the name <code>"null"</code>.</p>
     <div class="diagram">{{rr:name}}</div>
-  </section>
-
-  <section class="form" id="identifier">
-    <h3>identifier</h3>
-    <p>An <dfn>identifier</dfn> begins with an ASCII letter, <code>_</code> or <code>$</code>, followed by any number of ASCII letters, ASCII digits, <code>_</code> or <code>$</code>. Every other name must be written in quotation marks, for example names with spaces, hyphens, dots or non-ASCII characters.</p>
-    <div class="diagram">{{rr:identifier}}</div>
   </section>
 
   <section class="form" id="string">
@@ -227,25 +217,26 @@
     <li>Comments are removed, and white space characters that JSON does not have become spaces.</li>
     <li>The members of an implicit root object are enclosed in <code>{</code> and <code>}</code>.</li>
     <li>Exactly one comma is put between two consecutive items; trailing commas are dropped.</li>
-    <li>An identifier at a name position becomes the JSON string with the same characters.</li>
+    <li>A name without quotation marks becomes the JSON string with the same characters.</li>
     <li>Strings become JSON strings in double quotation marks with the same value.</li>
     <li>Numbers are written as JSON numbers: without <code>_</code>, in decimal notation, and with the suffix replaced by the result of its conversion.</li>
     <li><code>nil</code> is replaced by <code>null</code>.</li>
-    <li>The directive is removed.</li>
+    <li>The directives are removed.</li>
+    <li>With <code>%extends</code>, the result is applied to the base value as a JSON Merge Patch.</li>
   </ol>
   <p>A document that uses at least one of the extensions is not a JSON text. It must not be labelled with the media type <code>application/json</code> or sent to recipients that expect JSON.</p>
 </section>
 
 <section id="strict-mode">
   <h2>Strict mode</h2>
-  <p>In <dfn>strict mode</dfn> a parser also rejects documents with duplicate names, with surrogates or Unicode noncharacters in names and strings, or with a root value that is not an object or an array. Strict mode applies if the application requests it or if the document contains <code>%strict: true</code>, and it covers the content of the document. Every conforming parser offers it. The JSON equivalent of a document that is valid in strict mode, and whose numbers stay within the range of IEEE 754 binary64, is an <a href="https://www.rfc-editor.org/rfc/rfc7493">I-JSON</a> message.</p>
+  <p>In <dfn>strict mode</dfn> a parser also rejects documents with duplicate names, with surrogates or Unicode noncharacters in names and strings, or with a root value that is not an object or an array. Strict mode applies if the application requests it or if the document contains <code>%strict: true</code>, and it covers the content of the document and, with <code>%extends</code>, the result of the merge. Every conforming parser offers it. The JSON equivalent of a document that is valid in strict mode, and whose numbers stay within the range of IEEE 754 binary64, is an <a href="https://www.rfc-editor.org/rfc/rfc7493">I-JSON</a> message.</p>
 </section>
 
 <section id="principles">
   <h2>Principles</h2>
   <ul>
-    <li><strong>Every document is portable.</strong> The literals, the suffixes and the directive are fixed by the specification. Neither the document nor the application can define values or add any of them, so the value of a document depends only on its text, and every conforming parser reads it in the same way.</li>
-    <li><strong>Errors instead of guessing.</strong> Unknown escape sequences, white space after a line continuation, identifiers other than the literals at a value position, unknown directives, unknown suffixes and mixed indentation are errors and are not silently interpreted.</li>
+    <li><strong>Documents are portable.</strong> The values without quotation marks, the suffixes and the directives are fixed by the specification. Neither the document nor the application can define values or add any of them, so the value of a document without <code>%extends</code> depends only on its text, and every conforming parser reads it in the same way. The value of a document with <code>%extends</code> also depends on the base value that the resolver of the application provides.</li>
+    <li><strong>Errors instead of guessing.</strong> Unknown escape sequences, white space after a line continuation, words other than <code>true</code>, <code>false</code>, <code>null</code> and <code>nil</code> at a value position, unknown directives, unknown suffixes and mixed indentation are errors and are not silently interpreted.</li>
     <li><strong>Never code.</strong> XTJSON is not a subset of a programming language and is never read by evaluating it as program code.</li>
   </ul>
 </section>

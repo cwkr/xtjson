@@ -199,19 +199,20 @@ CHARS_DQ = 'any character except " \\ and control characters'
 CHARS_SQ = "any character except ' \\ and control characters"
 
 DIAGRAMS = {
-    'document': Seq(Opt(Seq(N('directive'), N('separator'))),
+    'document': Seq(Opt(Seq(N('directive'), Opt(Seq(N('separator'), N('directive'))), N('separator'))),
                     Choice(N('value'), N('members'))),
-    'directive': Seq(T('%strict'), T(':'), Choice(T('true'), T('false'))),
+    'directive': Choice(
+        Seq(T('%strict'), T(':'), Choice(T('true'), T('false'))),
+        Seq(T('%extends'), T(':'), N('string'), Label('a resolver provides the base value'))),
     'object': Seq(T('{'), Opt(N('members')), T('}')),
     'members': Seq(Loop(Seq(N('name'), T(':'), N('value')), N('separator')), Opt(T(','))),
     'array': Seq(T('['), Opt(Seq(Loop(N('value'), N('separator')), Opt(T(',')))), T(']')),
     'separator': Choice(T(','), C('white space containing a line break')),
-    'value': Choice(N('object'), N('array'), N('string'), N('number'), N('literal')),
-    'literal': Choice(T('true'), T('false'), T('null'),
-                      Seq(T('nil'), Label('the same as null'))),
-    'name': Choice(N('string'), N('identifier')),
-    'identifier': Seq(Choice(C('a–z A–Z'), T('_'), T('$')),
-                      Many(Choice(C('a–z A–Z'), C('0–9'), T('_'), T('$')))),
+    'value': Choice(N('object'), N('array'), N('string'), N('number'),
+                    T('true'), T('false'), T('null'), Seq(T('nil'), Label('the same as null'))),
+    'name': Choice(N('string'), Seq(Choice(C('a–z A–Z'), T('_'), T('$'), C('µ À–Ö Ø–ö ø–ÿ')),
+                                    Many(Choice(C('a–z A–Z'), C('0–9'), T('_'), T('$'),
+                                                C('µ À–Ö Ø–ö ø–ÿ'))))),
     'string': Choice(
         Seq(T('"'), Many(Choice(C(CHARS_DQ), C('tab'), N('line break'), N('escape'))), T('"')),
         Seq(T("'"), Many(Choice(C(CHARS_SQ), C('tab'), N('line break'), N('escape'))), T("'"))),

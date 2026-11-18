@@ -1,7 +1,8 @@
-"""Zusatztests: Literale (6.4) und Zahlen-Suffixe (9.5).
+"""Zusatztests: Werte ohne Anfuehrungszeichen (6.3), Bezeichner (7.2) und Zahlen-Suffixe (9.5).
 
 Der Dateiname stammt aus einer Zeit, in der Dokumente benannte Werte
-definieren konnten; heute gibt es nur die vier Literale.
+definieren konnten; heute gibt es ohne Anfuehrungszeichen nur true, false,
+null und nil.
 """
 import os
 import sys
@@ -26,6 +27,16 @@ VALID = [
     # Bezeichner an Namensposition sind gewoehnliche Namen
     ('{$a: 1, _b: nil, Nil: 2, NaN: 3, px: 4, ms: 5, k: 6}',
      {'$a': 1, '_b': None, 'Nil': 2, 'NaN': 3, 'px': 4, 'ms': 5, 'k': 6}),
+    # Bezeichner mit U+00B5 und den Buchstaben U+00C0 bis U+00FF aus Latin-1 Supplement
+    ('{größe: 1}', {'größe': 1}),
+    ('{µ: 1, À: 2, Ö: 3, Ø: 4, ö: 5, ø: 6, ÿ: 7, ß: 8, Þ: 9}',
+     {'µ': 1, 'À': 2, 'Ö': 3, 'Ø': 4, 'ö': 5, 'ø': 6, 'ÿ': 7, 'ß': 8, 'Þ': 9}),
+    ('{a9ö: 1, Ö9_$: 2, _ü: 3}', {'a9ö': 1, 'Ö9_$': 2, '_ü': 3}),
+    ('größe: 1\nbreite_µm: 2', {'größe': 1, 'breite_µm': 2}),
+    ('{"größe": 1, größe: 2}', {'größe': 2}),
+    ('{é: 1, "\\u00e9": 2}', {'é': 2}),
+    ('{"e\\u0301": 1, é: 2}', {'e\N{COMBINING ACUTE ACCENT}': 1, 'é': 2}),
+    ('{ÿ: [1], nil: nil}', {'ÿ': [1], 'nil': None}),
     # Suffixe: Faktor 1000, 1024, 1000000, 1048576
     ('10k', 10000), ('1kb', 1024), ('2m', 2000000), ('1mb', 1048576),
     ('1.5k', 1500), ('0.5kb', 512), ('0.1kb', 102.4), ('-2k', -2000),
@@ -74,6 +85,13 @@ INVALID = [
     'nill', 'nil2', 'nil_', 'nil$', '_nil', '$nil', 'nullable', 'trueish', 'falsey',
     # Leerraum und fehlende Trenner
     '[nil nil]', 'nil null', '[n il]', '[ni l]', 'a: nil nil', 'tr ue',
+    # andere Zeichen als Buchstaben aus ASCII und Latin-1 Supplement; auch nicht ª, º und ·
+    '{ª: 1}', '{º: 1}', '{Nº: 1}', '{aª: 1}', '{·a: 1}', '{·: 1}', '{a·b: 1}', '{a·: 1}', '{×: 1}', '{a×b: 1}', '{÷: 1}', '{a÷: 1}', '{π: 1}', '{€: 1}',
+    '{a€: 1}', '{©: 1}', '{«a»: 1}', '{¿a: 1}', '{a¹: 1}', '{²: 1}', '{\xad: 1}', '{a\xadb: 1}',
+    '{e\N{COMBINING ACUTE ACCENT}: 1}', '{gr\N{LATIN SMALL LETTER LONG S}: 1}', '{Ā: 1}', '{a\x7f: 1}',
+    '{9ö: 1}', '{ö-ä: 1}', '{ö.ä: 1}',
+    # Bezeichner an Wertposition sind auch mit Latin-1-Buchstaben ein Fehler
+    '[größe]', '[µ]', 'ä', 'a: nül', '[nil·]',
     # Werte koennen nicht definiert werden
     '%define: a = 1\n[a]', '%define: nil = null\nnil', '%define: x = 1\n1',
     # Suffixe, die es nicht gibt; Zeichen direkt nach einem Suffix

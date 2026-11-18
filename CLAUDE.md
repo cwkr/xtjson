@@ -25,8 +25,8 @@ scripts/
   compare_versions.py             compares the two language versions
   tests_zeilenumbruch_strings.py  tests: line breaks, strings, names, escapes
   tests_mehrzeilige_strings.py    tests: value of strings across several lines
-  tests_definitionen.py           tests: literals and number suffixes
-  tests_direktiven.py             tests: the directive %strict and strict mode
+  tests_definitionen.py           tests: true/false/null/nil, identifiers, number suffixes
+  tests_direktiven.py             tests: %strict, %extends and strict mode
   build_index.py                  generates docs/index.html
   index_template.html             template for docs/index.html
   export_corpus.py                exports the test cases as JSON for implementations
@@ -56,8 +56,8 @@ Each script ends with a result line and exit code 0 on success. The scripts prin
 
 What they check:
 
-- `xtjson_ref.py <version>` parses every fenced block tagged `xtjson` in the given version. If a block tagged `json` follows immediately, its value must be equal. It also runs built-in valid and invalid cases and plain JSON texts (the superset property).
-- The four `tests_*.py` files contain pairs of text and expected value, and texts that must be rejected. `tests_direktiven.py` also checks strict mode requested by the application.
+- `xtjson_ref.py <version>` parses every fenced block tagged `xtjson` in the given version. If a block tagged `json` follows immediately, its value must be equal. A block tagged `json` directly before an `xtjson` block is the base value for its `%extends`. It also runs built-in valid and invalid cases and plain JSON texts (the superset property).
+- The four `tests_*.py` files contain pairs of text and expected value, and texts that must be rejected. `tests_direktiven.py` also checks strict mode requested by the application and `%extends` with a resolver (text, base values by reference, expected value).
 - `compare_versions.py` compares the outline, the ABNF blocks (without comments), the shape of the example values, tables, list items and the number of normative key words per section. Item 7 of its output lists code spans that occur in only one version; only translated example words are acceptable there.
 
 The comparison is mechanical. It does not detect differences of meaning in prose. Always read changed sentences against each other in both versions.
@@ -107,7 +107,8 @@ Use the terms from section 2 of the specification consistently. The most importa
 | Element | item |
 | Name | name |
 | Bezeichner | identifier |
-| Literal | literal |
+| Basiswert | base value |
+| Resolver | resolver |
 | Zahlen-Suffix | number suffix |
 | Leerraum, Leerraumzeichen | white space, white space character |
 | Zeilenumbruch | line break |
@@ -129,9 +130,10 @@ No change may give up these properties:
 
 - **Superset.** Every UTF-8 encoded JSON text is a valid XTJSON document with the same meaning (K1, K2). An extension may only occupy notations that are a syntax error in JSON.
 - **JSON data model.** Every document has a JSON equivalent (section 10). There are no new data types, no expressions, no references.
-- **Predefined and not changeable** are the literals `true`, `false`, `null` and `nil` (the same value as `null`), the directive `%strict`, and all number suffixes. The literals and the directive are fixed in the grammar (6.4, 6.5). The suffixes are fixed in the grammar (rules `suffix` and `int-suffix`), and the table in 9.5 is exhaustive: `k`, `kb`, `m`, `mb`, `ms`, `s`, `min`, `h`, `pct`, `n`.
-- **No definitions.** Neither the document nor the application can define values, directives or suffixes; there are no named values, aliases, constants or variables. Every document is therefore portable. Any other identifier at a value position is an error.
-- **Errors instead of guessing.** When in doubt, an input is an error and is not silently interpreted (unknown escape sequences, identifiers other than the literals at a value position, mixed indentation).
+- **Predefined and not changeable** are the values `true`, `false`, `null` and `nil` (the same value as `null`), the directives `%strict` and `%extends`, and all number suffixes. The values are fixed in the rule `value` (6.3), the directives in `directives` (6.4 to 6.6). The suffixes are fixed in the grammar (rule `suffix`, `n` in `number`), and the table in 9.5 is exhaustive: `k`, `kb`, `m`, `mb`, `ms`, `s`, `min`, `h`, `pct`, `n`.
+- **No definitions.** Neither the document nor the application can define values, directives or suffixes; there are no named values, aliases, constants or variables. Any other identifier at a value position is an error. Every document without `%extends` is therefore portable.
+- **`%extends` is the only external input.** A document can extend one base value according to JSON Merge Patch (RFC 7396, replaces RFC 7386). The application provides the base value through a resolver; support is optional, and without a resolver `%extends` is an error. The specification fixes only the merging, not how a reference is resolved.
+- **Errors instead of guessing.** When in doubt, an input is an error and is not silently interpreted (unknown escape sequences, identifiers other than `true`, `false`, `null` and `nil` at a value position, mixed indentation).
 - **Narrow rules first.** Where several solutions are possible, choose the narrower one and give the rationale in Appendix D. Loosening later is compatible; restricting is not.
 
 Do not simply implement proposals that touch one of these principles. Present them for a decision, with reasons.
@@ -141,13 +143,15 @@ Do not simply implement proposals that touch one of these principles. Present th
 An implementation in this repository is a conforming XTJSON parser, generator or converter in the sense of section 11 of the specification. In particular:
 
 - **No dialects.** Accept exactly what the grammar in Appendix A allows, and reject everything else. Do not add convenience extensions, lenient modes or fallbacks that the specification does not define. Options that restrict (for example strict mode according to section 12) are fine.
-- **Only the four literals.** Know exactly `true`, `false`, `null` and `nil` (6.4). Do not offer an API to define values.
-- **No custom directives or suffixes.** Know exactly the directive `%strict` (6.5) and the suffixes in the table in 9.5. Do not offer an API to add, change or remove directives or suffixes.
-- **Strict mode is required.** Offer strict mode (section 12) to the application, and apply it also when the document contains `%strict: true`. When the application has requested strict mode, `%strict: false` is an error. Strict mode rejects duplicate names, surrogates and noncharacters in names and strings (directly or escaped), and a root value that is not an object or an array. It covers the content of the document, the part after the directive.
+- **Only four values without quotation marks.** Know exactly `true`, `false`, `null` and `nil` (6.3). Do not offer an API to define values.
+- **No custom directives or suffixes.** Know exactly the directives `%strict` and `%extends` (6.4 to 6.6) and the suffixes in the table in 9.5. Do not offer an API to add, change or remove directives or suffixes.
+- **Strict mode is required.** Offer strict mode (section 12) to the application, and apply it also when the document contains `%strict: true`. When the application has requested strict mode, `%strict: false` is an error. Strict mode rejects duplicate names, surrogates and noncharacters in names and strings (directly or escaped), and a root value that is not an object or an array. It covers the content of the document, the part after the directives, and with `%extends` also the result of the merge (names, strings, root value).
 - **Behaviour that is easy to get wrong:**
   - Duplicate names: the member that comes last in the document applies (7.2); forbidden in strict mode.
-  - Literals: exactly `true`, `false`, `null` and `nil`, lower case only, read with the longest match (`nullable`, `nil2` are errors). `nil` becomes `null`. At a name position they are ordinary names (`{nil: nil}`).
-  - Directive: only `%strict`, written as one token (`% strict` and `%Strict` are errors), only at the top level before the content, at most once, separated from the content like an item, and a document of the directive alone is an error. Its value is the literal `true` or `false`, nothing else (not `nil`, not a string). Every other directive, including `%define` and `%version`, is an error.
+  - Values without quotation marks: exactly `true`, `false`, `null` and `nil`, lower case only, read with the longest match (`nullable`, `nil2` are errors). `nil` becomes `null`. At a name position they are ordinary names (`{nil: nil}`).
+  - Identifiers (names without quotation marks): ASCII letters, `_`, `$` and the Latin-1 Supplement letters U+00B5, U+00C0–U+00D6, U+00D8–U+00F6, U+00F8–U+00FF; after the first character also ASCII digits. No other characters (`ª`, `º`, `·`, `×`, `÷`, `π`, combining characters, U+00AD), no normalization.
+  - Directives: only `%strict` and `%extends`, each written as one token (`% strict` and `%Strict` are errors), only at the top level before the content, in either order, each at most once, separated from each other and from the content like items; a document of directives alone is an error. The value of `%strict` is `true` or `false`, nothing else (not `nil`, not a string). The value of `%extends` is a string. Every other directive, including `%define` and `%version`, is an error.
+  - `%extends`: without a resolver it is an error. Call the resolver with the value of the string, after the content has been read; an error of the resolver or a value that is not a JSON value is an error of the document. Do not change the value that the resolver returns. Merge with MergePatch(base, content) of RFC 7396: `null` and `nil` remove a member, arrays are replaced as a whole, a content that is not an object replaces the base. Duplicate names in the content are resolved first (the last member applies).
   - Line break: LF, CR or CR LF, with CR LF counting as one. U+2028 and U+2029 are white space, not line breaks, and do not end a line comment.
   - A line break inside a block comment is not a separator.
   - Strings: there is one kind of string, in `"` or `'`, and every string may extend across several lines. Line breaks (LF, CR, CR LF) and tab may appear unescaped; every other control character, including VT and FF, must be escaped. Three quotation marks in a row are not a delimiter but an error. Names may extend across several lines too.
@@ -174,7 +178,7 @@ An implementation in this repository is a conforming XTJSON parser, generator or
 
 ## Reference parser
 
-- Interface: `parse(text, strict=False)` returns the value. `strict` is strict mode requested by the application. The literals are fixed in `LITERALS`, the suffixes in `SUFFIXES`.
+- Interface: `parse(text, strict=False, resolver=None)` returns the value. `strict` is strict mode requested by the application. `resolver` is a function that returns the base value for the string of `%extends`; without it `%extends` is disabled. The values without quotation marks are fixed in `LITERALS`, the suffixes in `SUFFIXES`.
 - Invalid documents raise `XTJSONError`.
 - Known gaps compared with the specification; do not treat them as done:
   - It does not limit the number range, also not in strict mode (section 12 only recommends the range of binary64).

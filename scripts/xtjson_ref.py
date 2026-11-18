@@ -1,4 +1,5 @@
 """Referenz-Parser fuer XTJSON (Entwurf 0.7) + Pruefung der Beispiele der Spezifikation."""
+import copy
 import json
 import re
 import sys
@@ -9,7 +10,10 @@ class XTJSONError(ValueError):
     pass
 
 
-ID = re.compile(r'[A-Za-z_$][A-Za-z0-9_$]*')
+# Bezeichner (7.2): ASCII-Buchstaben, '_', '$', U+00B5 und die Buchstaben
+# U+00C0 bis U+00FF ohne U+00D7 und U+00F7; danach auch Ziffern.
+ID_START = 'A-Za-z_$\xb5\xc0-\xd6\xd8-\xf6\xf8-\xff'
+ID = re.compile('[%s][%s0-9]*' % (ID_START, ID_START))
 NUM = re.compile(
     r'-?(?:0[xX][0-9A-Fa-f](?:_?[0-9A-Fa-f])*'
     r'|0[oO][0-7](?:_?[0-7])*'
@@ -24,7 +28,7 @@ ESC = {'"': '"', "'": "'", '\\': '\\', '/': '/', 'b': '\b', 'f': '\f',
 # Suffixe nach 9.5, fest in der Grammatik; laengste Uebereinstimmung zuerst.
 SUF = re.compile(r'min|ms|mb|m|kb|k|s|h|pct')
 INT_SUF = 'n'                                     # nur nach einer ganzen Zahl
-# Literale nach 6.4, fest in der Grammatik; nil ist derselbe Wert wie null.
+# Werte ohne Anfuehrungszeichen nach 6.3; nil ist derselbe Wert wie null.
 LITERALS = {'true': True, 'false': False, 'null': None, 'nil': None}
 # Suffixe nach 9.5: Suffix -> (Faktor, Teiler). Die Tabelle ist abschliessend.
 SUFFIXES = {}
@@ -234,12 +238,63 @@ def tokenize(s):
     return toks
 
 
+def json_value(v):
+    """Kopie des Werts, den ein Resolver liefert; Fehler, wenn er kein JSON-Wert ist (6.6)."""
+    if v is None or isinstance(v, (bool, str)):
+        return v
+    if isinstance(v, int) or (isinstance(v, float) and v == v and abs(v) != float('inf')):
+        return v
+    if isinstance(v, list):
+        return [json_value(x) for x in v]
+    if isinstance(v, dict) and all(isinstance(k, str) for k in v):
+        return {k: json_value(x) for k, x in v.items()}
+    raise XTJSONError('der Resolver liefert keinen JSON-Wert: %r' % (v,))
+
+
+def merge_patch(target, patch):
+    """MergePatch(target, patch) nach RFC 7396 (6.6); target wird veraendert."""
+    if not isinstance(patch, dict):
+        return patch
+    result = target if isinstance(target, dict) else {}
+    for name, value in patch.items():
+        if value is None:
+            result.pop(name, None)
+        else:
+            result[name] = merge_patch(result.get(name), value)
+    return result
+
+
+def check_result(v, violation):
+    """Verbote des Strict-Modus zu Namen und Strings im Ergebnis von %extends (12)."""
+    if isinstance(v, str):
+        if any(strict_char(ch) for ch in v):
+            violation('Surrogat oder Noncharacter in %r' % v)
+    elif isinstance(v, list):
+        for x in v:
+            check_result(x, violation)
+    elif isinstance(v, dict):
+        for k, x in v.items():
+            check_result(k, violation)
+            check_result(x, violation)
+
+
+def example_resolver(prev):
+    """Resolver fuer die Beispiele der Spezifikation: Ein json-Block direkt vor einem
+    xtjson-Block ist der Basiswert seines %extends (6.6). prev: (Sprache, Text) oder None."""
+    if prev is None or prev[0] != 'json':
+        return None
+    base = json.loads(prev[1])
+    return lambda ref: copy.deepcopy(base)
+
+
 class Parser:
-    def __init__(self, text, strict=False):
+    def __init__(self, text, strict=False, resolver=None):
         self.t = tokenize(text)
         self.p = 0
         self.strict = strict                           # von der Anwendung verlangt (12)
+        self.resolver = resolver                       # fuer %extends (6.6); None: abgeschaltet
         self.doc_strict = None                         # Wert von %strict (6.5)
+        self.extends = None                            # String von %extends (6.6)
         self.check = False                             # gilt der Strict-Modus?
 
     def violation(self, msg):
@@ -259,15 +314,16 @@ class Parser:
         return tok
 
     def document(self):
-        if self.peek()[0] == 'dir':
-            self.directive()
+        seen = set()
+        while self.peek()[0] == 'dir':
+            self.directive(seen)
             k, _, nl = self.peek()                     # Trenner wie zwischen Elementen (7.3)
             if k == ',':
                 self.next()
             elif not nl or k == 'eof':
                 raise XTJSONError('Komma oder Zeilenumbruch nach der Direktive erwartet')
             if self.peek()[0] == 'eof':
-                raise XTJSONError('Dokument ohne Inhalt nach der Direktive')
+                raise XTJSONError('Dokument ohne Inhalt nach den Direktiven')
         if self.strict and self.doc_strict is False:
             raise XTJSONError('%strict: false widerspricht dem Strict-Modus der Anwendung')
         self.check = self.strict or bool(self.doc_strict)
@@ -278,21 +334,39 @@ class Parser:
             v = self.value()
         if self.peek()[0] != 'eof':
             raise XTJSONError('Text nach dem Wurzelwert')
+        if self.extends is not None:                   # Basiswert und Zusammenfuehrung (6.6)
+            try:
+                base = self.resolver(self.extends)
+            except Exception as ex:                    # jeder Fehler des Resolvers
+                raise XTJSONError('Resolver meldet fuer %r einen Fehler: %s' % (self.extends, ex))
+            v = merge_patch(json_value(base), v)
+            if self.check:                             # Strict-Modus auch fuer das Ergebnis (12)
+                check_result(v, self.violation)
         if not isinstance(v, (dict, list)):
             self.violation('Wurzelwert ist kein Objekt und kein Array')
         return v
 
-    def directive(self):
-        """Die einzige Direktive %strict (6.5); ihr Wert ist true oder false."""
+    def directive(self, seen):
+        """Die Direktiven %strict (6.5) und %extends (6.6), jede hoechstens einmal (6.4)."""
         _, name, _ = self.next()
-        if name != 'strict':
+        if name not in ('strict', 'extends'):
             raise XTJSONError('unbekannte Direktive %%%s' % name)
+        if name in seen:
+            raise XTJSONError('%%%s ist bereits angegeben' % name)
+        seen.add(name)
         if self.next()[0] != ':':
-            raise XTJSONError("':' nach %strict erwartet")
+            raise XTJSONError("':' nach %%%s erwartet" % name)
         k, v, _ = self.next()
-        if k != 'id' or v not in ('true', 'false'):
-            raise XTJSONError('%strict erwartet true oder false')
-        self.doc_strict = v == 'true'
+        if name == 'strict':
+            if k != 'id' or v not in ('true', 'false'):
+                raise XTJSONError('%strict erwartet true oder false')
+            self.doc_strict = v == 'true'
+        else:
+            if k != 'str':
+                raise XTJSONError('%extends erwartet einen String')
+            if self.resolver is None:
+                raise XTJSONError('%extends ist abgeschaltet: kein Resolver')
+            self.extends = v
 
     def value(self):
         k, v, _ = self.next()
@@ -356,13 +430,15 @@ class Parser:
                 return arr
 
 
-def parse(text, strict=False):
+def parse(text, strict=False, resolver=None):
     """Liest ein XTJSON-Dokument und liefert seinen Wert.
 
     strict: die Anwendung verlangt den Strict-Modus (12); ohne ihn gilt er nur mit
     %strict: true im Dokument (6.5).
+    resolver: Funktion, die zum String von %extends den Basiswert liefert (6.6);
+    ohne sie ist %extends abgeschaltet und ein Fehler.
     """
-    return Parser(text, strict).document()
+    return Parser(text, strict, resolver).document()
 
 
 
@@ -379,7 +455,7 @@ def main(spec_path):
             continue
         n_l += 1
         try:
-            v = parse(body)
+            v = parse(body, resolver=example_resolver(blocks[idx - 1] if idx else None))
         except XTJSONError as ex:
             fails += 1
             print('FEHLER xtjson-Block %d: %s\n%s' % (n_l, ex, body))
@@ -394,7 +470,7 @@ def main(spec_path):
     # 2) ungueltige Beispiele (Anhang B.3 + Text)
     invalid = [
         '', '  \n# nur Kommentar\n', '[1 2]', 'a: 1 b: 2', '[1,,2]', '[,]', '{,}', '[,1]',
-        '{a: 1} b: 2', 'a: 1 }', '[abc]', '{2fa: true}', '{größe: 1}', '{a.b: 1}',
+        '{a: 1} b: 2', 'a: 1 }', '[abc]', '{2fa: true}', '{π: 1}', '{a×b: 1}', '{Nº: 1}', '{ª: 1}', '{a·b: 1}', '{a.b: 1}',
         "'It's'", '/* offen', '0755', '0x', '0x_FF',
         '1__000', '1_', '1_.5', '0b102', '0o78', '0x1.8', '+1', '.5', '5.', 'NaN',
         'Infinity', '{a: 1,, b: 2}', 'a: 1,,', '[1, 2', '{a: 1',
@@ -408,7 +484,10 @@ def main(spec_path):
         '"\\X41"', '"\\ "', '"\\e"', '"\\U0041"', "'\\.'",
         '"""a"""', "'''a'''", '""""""', '{"""a""": 1}', '"a\\ \nb"', '"a\\\t\nb"', '"a\\ \r\nb"',
         '"a\x0cb"', '"a\\\u2028b"', '"abc', "'a\nb", '"\n\ta\n  b\n "',
-        # Direktive (6.5) und Literale (6.4)
+        # Direktiven (6.4 bis 6.6) und Werte ohne Anfuehrungszeichen (6.3);
+        # %extends ist ohne Resolver abgeschaltet
+        "%extends: 'a.json'\n{}", '%extends: nil\n{}', "%extends: ['a.json']\n{}",
+        "%extends: 'a.json'\n%extends: 'b.json'\n{}",
         '% strict: true\n{}', '%include: "a.xtj"\n{}', '%Strict: true\n{}', '%strict: true [1]',
         '%strict: true', 'a: 1\n%strict: true', '[%strict: true]',
         '%strict: 1\n{}', "%strict: 'true'\n{}", '%strict: nil\n{}', '%strict: true\n%strict: true\n{}',
@@ -434,6 +513,8 @@ def main(spec_path):
         ('a: 1', {'a': 1}), ('a: 1,', {'a': 1}), ('"a": 1\n\'b\': 2', {'a': 1, 'b': 2}),
         ('true: false\nnull: null', {'true': False, 'null': None}),
         ('true', True), ('"x"', 'x'), ("'x'", 'x'), ('{}', {}), ('[]', []),
+        ('{größe: 1, µm: 2, ÿ$_9: 3}', {'größe': 1, 'µm': 2, 'ÿ$_9': 3}),
+        ('größe: nil', {'größe': None}),
         ('a\n:\n1\nb: 2', {'a': 1, 'b': 2}),
         ('{a: 1 /* x\n */\n b: 2}', {'a': 1, 'b': 2}), ('\u00a0[1]\u2028', [1]),
         ('[1,\u2028\xa0\u20292]', [1, 2]), ('a: 1 // k\u2028b: 2', {'a': 1}), ('[1, /* \n */ 2]', [1, 2]),

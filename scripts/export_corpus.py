@@ -12,6 +12,10 @@ Standard fuer Datei: xtjson-js/test/corpus.json
 
 d_strict_valid und d_strict_invalid gelten fuer den Strict-Modus, den die
 Anwendung verlangt (12); die Texte in d_strict_invalid sind ohne ihn gueltig.
+d_extends_valid enthaelt Tripel aus Text, Basiswerten {Verweis: Wert} und
+erwartetem Wert, d_extends_invalid Paare aus Text und Basiswerten (6.6). Der
+Resolver liefert zu einem Verweis den Basiswert und meldet fuer einen
+unbekannten Verweis einen Fehler; ohne Resolver sind alle diese Texte ungueltig.
 """
 import ast
 import json
@@ -65,6 +69,8 @@ def corpus():
         'd_invalid': td.INVALID,
         'd_strict_valid': [[t, v] for t, v in td.STRICT_VALID],
         'd_strict_invalid': td.STRICT_INVALID,
+        'd_extends_valid': [[t, b, v] for t, b, v in td.EXTENDS_VALID],
+        'd_extends_invalid': [[t, b] for t, b in td.EXTENDS_INVALID],
     }
 
 

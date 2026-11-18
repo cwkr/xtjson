@@ -36,7 +36,7 @@
   <h2>What XTJSON adds to JSON</h2>
   <ul class="features">
     <li><strong>Comments:</strong> <code>// …</code>, <code># …</code> and <code>/* … */</code>.</li>
-    <li><strong>Names without quotation marks:</strong> <code>port: 8080</code>.</li>
+    <li><strong>Names without quotation marks:</strong> <code>port: 8080</code>, also with letters such as <code>ö</code> or <code>é</code>.</li>
     <li><strong>Line breaks as separators:</strong> a line break can take the place of a comma.</li>
     <li><strong>Trailing commas</strong> in objects and arrays.</li>
     <li><strong>Optional braces</strong> around the object at the top level.</li>
@@ -47,7 +47,7 @@
     <li><strong>Digit grouping</strong> with <code>_</code>: <code>1_000_000</code>.</li>
     <li><strong>Number suffixes:</strong> <code>10k</code>, <code>64mb</code>, <code>250ms</code>.</li>
     <li><strong><code>nil</code></strong> as another notation for <code>null</code>.</li>
-    <li><strong>The directive <code>%strict</code></strong> at the start of the document, for strict mode.</li>
+    <li><strong>Directives</strong> at the start of the document: <code>%strict</code> for strict mode and <code>%extends</code> to extend a base value.</li>
     <li><strong>More white space characters:</strong> all white space characters of ECMAScript.</li>
   </ul>
 </section>
@@ -129,67 +129,99 @@ tags: [
 
   <section class="form" id="document">
     <h3>document</h3>
-    <p>A <dfn>document</dfn> begins with an optional <a href="#directive">directive</a>. It is followed either by a single <a href="#value">value</a>, as in JSON, or by a sequence of <a href="#members">members</a> without enclosing braces. The second form denotes the object that contains exactly these members and needs at least one member. It exists only at the top level; an empty object is written as <code>{}</code>.</p>
-    <div class="diagram"><svg class="rr" viewBox="0 0 400 72" width="400" height="72" role="img" aria-label="Railroad diagram: document">
+    <p>A <dfn>document</dfn> begins with optional <a href="#directive">directives</a>. They are followed either by a single <a href="#value">value</a>, as in JSON, or by a sequence of <a href="#members">members</a> without enclosing braces. The second form denotes the object that contains exactly these members and needs at least one member. It exists only at the top level; an empty object is written as <code>{}</code>.</p>
+    <div class="diagram"><svg class="rr" viewBox="0 0 630 80" width="630" height="80" role="img" aria-label="Railroad diagram: document">
 <path class="cap" d="M8 12v16m4 -16v16"/>
 <path d="M12 20H30"/>
 <path d="M30 20H50"/>
-<path d="M230 20H250"/>
-<path d="M50 20H230"/>
+<path d="M460 20H480"/>
+<path d="M50 20H460"/>
 <path d="M30 20a10 10 0 0 1 10 10v0a10 10 0 0 0 10 10"/>
-<path d="M230 40a10 10 0 0 0 10 -10v0a10 10 0 0 1 10 -10"/>
+<path d="M460 40a10 10 0 0 0 10 -10v0a10 10 0 0 1 10 -10"/>
 <a href="#directive">
 <rect class="n" x="50" y="28" width="85" height="24" rx="0"/>
 <text class="n" x="92.5" y="40">directive</text>
 </a>
 <path d="M135 40H145"/>
+<path d="M145 40H165"/>
+<path d="M345 40H365"/>
+<path d="M165 40H345"/>
+<path d="M145 40a10 10 0 0 1 10 10v0a10 10 0 0 0 10 10"/>
+<path d="M345 60a10 10 0 0 0 10 -10v0a10 10 0 0 1 10 -10"/>
 <a href="#separator">
-<rect class="n" x="145" y="28" width="85" height="24" rx="0"/>
-<text class="n" x="187.5" y="40">separator</text>
+<rect class="n" x="165" y="48" width="85" height="24" rx="0"/>
+<text class="n" x="207.5" y="60">separator</text>
 </a>
-<path d="M250 20H260"/>
-<path d="M260 20H280"/>
-<path d="M350 20H370"/>
+<path d="M250 60H260"/>
+<a href="#directive">
+<rect class="n" x="260" y="48" width="85" height="24" rx="0"/>
+<text class="n" x="302.5" y="60">directive</text>
+</a>
+<path d="M365 40H375"/>
+<a href="#separator">
+<rect class="n" x="375" y="28" width="85" height="24" rx="0"/>
+<text class="n" x="417.5" y="40">separator</text>
+</a>
+<path d="M480 20H490"/>
+<path d="M490 20H510"/>
+<path d="M580 20H600"/>
 <a href="#value">
-<rect class="n" x="280" y="8" width="56" height="24" rx="0"/>
-<text class="n" x="308" y="20">value</text>
+<rect class="n" x="510" y="8" width="56" height="24" rx="0"/>
+<text class="n" x="538" y="20">value</text>
 </a>
-<path d="M336 20H350"/>
-<path d="M260 20a10 10 0 0 1 10 10v12a10 10 0 0 0 10 10"/>
-<path d="M350 52a10 10 0 0 0 10 -10v-12a10 10 0 0 1 10 -10"/>
+<path d="M566 20H580"/>
+<path d="M490 20a10 10 0 0 1 10 10v12a10 10 0 0 0 10 10"/>
+<path d="M580 52a10 10 0 0 0 10 -10v-12a10 10 0 0 1 10 -10"/>
 <a href="#members">
-<rect class="n" x="280" y="40" width="70" height="24" rx="0"/>
-<text class="n" x="315" y="52">members</text>
+<rect class="n" x="510" y="40" width="70" height="24" rx="0"/>
+<text class="n" x="545" y="52">members</text>
 </a>
-<path d="M370 20H388"/>
-<path class="cap" d="M388 12v16m4 -16v16"/>
+<path d="M600 20H618"/>
+<path class="cap" d="M618 12v16m4 -16v16"/>
 </svg></div>
   </section>
 
   <section class="form" id="directive">
     <h3>directive</h3>
-    <p>The only <dfn>directive</dfn> is <code>%strict</code>, a statement at the start of the document. It is written in lower case, without white space after the <code>%</code>, occurs at most once and is separated from the content like an item. Any other directive is an error.</p>
+    <p>A <dfn>directive</dfn> is a statement at the start of the document. There are two, <code>%strict</code> and <code>%extends</code>. They are written in lower case, without white space after the <code>%</code>, in either order and each at most once, and are separated from each other and from the content like items. Any other directive is an error.</p>
     <p><code>%strict: true</code> makes the parser read the content of the document in <a href="#strict-mode">strict mode</a>. The value is <code>true</code> or <code>false</code>. If the application has requested strict mode, <code>%strict: false</code> is an error.</p>
-    <div class="diagram"><svg class="rr" viewBox="0 0 283 72" width="283" height="72" role="img" aria-label="Railroad diagram: directive">
+    <p><code>%extends: './defaults.json'</code> makes the document extend a base value according to <a href="https://www.rfc-editor.org/rfc/rfc7396">JSON Merge Patch</a>: members of the document replace or add members of the base, objects are merged at any depth, and a member with the value <code>null</code> or <code>nil</code> removes the member of the base. The string is passed to a resolver of the application, which returns the base value; a URI is recommended. The base need not be an XTJSON document. Support for <code>%extends</code> is optional, and without a resolver a document with <code>%extends</code> is an error.</p>
+    <div class="diagram"><svg class="rr" viewBox="0 0 534 104" width="534" height="104" role="img" aria-label="Railroad diagram: directive">
 <path class="cap" d="M8 12v16m4 -16v16"/>
 <path d="M12 20H30"/>
-<rect class="t" x="30" y="8" width="75" height="24" rx="12"/>
-<text class="t" x="67.5" y="20">%strict</text>
-<path d="M105 20H115"/>
-<rect class="t" x="115" y="8" width="28" height="24" rx="12"/>
-<text class="t" x="129" y="20">:</text>
-<path d="M143 20H153"/>
-<path d="M153 20H173"/>
-<path d="M233 20H253"/>
-<rect class="t" x="173" y="8" width="52" height="24" rx="12"/>
-<text class="t" x="199" y="20">true</text>
-<path d="M225 20H233"/>
-<path d="M153 20a10 10 0 0 1 10 10v12a10 10 0 0 0 10 10"/>
-<path d="M233 52a10 10 0 0 0 10 -10v-12a10 10 0 0 1 10 -10"/>
-<rect class="t" x="173" y="40" width="60" height="24" rx="12"/>
-<text class="t" x="203" y="52">false</text>
-<path d="M253 20H271"/>
-<path class="cap" d="M271 12v16m4 -16v16"/>
+<path d="M30 20H50"/>
+<path d="M484 20H504"/>
+<rect class="t" x="50" y="8" width="75" height="24" rx="12"/>
+<text class="t" x="87.5" y="20">%strict</text>
+<path d="M125 20H135"/>
+<rect class="t" x="135" y="8" width="28" height="24" rx="12"/>
+<text class="t" x="149" y="20">:</text>
+<path d="M163 20H173"/>
+<path d="M173 20H193"/>
+<path d="M253 20H273"/>
+<rect class="t" x="193" y="8" width="52" height="24" rx="12"/>
+<text class="t" x="219" y="20">true</text>
+<path d="M245 20H253"/>
+<path d="M173 20a10 10 0 0 1 10 10v12a10 10 0 0 0 10 10"/>
+<path d="M253 52a10 10 0 0 0 10 -10v-12a10 10 0 0 1 10 -10"/>
+<rect class="t" x="193" y="40" width="60" height="24" rx="12"/>
+<text class="t" x="223" y="52">false</text>
+<path d="M273 20H484"/>
+<path d="M30 20a10 10 0 0 1 10 10v44a10 10 0 0 0 10 10"/>
+<path d="M484 84a10 10 0 0 0 10 -10v-44a10 10 0 0 1 10 -10"/>
+<rect class="t" x="50" y="72" width="83" height="24" rx="12"/>
+<text class="t" x="91.5" y="84">%extends</text>
+<path d="M133 84H143"/>
+<rect class="t" x="143" y="72" width="28" height="24" rx="12"/>
+<text class="t" x="157" y="84">:</text>
+<path d="M171 84H181"/>
+<a href="#string">
+<rect class="n" x="181" y="72" width="63" height="24" rx="0"/>
+<text class="n" x="212.5" y="84">string</text>
+</a>
+<text class="l" x="258" y="84">a resolver provides the base value</text>
+<path d="M504 20H522"/>
+<path class="cap" d="M522 12v16m4 -16v16"/>
 </svg></div>
   </section>
 
@@ -324,75 +356,58 @@ tags: [
 
   <section class="form" id="value">
     <h3>value</h3>
-    <p>A <dfn>value</dfn> can be an <a href="#object">object</a>, an <a href="#array">array</a>, a <a href="#string">string</a>, a <a href="#number">number</a> or a <a href="#literal">literal</a>. These structures can be nested.</p>
-    <div class="diagram"><svg class="rr" viewBox="0 0 170 168" width="170" height="168" role="img" aria-label="Railroad diagram: value">
-<path class="cap" d="M8 12v16m4 -16v16"/>
-<path d="M12 20H30"/>
-<path d="M30 20H50"/>
-<path d="M120 20H140"/>
-<a href="#object">
-<rect class="n" x="50" y="8" width="63" height="24" rx="0"/>
-<text class="n" x="81.5" y="20">object</text>
-</a>
-<path d="M113 20H120"/>
-<path d="M30 20a10 10 0 0 1 10 10v12a10 10 0 0 0 10 10"/>
-<path d="M120 52a10 10 0 0 0 10 -10v-12a10 10 0 0 1 10 -10"/>
-<a href="#array">
-<rect class="n" x="50" y="40" width="56" height="24" rx="0"/>
-<text class="n" x="78" y="52">array</text>
-</a>
-<path d="M106 52H120"/>
-<path d="M30 20a10 10 0 0 1 10 10v44a10 10 0 0 0 10 10"/>
-<path d="M120 84a10 10 0 0 0 10 -10v-44a10 10 0 0 1 10 -10"/>
-<a href="#string">
-<rect class="n" x="50" y="72" width="63" height="24" rx="0"/>
-<text class="n" x="81.5" y="84">string</text>
-</a>
-<path d="M113 84H120"/>
-<path d="M30 20a10 10 0 0 1 10 10v76a10 10 0 0 0 10 10"/>
-<path d="M120 116a10 10 0 0 0 10 -10v-76a10 10 0 0 1 10 -10"/>
-<a href="#number">
-<rect class="n" x="50" y="104" width="63" height="24" rx="0"/>
-<text class="n" x="81.5" y="116">number</text>
-</a>
-<path d="M113 116H120"/>
-<path d="M30 20a10 10 0 0 1 10 10v108a10 10 0 0 0 10 10"/>
-<path d="M120 148a10 10 0 0 0 10 -10v-108a10 10 0 0 1 10 -10"/>
-<a href="#literal">
-<rect class="n" x="50" y="136" width="70" height="24" rx="0"/>
-<text class="n" x="85" y="148">literal</text>
-</a>
-<path d="M140 20H158"/>
-<path class="cap" d="M158 12v16m4 -16v16"/>
-</svg></div>
-  </section>
-
-  <section class="form" id="literal">
-    <h3>literal</h3>
-    <p>There are exactly four <dfn>literals</dfn>: <code>true</code>, <code>false</code> and <code>null</code> as in JSON, and <code>nil</code>, another notation for <code>null</code>. They are written in lower case and cannot be changed. Any other <a href="#identifier">identifier</a> at a value position is an error; it is never read as a string. At a name position the literals are ordinary names.</p>
-    <div class="diagram"><svg class="rr" viewBox="0 0 266 136" width="266" height="136" role="img" aria-label="Railroad diagram: literal">
+    <p>A <dfn>value</dfn> can be an <a href="#object">object</a>, an <a href="#array">array</a>, a <a href="#string">string</a>, a <a href="#number">number</a>, or <code>true</code>, <code>false</code> or <code>null</code> as in JSON, or <code>nil</code>, another notation for <code>null</code>. These structures can be nested. The four values without quotation marks are written in lower case and cannot be changed; any other word without quotation marks at a value position is an error and is never read as a string.</p>
+    <div class="diagram"><svg class="rr" viewBox="0 0 266 264" width="266" height="264" role="img" aria-label="Railroad diagram: value">
 <path class="cap" d="M8 12v16m4 -16v16"/>
 <path d="M12 20H30"/>
 <path d="M30 20H50"/>
 <path d="M216 20H236"/>
-<rect class="t" x="50" y="8" width="52" height="24" rx="12"/>
-<text class="t" x="76" y="20">true</text>
-<path d="M102 20H216"/>
+<a href="#object">
+<rect class="n" x="50" y="8" width="63" height="24" rx="0"/>
+<text class="n" x="81.5" y="20">object</text>
+</a>
+<path d="M113 20H216"/>
 <path d="M30 20a10 10 0 0 1 10 10v12a10 10 0 0 0 10 10"/>
 <path d="M216 52a10 10 0 0 0 10 -10v-12a10 10 0 0 1 10 -10"/>
-<rect class="t" x="50" y="40" width="60" height="24" rx="12"/>
-<text class="t" x="80" y="52">false</text>
-<path d="M110 52H216"/>
+<a href="#array">
+<rect class="n" x="50" y="40" width="56" height="24" rx="0"/>
+<text class="n" x="78" y="52">array</text>
+</a>
+<path d="M106 52H216"/>
 <path d="M30 20a10 10 0 0 1 10 10v44a10 10 0 0 0 10 10"/>
 <path d="M216 84a10 10 0 0 0 10 -10v-44a10 10 0 0 1 10 -10"/>
-<rect class="t" x="50" y="72" width="52" height="24" rx="12"/>
-<text class="t" x="76" y="84">null</text>
-<path d="M102 84H216"/>
+<a href="#string">
+<rect class="n" x="50" y="72" width="63" height="24" rx="0"/>
+<text class="n" x="81.5" y="84">string</text>
+</a>
+<path d="M113 84H216"/>
 <path d="M30 20a10 10 0 0 1 10 10v76a10 10 0 0 0 10 10"/>
 <path d="M216 116a10 10 0 0 0 10 -10v-76a10 10 0 0 1 10 -10"/>
-<rect class="t" x="50" y="104" width="44" height="24" rx="12"/>
-<text class="t" x="72" y="116">nil</text>
-<text class="l" x="108" y="116">the same as null</text>
+<a href="#number">
+<rect class="n" x="50" y="104" width="63" height="24" rx="0"/>
+<text class="n" x="81.5" y="116">number</text>
+</a>
+<path d="M113 116H216"/>
+<path d="M30 20a10 10 0 0 1 10 10v108a10 10 0 0 0 10 10"/>
+<path d="M216 148a10 10 0 0 0 10 -10v-108a10 10 0 0 1 10 -10"/>
+<rect class="t" x="50" y="136" width="52" height="24" rx="12"/>
+<text class="t" x="76" y="148">true</text>
+<path d="M102 148H216"/>
+<path d="M30 20a10 10 0 0 1 10 10v140a10 10 0 0 0 10 10"/>
+<path d="M216 180a10 10 0 0 0 10 -10v-140a10 10 0 0 1 10 -10"/>
+<rect class="t" x="50" y="168" width="60" height="24" rx="12"/>
+<text class="t" x="80" y="180">false</text>
+<path d="M110 180H216"/>
+<path d="M30 20a10 10 0 0 1 10 10v172a10 10 0 0 0 10 10"/>
+<path d="M216 212a10 10 0 0 0 10 -10v-172a10 10 0 0 1 10 -10"/>
+<rect class="t" x="50" y="200" width="52" height="24" rx="12"/>
+<text class="t" x="76" y="212">null</text>
+<path d="M102 212H216"/>
+<path d="M30 20a10 10 0 0 1 10 10v204a10 10 0 0 0 10 10"/>
+<path d="M216 244a10 10 0 0 0 10 -10v-204a10 10 0 0 1 10 -10"/>
+<rect class="t" x="50" y="232" width="44" height="24" rx="12"/>
+<text class="t" x="72" y="244">nil</text>
+<text class="l" x="108" y="244">the same as null</text>
 <path d="M236 20H254"/>
 <path class="cap" d="M254 12v16m4 -16v16"/>
 </svg></div>
@@ -400,81 +415,77 @@ tags: [
 
   <section class="form" id="name">
     <h3>name</h3>
-    <p>A <dfn>name</dfn> is a <a href="#string">string</a> or an <a href="#identifier">identifier</a>. The notation does not matter for the identity of a name: <code>a</code>, <code>"a"</code> and <code>'a'</code> denote the same name. At a name position an identifier is always a name, so <code>{null: null}</code> has the name <code>"null"</code>.</p>
-    <div class="diagram"><svg class="rr" viewBox="0 0 192 72" width="192" height="72" role="img" aria-label="Railroad diagram: name">
+    <p>A <dfn>name</dfn> is a <a href="#string">string</a> or is written without quotation marks. A name without quotation marks begins with an ASCII letter, <code>_</code>, <code>$</code> or a letter of Latin-1 Supplement, such as <code>ä</code>, <code>é</code>, <code>ß</code> or <code>µ</code>; <code>ª</code>, <code>º</code>, <code>·</code>, <code>×</code> and <code>÷</code> are not permitted. Digits may follow. Every other name must be written in quotation marks, for example names with spaces, hyphens, dots or other characters. Names are not normalized.</p>
+    <p>The notation does not matter for the identity of a name: <code>a</code>, <code>"a"</code> and <code>'a'</code> denote the same name. At a name position a word is always a name, so <code>{null: null}</code> has the name <code>"null"</code>.</p>
+    <div class="diagram"><svg class="rr" viewBox="0 0 478 228" width="478" height="228" role="img" aria-label="Railroad diagram: name">
 <path class="cap" d="M8 12v16m4 -16v16"/>
 <path d="M12 20H30"/>
 <path d="M30 20H50"/>
-<path d="M142 20H162"/>
+<path d="M428 20H448"/>
 <a href="#string">
 <rect class="n" x="50" y="8" width="63" height="24" rx="0"/>
 <text class="n" x="81.5" y="20">string</text>
 </a>
-<path d="M113 20H142"/>
+<path d="M113 20H428"/>
 <path d="M30 20a10 10 0 0 1 10 10v12a10 10 0 0 0 10 10"/>
-<path d="M142 52a10 10 0 0 0 10 -10v-12a10 10 0 0 1 10 -10"/>
-<a href="#identifier">
-<rect class="n" x="50" y="40" width="92" height="24" rx="0"/>
-<text class="n" x="96" y="52">identifier</text>
-</a>
-<path d="M162 20H180"/>
-<path class="cap" d="M180 12v16m4 -16v16"/>
-</svg></div>
-  </section>
-
-  <section class="form" id="identifier">
-    <h3>identifier</h3>
-    <p>An <dfn>identifier</dfn> begins with an ASCII letter, <code>_</code> or <code>$</code>, followed by any number of ASCII letters, ASCII digits, <code>_</code> or <code>$</code>. Every other name must be written in quotation marks, for example names with spaces, hyphens, dots or non-ASCII characters.</p>
-    <div class="diagram"><svg class="rr" viewBox="0 0 350 164" width="350" height="164" role="img" aria-label="Railroad diagram: identifier">
-<path class="cap" d="M8 12v16m4 -16v16"/>
-<path d="M12 20H30"/>
-<path d="M30 20H50"/>
-<path d="M120 20H140"/>
-<rect class="c" x="50" y="8" width="70" height="24" rx="4"/>
-<text class="c" x="85" y="20">a–z A–Z</text>
-<path d="M30 20a10 10 0 0 1 10 10v12a10 10 0 0 0 10 10"/>
-<path d="M120 52a10 10 0 0 0 10 -10v-12a10 10 0 0 1 10 -10"/>
-<rect class="t" x="50" y="40" width="28" height="24" rx="12"/>
-<text class="t" x="64" y="52">_</text>
-<path d="M78 52H120"/>
-<path d="M30 20a10 10 0 0 1 10 10v44a10 10 0 0 0 10 10"/>
-<path d="M120 84a10 10 0 0 0 10 -10v-44a10 10 0 0 1 10 -10"/>
-<rect class="t" x="50" y="72" width="28" height="24" rx="12"/>
-<text class="t" x="64" y="84">$</text>
-<path d="M78 84H120"/>
-<path d="M140 20H150"/>
-<path d="M150 20H170"/>
-<path d="M300 20H320"/>
-<path d="M170 20H300"/>
-<path d="M150 20a10 10 0 0 1 10 10v0a10 10 0 0 0 10 10"/>
-<path d="M300 40a10 10 0 0 0 10 -10v0a10 10 0 0 1 10 -10"/>
-<path d="M170 40H180"/>
-<path d="M180 40H200"/>
-<path d="M270 40H290"/>
-<rect class="c" x="200" y="28" width="70" height="24" rx="4"/>
-<text class="c" x="235" y="40">a–z A–Z</text>
-<path d="M180 40a10 10 0 0 1 10 10v12a10 10 0 0 0 10 10"/>
-<path d="M270 72a10 10 0 0 0 10 -10v-12a10 10 0 0 1 10 -10"/>
-<rect class="c" x="200" y="60" width="42" height="24" rx="4"/>
-<text class="c" x="221" y="72">0–9</text>
-<path d="M242 72H270"/>
-<path d="M180 40a10 10 0 0 1 10 10v44a10 10 0 0 0 10 10"/>
-<path d="M270 104a10 10 0 0 0 10 -10v-44a10 10 0 0 1 10 -10"/>
-<rect class="t" x="200" y="92" width="28" height="24" rx="12"/>
-<text class="t" x="214" y="104">_</text>
-<path d="M228 104H270"/>
-<path d="M180 40a10 10 0 0 1 10 10v76a10 10 0 0 0 10 10"/>
-<path d="M270 136a10 10 0 0 0 10 -10v-76a10 10 0 0 1 10 -10"/>
-<rect class="t" x="200" y="124" width="28" height="24" rx="12"/>
-<text class="t" x="214" y="136">$</text>
-<path d="M228 136H270"/>
-<path d="M290 40H300"/>
-<path d="M290 40a10 10 0 0 1 10 10v96a10 10 0 0 1 -10 10"/>
-<path d="M180 156a10 10 0 0 1 -10 -10v-96a10 10 0 0 1 10 -10"/>
-<path d="M180 156H235"/>
-<path d="M235 156H290"/>
-<path d="M320 20H338"/>
-<path class="cap" d="M338 12v16m4 -16v16"/>
+<path d="M428 52a10 10 0 0 0 10 -10v-12a10 10 0 0 1 10 -10"/>
+<path d="M50 52H70"/>
+<path d="M184 52H204"/>
+<rect class="c" x="70" y="40" width="70" height="24" rx="4"/>
+<text class="c" x="105" y="52">a–z A–Z</text>
+<path d="M140 52H184"/>
+<path d="M50 52a10 10 0 0 1 10 10v12a10 10 0 0 0 10 10"/>
+<path d="M184 84a10 10 0 0 0 10 -10v-12a10 10 0 0 1 10 -10"/>
+<rect class="t" x="70" y="72" width="28" height="24" rx="12"/>
+<text class="t" x="84" y="84">_</text>
+<path d="M98 84H184"/>
+<path d="M50 52a10 10 0 0 1 10 10v44a10 10 0 0 0 10 10"/>
+<path d="M184 116a10 10 0 0 0 10 -10v-44a10 10 0 0 1 10 -10"/>
+<rect class="t" x="70" y="104" width="28" height="24" rx="12"/>
+<text class="t" x="84" y="116">$</text>
+<path d="M98 116H184"/>
+<path d="M50 52a10 10 0 0 1 10 10v76a10 10 0 0 0 10 10"/>
+<path d="M184 148a10 10 0 0 0 10 -10v-76a10 10 0 0 1 10 -10"/>
+<rect class="c" x="70" y="136" width="114" height="24" rx="4"/>
+<text class="c" x="127" y="148">µ À–Ö Ø–ö ø–ÿ</text>
+<path d="M204 52H214"/>
+<path d="M214 52H234"/>
+<path d="M408 52H428"/>
+<path d="M234 52H408"/>
+<path d="M214 52a10 10 0 0 1 10 10v0a10 10 0 0 0 10 10"/>
+<path d="M408 72a10 10 0 0 0 10 -10v0a10 10 0 0 1 10 -10"/>
+<path d="M234 72H244"/>
+<path d="M244 72H264"/>
+<path d="M378 72H398"/>
+<rect class="c" x="264" y="60" width="70" height="24" rx="4"/>
+<text class="c" x="299" y="72">a–z A–Z</text>
+<path d="M334 72H378"/>
+<path d="M244 72a10 10 0 0 1 10 10v12a10 10 0 0 0 10 10"/>
+<path d="M378 104a10 10 0 0 0 10 -10v-12a10 10 0 0 1 10 -10"/>
+<rect class="c" x="264" y="92" width="42" height="24" rx="4"/>
+<text class="c" x="285" y="104">0–9</text>
+<path d="M306 104H378"/>
+<path d="M244 72a10 10 0 0 1 10 10v44a10 10 0 0 0 10 10"/>
+<path d="M378 136a10 10 0 0 0 10 -10v-44a10 10 0 0 1 10 -10"/>
+<rect class="t" x="264" y="124" width="28" height="24" rx="12"/>
+<text class="t" x="278" y="136">_</text>
+<path d="M292 136H378"/>
+<path d="M244 72a10 10 0 0 1 10 10v76a10 10 0 0 0 10 10"/>
+<path d="M378 168a10 10 0 0 0 10 -10v-76a10 10 0 0 1 10 -10"/>
+<rect class="t" x="264" y="156" width="28" height="24" rx="12"/>
+<text class="t" x="278" y="168">$</text>
+<path d="M292 168H378"/>
+<path d="M244 72a10 10 0 0 1 10 10v108a10 10 0 0 0 10 10"/>
+<path d="M378 200a10 10 0 0 0 10 -10v-108a10 10 0 0 1 10 -10"/>
+<rect class="c" x="264" y="188" width="114" height="24" rx="4"/>
+<text class="c" x="321" y="200">µ À–Ö Ø–ö ø–ÿ</text>
+<path d="M398 72H408"/>
+<path d="M398 72a10 10 0 0 1 10 10v128a10 10 0 0 1 -10 10"/>
+<path d="M244 220a10 10 0 0 1 -10 -10v-128a10 10 0 0 1 10 -10"/>
+<path d="M244 220H321"/>
+<path d="M321 220H398"/>
+<path d="M448 20H466"/>
+<path class="cap" d="M466 12v16m4 -16v16"/>
 </svg></div>
   </section>
 
@@ -1134,25 +1145,26 @@ tags: [
     <li>Comments are removed, and white space characters that JSON does not have become spaces.</li>
     <li>The members of an implicit root object are enclosed in <code>{</code> and <code>}</code>.</li>
     <li>Exactly one comma is put between two consecutive items; trailing commas are dropped.</li>
-    <li>An identifier at a name position becomes the JSON string with the same characters.</li>
+    <li>A name without quotation marks becomes the JSON string with the same characters.</li>
     <li>Strings become JSON strings in double quotation marks with the same value.</li>
     <li>Numbers are written as JSON numbers: without <code>_</code>, in decimal notation, and with the suffix replaced by the result of its conversion.</li>
     <li><code>nil</code> is replaced by <code>null</code>.</li>
-    <li>The directive is removed.</li>
+    <li>The directives are removed.</li>
+    <li>With <code>%extends</code>, the result is applied to the base value as a JSON Merge Patch.</li>
   </ol>
   <p>A document that uses at least one of the extensions is not a JSON text. It must not be labelled with the media type <code>application/json</code> or sent to recipients that expect JSON.</p>
 </section>
 
 <section id="strict-mode">
   <h2>Strict mode</h2>
-  <p>In <dfn>strict mode</dfn> a parser also rejects documents with duplicate names, with surrogates or Unicode noncharacters in names and strings, or with a root value that is not an object or an array. Strict mode applies if the application requests it or if the document contains <code>%strict: true</code>, and it covers the content of the document. Every conforming parser offers it. The JSON equivalent of a document that is valid in strict mode, and whose numbers stay within the range of IEEE 754 binary64, is an <a href="https://www.rfc-editor.org/rfc/rfc7493">I-JSON</a> message.</p>
+  <p>In <dfn>strict mode</dfn> a parser also rejects documents with duplicate names, with surrogates or Unicode noncharacters in names and strings, or with a root value that is not an object or an array. Strict mode applies if the application requests it or if the document contains <code>%strict: true</code>, and it covers the content of the document and, with <code>%extends</code>, the result of the merge. Every conforming parser offers it. The JSON equivalent of a document that is valid in strict mode, and whose numbers stay within the range of IEEE 754 binary64, is an <a href="https://www.rfc-editor.org/rfc/rfc7493">I-JSON</a> message.</p>
 </section>
 
 <section id="principles">
   <h2>Principles</h2>
   <ul>
-    <li><strong>Every document is portable.</strong> The literals, the suffixes and the directive are fixed by the specification. Neither the document nor the application can define values or add any of them, so the value of a document depends only on its text, and every conforming parser reads it in the same way.</li>
-    <li><strong>Errors instead of guessing.</strong> Unknown escape sequences, white space after a line continuation, identifiers other than the literals at a value position, unknown directives, unknown suffixes and mixed indentation are errors and are not silently interpreted.</li>
+    <li><strong>Documents are portable.</strong> The values without quotation marks, the suffixes and the directives are fixed by the specification. Neither the document nor the application can define values or add any of them, so the value of a document without <code>%extends</code> depends only on its text, and every conforming parser reads it in the same way. The value of a document with <code>%extends</code> also depends on the base value that the resolver of the application provides.</li>
+    <li><strong>Errors instead of guessing.</strong> Unknown escape sequences, white space after a line continuation, words other than <code>true</code>, <code>false</code>, <code>null</code> and <code>nil</code> at a value position, unknown directives, unknown suffixes and mixed indentation are errors and are not silently interpreted.</li>
     <li><strong>Never code.</strong> XTJSON is not a subset of a programming language and is never read by evaluating it as program code.</li>
   </ul>
 </section>
@@ -1169,28 +1181,28 @@ tags: [
   <h2 id="grammar-title">Grammar</h2>
   <p>The complete grammar in <a href="https://www.rfc-editor.org/rfc/rfc5234">ABNF</a>, taken from Appendix A of the specification.</p>
   <pre><code>; ---------- Document ----------
-XTJSON-text    = S [ directive item-sep ] ( value / root-members ) S [ line-comment ]
-root-members   = member-list                 ; implicit root object
+XTJSON-text    = S [ directives item-sep ] ( value / member-list ) S [ line-comment ]
+                                             ; member-list: implicit root object
 
-; ---------- Directive ----------
-directive      = %x25.73.74.72.69.63.74 S &quot;:&quot; S ( true / false )   ; %strict
+; ---------- Directives ----------
+directives     = strict-directive [ item-sep extends-directive ]
+               / extends-directive [ item-sep strict-directive ]
+strict-directive  = %x25.73.74.72.69.63.74 S &quot;:&quot; S
+                    ( %x74.72.75.65 / %x66.61.6C.73.65 )   ; %strict: true / false
+extends-directive = %x25.65.78.74.65.6E.64.73 S &quot;:&quot; S string   ; %extends
 
 ; ---------- Values ----------
-value          = object / array / string / number / literal
-literal        = true / false / null / nil
-true           = %x74.72.75.65               ; true
-false          = %x66.61.6C.73.65            ; false
-null           = %x6E.75.6C.6C               ; null
-nil            = %x6E.69.6C                  ; nil, the same value as null
+value          = object / array / string / number /
+                 %x74.72.75.65 / %x66.61.6C.73.65 /  ; true false
+                 %x6E.75.6C.6C / %x6E.69.6C          ; null nil (the same value)
 
 ; ---------- Objects ----------
 object         = &quot;{&quot; S [ member-list S ] &quot;}&quot;
 member-list    = member *( item-sep member ) [ S &quot;,&quot; ]
 member         = name S &quot;:&quot; S value
-name           = string / identifier
-identifier     = id-start *id-continue
-id-start       = ALPHA / &quot;_&quot; / &quot;$&quot;
-id-continue    = ALPHA / DIGIT / &quot;_&quot; / &quot;$&quot;
+name           = string / name-start *( name-start / DIGIT )
+name-start     = ALPHA / &quot;_&quot; / &quot;$&quot; / %xB5 /                 ; letters of
+                 %xC0-D6 / %xD8-F6 / %xF8-FF                ; Latin-1 Supplement
 
 ; ---------- Arrays ----------
 array          = &quot;[&quot; S [ value-list S ] &quot;]&quot;
@@ -1222,36 +1234,32 @@ string         = DQUOTE *( unescaped / SQUOTE / escape-seq ) DQUOTE
 unescaped      = %x09 / newline / %x20-21 / %x23-26 / %x28-5B / %x5D-10FFFF
                                              ; without &quot; &#x27; \ and without control
                                              ; characters other than HT and line breaks
-escape-seq     = %x5C ( char-escape / null-escape / hex-escape /
-                        unicode-escape / codepoint-escape / newline )
-                                             ; \ before newline: line continuation
-char-escape    = %x22 / %x27 / %x5C / %x2F /         ; &quot; &#x27; \ /
-                 %x62 / %x66 / %x6E / %x72 /         ; b f n r
-                 %x74 / %x76                         ; t v
-null-escape    = %x30                        ; \0, not before a DIGIT
-hex-escape     = %x78 2HEXDIG                ; \xHH
-unicode-escape = %x75 4HEXDIG                ; \uXXXX
-codepoint-escape = %x75 &quot;{&quot; *&quot;0&quot; ( 1*5HEXDIG / ( &quot;10&quot; 4HEXDIG ) ) &quot;}&quot;
-                                             ; \u{…}, at most 10FFFF, not D800-DFFF
+escape-seq     = %x5C ( %x22 / %x27 / %x5C / %x2F /  ; &quot; &#x27; \ /
+                        %x62 / %x66 / %x6E / %x72 /  ; b f n r
+                        %x74 / %x76 /                ; t v
+                        %x30 /                       ; \0, not before a DIGIT
+                        %x78 2HEXDIG /               ; \xHH
+                        %x75 4HEXDIG /               ; \uXXXX
+                        %x75 &quot;{&quot; *&quot;0&quot; ( 1*5HEXDIG / ( &quot;10&quot; 4HEXDIG ) ) &quot;}&quot; /
+                                                     ; \u{…}, at most 10FFFF, not D800-DFFF
+                        newline )                    ; line continuation
 SQUOTE         = %x27                        ; &#x27;
 
 ; ---------- Numbers ----------
-number         = [ minus ] ( ( hex-int / oct-int / bin-int / decimal ) [ suffix ]
-                           / ( hex-int / oct-int / bin-int / int ) int-suffix )
+number         = [ minus ] ( ( radix-int / decimal ) [ suffix ]
+                           / ( radix-int / int ) %x6E )  ; n only after an integer (9.5)
 suffix         = %x6B / %x6B.62 / %x6D /     ; k kb m
                  %x6D.62 / %x6D.73 /         ; mb ms
                  %x6D.69.6E / %x73 / %x68 /  ; min s h
                  %x70.63.74                  ; pct
-int-suffix     = %x6E                        ; n, only after an integer (9.5)
 decimal        = int [ frac ] [ exp ]
 int            = zero / ( digit1-9 *( [ &quot;_&quot; ] DIGIT ) )
 frac           = &quot;.&quot; digits
 exp            = e [ minus / plus ] digits
 digits         = DIGIT *( [ &quot;_&quot; ] DIGIT )
-hex-int        = zero ( %x78 / %x58 ) HEXDIG    *( [ &quot;_&quot; ] HEXDIG )     ; 0x 0X
-oct-int        = zero ( %x6F / %x4F ) oct-digit *( [ &quot;_&quot; ] oct-digit )  ; 0o 0O
-bin-int        = zero ( %x62 / %x42 ) BIT       *( [ &quot;_&quot; ] BIT )        ; 0b 0B
-oct-digit      = %x30-37
+radix-int      = zero ( ( %x78 / %x58 ) HEXDIG *( [ &quot;_&quot; ] HEXDIG )       ; 0x 0X
+                      / ( %x6F / %x4F ) %x30-37 *( [ &quot;_&quot; ] %x30-37 )     ; 0o 0O
+                      / ( %x62 / %x42 ) BIT *( [ &quot;_&quot; ] BIT ) )           ; 0b 0B
 digit1-9       = %x31-39
 zero           = %x30
 minus          = %x2D
