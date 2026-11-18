@@ -385,7 +385,8 @@ describe('numbers', () => {
     assert.equal(parse('0.1h'), 360);
     assert.equal(parse('0x10ms'), 0.016);
     assert.equal(parse('9007199254740993ms'), 9007199254740.993);
-    assert.equal(parse('0.1px'), 0.1);
+    assert.equal(parse('0.1m'), 100000);
+    assert.equal(parse('1.5m'), 1500000);
     assert.ok(Object.is(parse('-0ms'), -0));
     assert.ok(Object.is(parse('-0.0pct'), -0));
     assert.ok(Object.is(parse('-0x0h'), -0));
@@ -394,7 +395,8 @@ describe('numbers', () => {
   test('the result of a suffix must be in range', () => {
     assert.match(error('1e308k').message, /out of range/);
     assert.match(error('1e305h').message, /out of range/);
-    assert.match(error('1e400px').message, /out of range/);
+    assert.match(error('1e400s').message, /out of range/);
+    assert.match(error('1e303m').message, /out of range/);
     // only the result counts (9.4)
     assert.equal(parse('4.4e308pct'), 4.4e306);
     assert.equal(parse('-1e310ms'), -1e307);
@@ -403,9 +405,8 @@ describe('numbers', () => {
 
   test('all suffixes of the table in 9.5', () => {
     const table = {
-      k: 2000, K: 2000, kb: 2048, Kb: 2048, kB: 2048, KB: 2048,
-      mb: 2097152, Mb: 2097152, mB: 2097152, MB: 2097152,
-      ms: 0.002, s: 2, min: 120, h: 7200, pct: 0.02, px: 2, L: 2, n: 2n,
+      k: 2000, kb: 2048, m: 2000000, mb: 2097152,
+      ms: 0.002, s: 2, min: 120, h: 7200, pct: 0.02, n: 2n,
     };
     for (const [suffix, expected] of Object.entries(table)) {
       assert.equal(parse('2' + suffix), expected, suffix);
@@ -417,24 +418,16 @@ describe('numbers', () => {
       ['10n', 10n], ['-3n', -3n], ['0n', 0n], ['-0n', 0n], ['1_000n', 1000n],
       ['9007199254740993n', 9007199254740993n], ['0xFFn', 255n], ['-0xFFn', -255n], ['0o17n', 15n],
       ['0b101n', 5n], ['0x1_0000_0000_0000_0001n', 18446744073709551617n],
-      ['1e3n', 1000n], ['120e-1n', 12n], ['0e-5n', 0n], ['1e30n', 10n ** 30n],
+      ['123_456_789_012_345_678_901_234_567_890n', 123456789012345678901234567890n],
     ];
     for (const [text, expected] of cases) assert.equal(parse(text), expected, text);
     assert.deepEqual(parse('a: 1n, b: [2n, 3]'), { a: 1n, b: [2n, 3] });
   });
 
-  test('numbers with a fraction part or a non-integer value stay numbers with the suffix n', () => {
-    for (const [text, expected] of [['1.5n', 1.5], ['1.0n', 1], ['12e-1n', 1.2], ['1e-3n', 0.001], ['1.5L', 1.5], ['100L', 100]]) {
-      const value = parse(text);
-      assert.equal(typeof value, 'number', text);
-      assert.equal(value, expected, text);
+  test('the suffix n is an error after a fraction part or an exponent', () => {
+    for (const text of ['1.5n', '1.0n', '12e-1n', '1e-3n', '1e3n', '0e5n', '-1.0_0n']) {
+      assert.match(error(text).message, /The suffix 'n' is only permitted after an integer/, text);
     }
-  });
-
-  test('the exponent of a BigInt is limited', () => {
-    assert.equal(String(parse('1e10000n')).length, 10001);
-    assert.match(error('a: 1e10001n').message, /exponent of a BigInt number \(suffix n\) exceeds the limit of 10000 \(line 1, column 4\)/);
-    assert.equal(parse('0e99999n'), 0n);
   });
 
   test('predefined factors give the exact product (9.5)', () => {
@@ -443,7 +436,8 @@ describe('numbers', () => {
     assert.equal(parse('1.1mb'), 1153433.6);
     assert.equal(parse('1e-3k'), 1);
     assert.equal(parse('9007199254740993k'), 9007199254740993000);
-    assert.equal(parse('-0.000_001K'), -0.001);
+    assert.equal(parse('-0.000_001k'), -0.001);
+    assert.equal(parse('9007199254740993m'), 9007199254740993000000);
     assert.equal(parse('0x1F_FFFF_FFFF_FFFFkb'), (2 ** 53 - 1) * 1024);
     assert.equal(parse('1e-99999999999k'), 0);
   });
@@ -622,16 +616,21 @@ describe('error messages', () => {
     ['.5', /must not begin with '\.'/, 1, 1],
     ['5.', /Expected a decimal digit after '\.'/, 1, 3],
     ['10e', /Expected a decimal digit in the exponent/, 1, 4],
-    ['10q', /Unknown number suffix 'q'\. The suffixes are k, K, kb, .* L and n/, 1, 3],
-    ['10kbs', /Unknown number suffix 'kbs'; 'kbs' is read as one suffix, not as 'kb' followed by 's'/, 1, 3],
-    ['10MS', /Unknown number suffix 'MS'; did you mean 'ms'\? Suffixes are case-sensitive/, 1, 3],
-    ['10kB_', /Unknown number suffix 'kB_'/, 1, 3],
-    ['10l', /did you mean 'L'\?/, 1, 3],
+    ['10q', /Unknown number suffix 'q'\. The suffixes are k, kb, m, mb, ms, s, min, h, pct and n/, 1, 3],
+    ['10kbs', /Unexpected 's' after the number suffix 'kb'\. The suffixes are/, 1, 5],
+    ['10mi', /Unexpected 'i' after the number suffix 'm'/, 1, 4],
+    ['10k5', /Unexpected '5' after the number suffix 'k'/, 1, 4],
+    ['10MS', /Unknown number suffix 'MS'; did you mean 'ms'\? Suffixes are written in lower case/, 1, 3],
+    ['10K', /Unknown number suffix 'K'; did you mean 'k'\?/, 1, 3],
+    ['10kB_', /Unexpected 'B' after the number suffix 'k'/, 1, 4],
+    ['12px', /Unknown number suffix 'px'\./, 1, 3],
+    ['100L', /Unknown number suffix 'L'\./, 1, 4],
+    ['a: 1.5n', /The suffix 'n' is only permitted after an integer/, 1, 7],
     ['50%', /Unexpected '%' after the root value/, 1, 3],
     ['10k%', /Unexpected '%' after the root value/, 1, 4],
     ['10_k', /'_' is only permitted between two digits/, 1, 3],
-    ['10ab', /a number suffix cannot begin with a to f, o or x/, 1, 3],
-    ['10x', /a number suffix cannot begin with a to f, o or x/, 1, 3],
+    ['10ab', /Unknown number suffix 'ab'/, 1, 3],
+    ['10x', /Unknown number suffix 'x'/, 1, 3],
   ];
   for (const [text, pattern, line, column] of cases) {
     test(JSON.stringify(text), () => {

@@ -99,8 +99,7 @@ export interface ParsedDocument {
 
 /**
  * Parses an XTJSON document and returns its value. Numbers become `number`;
- * a number with the suffix `n` and without a fraction part becomes a
- * `bigint` if its value is an integer (`10n`, `0xFFn`, `1e3n`).
+ * an integer with the suffix `n` becomes a `bigint` (`10n`, `0xFFn`).
  *
  * @param text the document
  * @param options strict mode and the limits

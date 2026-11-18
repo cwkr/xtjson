@@ -134,7 +134,7 @@ for (const lang of ['de', 'en']) {
       count++;
       const value = parse(body);
       if (blocks[i + 1]?.[0] === 'json') {
-        assert.deepEqual(value, JSON.parse(blocks[i + 1][1]), `example ${count}`);
+        assert.deepEqual(asNumbers(value), JSON.parse(blocks[i + 1][1]), `example ${count}`);
       }
     });
     assert.ok(count > 0);

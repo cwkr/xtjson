@@ -60,12 +60,6 @@ const UNDERSCORE = 0x5f;
 const LBRACE = 0x7b;
 const RBRACE = 0x7d;
 
-/**
- * Largest exponent of a number that becomes a BigInt (suffix n); limits the
- * size of the BigInt that a short text such as `1e999999999n` could demand.
- */
-const MAX_BIGINT_EXPONENT = 10000;
-
 /** 10^0 to 10^22, the powers of ten that a JavaScript number holds exactly. */
 const POWERS_OF_TEN = [
   1e0, 1e1, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8, 1e9, 1e10, 1e11,
@@ -76,7 +70,13 @@ const RADIX_NAMES = { 2: 'binary', 8: 'octal', 10: 'decimal', 16: 'hexadecimal' 
 const BITS_PER_DIGIT = { 2: 1, 8: 3, 16: 4 };
 const RADIX_PREFIX = { 2: '0b', 8: '0o', 16: '0x' };
 
-const SUFFIX_LIST = 'k, K, kb, Kb, kB, KB, mb, Mb, mB, MB, ms, s, min, h, pct, px, L and n';
+const SUFFIX_LIST = 'k, kb, m, mb, ms, s, min, h, pct and n';
+
+/**
+ * The suffixes of 9.5 (rules `suffix` and `int-suffix`), ordered so that the
+ * first one that matches is the longest match.
+ */
+const SUFFIX_NAMES = ['min', 'ms', 'mb', 'm', 'kb', 'k', 's', 'h', 'pct', 'n'];
 
 const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
 
@@ -85,14 +85,13 @@ const DIRECTIVE_LIST = '%define, %version and %strict';
 // Flags for ASCII characters in the table `flags` of `characterTables()`
 const ID_START = 1; // ALPHA / "_" / "$"                       (7.2)
 const ID_PART = 2; // ALPHA / DIGIT / "_" / "$"                (7.2)
-const SUFFIX_FIRST = 4; // g-n p-w y z G-N P-W Y Z $            (9.5)
 
 /** @type {{flags: Uint8Array, hex: Int8Array} | undefined} */
 let tables;
 
 /**
  * Lookup tables for ASCII characters, built on first use and shared by all
- * parsers. `flags`: the flags `ID_START`, `ID_PART` and `SUFFIX_FIRST` of
+ * parsers. `flags`: the flags `ID_START` and `ID_PART` of
  * each ASCII character. `hex`: the value of a hexadecimal digit, or -1.
  * @returns {{flags: Uint8Array, hex: Int8Array}}
  */
@@ -105,7 +104,6 @@ function characterTables() {
       let f = 0;
       if (/[A-Za-z_$]/.test(ch)) f |= ID_START | ID_PART;
       if (/[0-9]/.test(ch)) f |= ID_PART;
-      if (/[g-np-wyzG-NP-WYZ$]/.test(ch)) f |= SUFFIX_FIRST;
       flags[c] = f;
       if (/[0-9A-Fa-f]/.test(ch)) hex[c] = parseInt(ch, 16);
     }
@@ -490,11 +488,9 @@ export class Parser {
     this.#flags = tables.flags;
     this.#hex = tables.hex;
     this.#suffixes = (Parser.#suffixTable ??= new Map([
-      ['k', [1000, 0]], ['K', [1000, 0]],
-      ['kb', [1024, 0]], ['Kb', [1024, 0]], ['kB', [1024, 0]], ['KB', [1024, 0]],
-      ['mb', [1048576, 0]], ['Mb', [1048576, 0]], ['mB', [1048576, 0]], ['MB', [1048576, 0]],
+      ['k', [1000, 0]], ['kb', [1024, 0]], ['m', [1000000, 0]], ['mb', [1048576, 0]],
       ['ms', [1, -3]], ['s', [1, 0]], ['min', [60, 0]], ['h', [3600, 0]],
-      ['pct', [1, -2]], ['px', [1, 0]], ['L', [1, 0]], ['n', [1, 0]],
+      ['pct', [1, -2]], ['n', [1, 0]],
     ]));
   }
 
@@ -503,8 +499,7 @@ export class Parser {
    *
    * @param {string} text the document; converted to a string as in
    *   `JSON.parse`
-   * @returns {any} the value; a number with the suffix `n` and without a
-   *   fraction part becomes a BigInt if its value is an integer
+   * @returns {any} the value; an integer with the suffix `n` becomes a BigInt
    * @throws {ParserError} if the text is not a valid XTJSON document
    */
   parse(text) {
@@ -560,21 +555,21 @@ export class Parser {
 
   // ----- Messages ---------------------------------------------------------
 
-  /** Message for a suffix that is not in the table of 9.5, with a hint. */
-  #unknownSuffixMessage(suffix) {
-    const suffixes = [...this.#suffixes.keys()];
-    let hint = '';
-    const lower = suffix.toLowerCase();
-    const sameLetters = suffixes.filter((s) => s.toLowerCase() === lower);
-    if (sameLetters.length > 0) {
-      hint = `; did you mean ${sameLetters.map((s) => `'${s}'`).join(' or ')}? Suffixes are case-sensitive`;
-    } else {
-      const prefix = suffixes.filter((s) => suffix.startsWith(s)).sort((a, b) => b.length - a.length)[0];
-      if (prefix !== undefined) {
-        hint = `; '${suffix}' is read as one suffix, not as '${prefix}' followed by '${suffix.slice(prefix.length)}'`;
-      }
+  /**
+   * Reports the identifier characters `word` directly after a number at
+   * `offset` that are not a suffix of 9.5. `suffix` is the longest suffix
+   * that `word` begins with, if any; the rest of `word` would need a
+   * separator (7.3).
+   */
+  #failSuffix(word, suffix, offset) {
+    const lower = word.toLowerCase();
+    if (lower !== word && this.#suffixes.has(lower)) {
+      this.#fail(`Unknown number suffix '${word}'; did you mean '${lower}'? Suffixes are written in lower case`, offset);
     }
-    return `Unknown number suffix '${suffix}'${hint}. The suffixes are ${SUFFIX_LIST}`;
+    if (suffix !== undefined) {
+      this.#fail(`Unexpected '${word.charAt(suffix.length)}' after the number suffix '${suffix}'. The suffixes are ${SUFFIX_LIST}`, offset + suffix.length);
+    }
+    this.#fail(`Unknown number suffix '${word}'. The suffixes are ${SUFFIX_LIST}`, offset);
   }
 
   // ----- Errors -----------------------------------------------------------
@@ -694,7 +689,7 @@ export class Parser {
     const end = this.#pos;
     this.#skipSpace();
     if (this.#pos < this.#len) {
-      // '%' directly after a number is a suffix that does not exist ('50%').
+      // '%' directly after a number is not a suffix ('50%').
       if (this.#peek() === PERCENT && this.#pos > end) this.#failDirectivePosition();
       this.#fail(`Unexpected ${describeAt(this.#text, this.#pos)} after the root value; a document contains exactly one value`);
     }
@@ -1402,57 +1397,59 @@ export class Parser {
       } else {
         pos = this.#scanDigits(pos, 10, '');
       }
-      let hasFraction = false;
       if (text.charCodeAt(pos) === DOT) {
         isInteger = false;
-        hasFraction = true;
         pos = this.#scanDigits(pos + 1, 10, "after '.'");
       }
-      let exponentStart = -1;
       if ((text.charCodeAt(pos) | 0x20) === 0x65) { // e E
         isInteger = false;
-        exponentStart = pos;
         pos++;
         const c = text.charCodeAt(pos);
         if (c === PLUS || c === MINUS) pos++;
         pos = this.#scanDigits(pos, 10, 'in the exponent');
       }
-      // With the suffix n a number without a fraction part becomes a BigInt
-      // if its value is an integer.
-      if (!hasFraction && this.#atSuffixN(pos)) value = this.#bigIntValue(start, exponentStart, pos);
+      // With the suffix n an integer becomes a BigInt, so it is exact at any
+      // size. After a fraction part or an exponent, n is an error (below).
+      if (isInteger && this.#atSuffixN(pos)) value = BigInt(this.#withoutUnderscores(start, pos));
       // May be Infinity; the range is checked below, after the suffix
       // (9.4: `4.4e308pct` is 4.4e306).
       value ??= Number(this.#withoutUnderscores(start, pos));
     }
 
-    // 9.5: suffix
+    // 9.5: suffix. The suffixes are a fixed list (longest match); any other
+    // identifier character directly after the number or its suffix would
+    // begin a new token without a separator (7.3).
     let c = text.charCodeAt(pos);
-    if (hasFlag(this.#flags, c, SUFFIX_FIRST)) {
-      // Longest match: all identifier characters belong to the suffix.
+    if (c === DOT) {
+      this.#fail(radix === 10
+        ? "Unexpected '.' in a number"
+        : `A ${RADIX_NAMES[radix]} number cannot have a fraction part`, pos);
+    }
+    if (hasFlag(this.#flags, c, ID_PART)) {
+      if (isDigit(c)) {
+        this.#fail(`'${String.fromCharCode(c)}' is not a valid ${RADIX_NAMES[radix]} digit`, pos);
+      }
+      if (c === UNDERSCORE) this.#fail("'_' is only permitted between two digits", pos);
       const suffixStart = pos;
+      const suffix = SUFFIX_NAMES.find((name) => text.startsWith(name, suffixStart));
       pos++;
       while (hasFlag(this.#flags, text.charCodeAt(pos), ID_PART)) pos++;
-      const suffix = text.slice(suffixStart, pos);
-      c = text.charCodeAt(pos);
-      if (c === DOT) {
+      if (suffix === undefined || suffixStart + suffix.length !== pos) {
+        this.#failSuffix(text.slice(suffixStart, pos), suffix, suffixStart);
+      }
+      if (text.charCodeAt(pos) === DOT) {
         this.#fail(`Unexpected '.' after the number suffix '${suffix}'`, pos);
       }
-      if (typeof value !== 'bigint') {
+      if (suffix === 'n') {
+        if (!isInteger) {
+          this.#fail("The suffix 'n' is only permitted after an integer, not after a number with a fraction part or an exponent", suffixStart);
+        }
+      } else {
         // `value` is exact for non-decimal numbers (checked in radixValue) and
         // for decimal integers within the safe range; otherwise it may be rounded.
         const exact = radix !== 10 || (isInteger && Math.abs(value) <= Number.MAX_SAFE_INTEGER);
         value = this.#applySuffix(suffix, value, exact, start, suffixStart);
       }
-    } else if (c === DOT) {
-      this.#fail(radix === 10
-        ? "Unexpected '.' in a number"
-        : `A ${RADIX_NAMES[radix]} number cannot have a fraction part`, pos);
-    } else if (hasFlag(this.#flags, c, ID_PART)) {
-      if (isDigit(c)) {
-        this.#fail(`'${String.fromCharCode(c)}' is not a valid ${RADIX_NAMES[radix]} digit`, pos);
-      }
-      if (c === UNDERSCORE) this.#fail("'_' is only permitted between two digits", pos);
-      this.#fail(`Unexpected '${String.fromCharCode(c)}' after a number; a number suffix cannot begin with a to f, o or x`, pos);
     }
     if (typeof value === 'number' && !Number.isFinite(value)) this.#fail('The number is out of range', start);
 
@@ -1463,31 +1460,6 @@ export class Parser {
   /** True if the suffix `n` (and nothing longer) begins at `pos`. */
   #atSuffixN(pos) {
     return this.#text.charCodeAt(pos) === 0x6e && !hasFlag(this.#flags, this.#text.charCodeAt(pos + 1), ID_PART);
-  }
-
-  /**
-   * Value of a decimal number without a fraction part as a BigInt, or
-   * undefined if it is not an integer (`12e-1`). `exponentStart` is the
-   * offset of the `e`, or -1.
-   */
-  #bigIntValue(start, exponentStart, end) {
-    let digits = this.#withoutUnderscores(start, exponentStart < 0 ? end : exponentStart);
-    const negative = digits.charCodeAt(0) === MINUS;
-    if (negative) digits = digits.slice(1);
-    let exponent = exponentStart < 0 ? 0 : Number(this.#withoutUnderscores(exponentStart + 1, end));
-    const significant = digits.replace(/0+$/, '');
-    if (significant === '') return 0n;
-    if (exponent < 0) {
-      if (digits.length - significant.length < -exponent) return undefined;
-      digits = digits.slice(0, digits.length + exponent);
-      exponent = 0;
-    }
-    if (exponent > MAX_BIGINT_EXPONENT) {
-      this.#fail(`The exponent of a BigInt number (suffix n) exceeds the limit of ${MAX_BIGINT_EXPONENT}`, start);
-    }
-    let value = BigInt(digits);
-    if (exponent > 0) value *= 10n ** BigInt(exponent);
-    return negative ? -value : value;
   }
 
   /**
@@ -1546,10 +1518,9 @@ export class Parser {
    */
   #applySuffix(suffix, value, exact, start, suffixStart) {
     const conversion = this.#suffixes.get(suffix);
-    if (conversion === undefined) this.#fail(this.#unknownSuffixMessage(suffix), suffixStart);
     const factor = conversion[0];
     const scale = conversion[1];
-    if (factor === 1 && scale === 0) return value; // s, px, L, n
+    if (factor === 1 && scale === 0) return value; // s
     let result;
     if (exact && scale === 0) {
       result = value * factor; // both operands exact: the product is correctly rounded

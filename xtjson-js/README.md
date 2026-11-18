@@ -3,7 +3,7 @@
 XTJSON parser for JavaScript. XTJSON is a syntactic superset of
 JSON for files that are written and maintained by people, such as
 configuration files. See the specification in
-[`docs/xtjson-spec-en.md`](../docs/xtjson-spec-en.md) (draft 0.6).
+[`docs/xtjson-spec-en.md`](../docs/xtjson-spec-en.md) (draft 0.7).
 
 - ES modules in plain JavaScript, with TypeScript declarations. Importing
   them has no side effects.
@@ -71,7 +71,7 @@ of the specification, or with an identifier the version of something else
 
 ```js
 parse(`
-%version: '0.6'
+%version: '0.7'
 %define: nil = null
 %define: address = { city: 'Köln', zip: nil }
 
@@ -112,12 +112,12 @@ application decides what to do with them.
 import { parseDocument } from '@cwkr/xtjson';
 
 const { value, versions } = parseDocument(`
-%version: '0.6'
+%version: '0.7'
 %version: schema = '2026.05.01b'
 port: 8080
 `);
 // value: { port: 8080 }
-// versions: Map { 'xtjson' => '0.6', 'schema' => '2026.05.01b' }
+// versions: Map { 'xtjson' => '0.7', 'schema' => '2026.05.01b' }
 ```
 
 ### Options
@@ -151,11 +151,12 @@ versions: named values are defined in the document with `%define`, and the
 I-JSON mode is now strict mode, option `strict`.
 
 The application cannot define named values, directives or number suffixes.
-The suffixes are fixed by section 9.5 and always active when parsing: `k`, `K` (times 1000), `kb`,
-`Kb`, `kB`, `KB` (times 1024), `mb`, `Mb`, `mB`, `MB` (times 1048576), `ms`
-(divided by 1000), `s`, `min` (times 60), `h` (times 3600), `pct` (divided
-by 100), `px`, `L` and `n`. `s`, `px`, `L` and `n` leave the value
-unchanged; `n` in addition yields a BigInt, see [Numbers](#numbers).
+The suffixes are fixed by section 9.5 and always active when parsing: `k`
+(times 1000), `kb` (times 1024), `m` (times 1000000), `mb` (times 1048576),
+`ms` (divided by 1000), `s`, `min` (times 60), `h` (times 3600), `pct`
+(divided by 100) and `n`. `s` and `n` leave the value unchanged; `n` is
+permitted only after an integer and yields a BigInt, see
+[Numbers](#numbers).
 
 `Options` validates the options once. Create it once and reuse it for
 `parse`, or create a [`Parser`](#parser) with it. A plain object with the
@@ -285,15 +286,12 @@ The package has only named exports: `parse`, `parseDocument`, `format`,
   is rejected, never rounded (section 9.4).
 - Suffixes give the exact product or quotient, rounded once: `0.1kb` is
   `102.4`, `100ms` is `0.1`, `12.5pct` is `0.125`. A suffix that is not in
-  the table of section 9.5 is an error; suffixes are case-sensitive (`10MS`
-  and `10l` are errors).
-- A number with the suffix `n` and without a fraction part becomes a BigInt
-  if its value is an integer: `10n`, `0xFFn`, `9007199254740993n` and `1e3n`
-  (`1000n`) are exact at any size. `1.5n`, `1.0n` and `12e-1n` stay
-  numbers, as the specification gives the suffix `n` no effect on the value.
-  The exponent of such a number may be at most 10000, so that a short text
-  cannot demand a huge BigInt. Note that `JSON.stringify` cannot write a
-  BigInt.
+  the table of section 9.5 is an error, and suffixes are written in lower
+  case only (`10K`, `10MS` and `12px` are errors).
+- An integer with the suffix `n` becomes a BigInt: `10n`, `0xFFn` and
+  `9007199254740993n` are exact at any size. After a fraction part or an
+  exponent the suffix `n` is an error (`1.5n`, `1e3n`). Note that
+  `JSON.stringify` cannot write a BigInt.
 
 ## Not yet implemented
 
