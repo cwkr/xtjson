@@ -116,28 +116,92 @@ describe('literals and the directive', () => {
 
   test('error messages for the directive', () => {
     const cases = [
-      ['% strict: true\n{}', /'strict' must follow '%' directly, without white space or comments; the only directive is %strict/, [1, 2]],
+      ['% strict: true\n{}', /The name of a directive must follow '%' directly, without white space or comments; the directives are %strict and %extends/, [1, 2]],
       ['%Strict: true\n{}', /Unknown directive '%Strict'; did you mean '%strict'\? Directives are case-sensitive/, [1, 1]],
-      ['%define: a = 1\n[a]', /Unknown directive '%define'\. The only directive is %strict/, [1, 1]],
-      ["%version: '0.7'\n{}", /Unknown directive '%version'\. The only directive is %strict/, [1, 1]],
+      ["%EXTENDS: 'a'\n{}", /Unknown directive '%EXTENDS'; did you mean '%extends'\?/, [1, 1]],
+      ['%define: a = 1\n[a]', /Unknown directive '%define'\. The directives are %strict and %extends/, [1, 1]],
+      ["%version: '0.7'\n{}", /Unknown directive '%version'\. The directives are %strict and %extends/, [1, 1]],
       ['%strict true\n{}', /expected ':' after '%strict'/, [1, 9]],
-      ['%strict: 1\n{}', /The value of %strict must be the literal true or false/, [1, 10]],
-      ["%strict: 'true'\n{}", /The value of %strict must be the literal true or false/, [1, 10]],
-      ['%strict: nil\n{}', /The value of %strict must be the literal true or false/, [1, 10]],
-      ['%strict: s = true\n{}', /The value of %strict must be the literal true or false/, [1, 10]],
+      ['%strict: 1\n{}', /The value of %strict must be true or false/, [1, 10]],
+      ["%strict: 'true'\n{}", /The value of %strict must be true or false/, [1, 10]],
+      ['%strict: nil\n{}', /The value of %strict must be true or false/, [1, 10]],
+      ['%strict: s = true\n{}', /The value of %strict must be true or false/, [1, 10]],
+      ['%extends: nil\n{}', /The value of %extends must be a string/, [1, 11]],
+      ["%extends: 'a.json'\n{}", /%extends is disabled: the application has given the parser no resolver \(option resolver\)/, [1, 1]],
+      ['%strict: true, %strict: false\n{}', /%strict is already stated at line 1, column 1; each directive may occur only once/, [1, 16]],
       ['%strict: true [1]', /Expected a comma or a line break after the directive, found '\['/, [1, 15]],
       ['%strict: true /*\n*/ [1]', /a line break inside a block comment does not separate items/, [2, 4]],
-      ['%strict: true\n', /The document contains only the directive/, [2, 1]],
-      ['%strict: true\n%strict: true\n{}', /%strict may occur only once, and there are no other directives/, [2, 1]],
-      ['a: 1\n%strict: true', /The directive %strict is permitted only at the top level, before the content of the document/, [2, 1]],
-      ['[%strict: true]', /The directive %strict is permitted only at the top level/, [1, 2]],
-      ['1\n%strict: true', /The directive %strict is permitted only at the top level/, [2, 1]],
+      ['%strict: true\n', /The document contains only directives/, [2, 1]],
+      ['%strict: true\n%strict: true\n{}', /%strict is already stated at line 1, column 1/, [2, 1]],
+      ['a: 1\n%strict: true', /A directive is permitted only at the top level, before the content of the document/, [2, 1]],
+      ['[%strict: true]', /A directive is permitted only at the top level/, [1, 2]],
+      ['1\n%strict: true', /A directive is permitted only at the top level/, [2, 1]],
     ];
     for (const [text, pattern, [line, column]] of cases) {
       const e = error(text);
       assert.match(e.message, pattern, text);
       assert.deepEqual([e.line, e.column], [line, column], text);
     }
+  });
+});
+
+describe('%extends', () => {
+  const base = { name: 'demo', server: { host: '0.0.0.0', port: 8080, debug: true }, tags: ['a', 'b'] };
+  const text = "%extends: './defaults.json'\nserver: {port: 8443, debug: nil}\ntags: ['c']";
+
+  test('merges the content into the base value (RFC 7396)', () => {
+    const calls = [];
+    const resolver = (reference) => {
+      calls.push(reference);
+      return base;
+    };
+    assert.deepEqual(parse(text, { resolver }), { name: 'demo', server: { host: '0.0.0.0', port: 8443 }, tags: ['c'] });
+    assert.deepEqual(calls, ['./defaults.json']);
+    // the value of the resolver is not changed
+    assert.deepEqual(base, { name: 'demo', server: { host: '0.0.0.0', port: 8080, debug: true }, tags: ['a', 'b'] });
+    assert.equal(new Options({ resolver }).resolver, resolver);
+    assert.equal(new Options().resolver, undefined);
+  });
+
+  test('without a resolver %extends is an error', () => {
+    assert.throws(() => parse(text), /%extends is disabled/);
+    assert.throws(() => parse(text, { resolver: null }), /%extends is disabled/);
+    assert.throws(() => new Options({ resolver: 'file' }), /"resolver" must be a function/);
+  });
+
+  test('an error of the resolver is an error of the document, with the cause', () => {
+    const cause = new Error('not found');
+    const e = error(text, { resolver: () => { throw cause; } });
+    assert.match(e.message, /The resolver of %extends reports an error for "\.\/defaults\.json": not found \(line 1, column 11\)/);
+    assert.equal(e.cause, cause);
+  });
+
+  test('the resolver must return a JSON value', () => {
+    const cyclic = {};
+    cyclic.self = cyclic;
+    for (const value of [undefined, NaN, Infinity, () => 1, Symbol('s'), new Map(), new Date(0), { a: undefined }, [1, NaN], cyclic]) {
+      assert.match(error('%extends: "b"\n{}', { resolver: () => value }).message, /not a JSON value|nested deeper than the limit/, String(value?.constructor?.name ?? value));
+    }
+    for (const value of [null, 1, 1n, 'x', true, [], {}, Object.create(null)]) {
+      assert.deepEqual(parse('%extends: "b"\n{a: 1}', { resolver: () => value }), { a: 1 });
+    }
+  });
+
+  test('the result is checked in strict mode', () => {
+    const resolver = () => ({ s: '\uFFFF' });
+    assert.deepEqual(parse('%extends: "b"\n{}', { resolver }), { s: '\uFFFF' });
+    assert.match(error('%extends: "b"\n{}', { resolver, strict: true }).message, /The result of %extends contains a string with the noncharacter U\+FFFF/);
+    assert.match(error('%extends: "b"\n"x"', { resolver: () => ({}), strict: true }).message, /with %extends this applies to the result of the merge/);
+    // the string of %extends is not content
+    assert.deepEqual(parse('%strict: true\n%extends: "\\uFFFF"\n{}', { resolver: () => ({ a: 1 }) }), { a: 1 });
+  });
+
+  test('"__proto__" is an ordinary name in the base value and the content', () => {
+    const resolver = () => JSON.parse('{"__proto__": {"x": 1}}');
+    const v = parse('%extends: "b"\n{"__proto__": {"y": 2}}', { resolver });
+    assert.equal(Object.getPrototypeOf(v), Object.prototype);
+    assert.deepEqual(Object.keys(v), ['__proto__']);
+    assert.deepEqual(v.__proto__, { x: 1, y: 2 });
   });
 });
 
@@ -167,7 +231,7 @@ describe('options', () => {
 
   test('unknown options are a TypeError', () => {
     assert.throws(() => parse('1', { strcit: true }),
-      /Unknown XTJSON option "strcit"\. The options are "maxDepth" and "strict"/);
+      /Unknown XTJSON option "strcit"\. The options are "maxDepth", "resolver" and "strict"/);
     assert.throws(() => parse('1', { ijson: true }), /Unknown XTJSON option "ijson"; the I-JSON mode is strict mode, option "strict"/);
     assert.deepEqual(parse('1', { strict: undefined, maxDepth: undefined }), 1);
   });
@@ -491,7 +555,11 @@ describe('error messages', () => {
     ['NaN', /NaN is not a JSON value/, 1, 1],
     ['{2fa: true}', /must begin with a letter/, 1, 2],
     ['{max-age: 1}', /Unexpected '-' in an identifier/, 1, 5],
-    ['{größe: 1}', /Unexpected 'ö' \(U\+00F6\) in an identifier/, 1, 4],
+    ['{grö×e: 1}', /Unexpected '×' \(U\+00D7\) in an identifier; identifiers consist of ASCII letters, digits, "_", "\$" and the letters of Latin-1 Supplement/, 1, 5],
+    ['{a·b: 1}', /Unexpected '·' \(U\+00B7\) in an identifier/, 1, 3],
+    ['{Nº: 1}', /Unexpected 'º' \(U\+00BA\) in an identifier/, 1, 3],
+    ['{ª: 1}', /Unexpected 'ª' \(U\+00AA\), expected a name/, 1, 2],
+    ['{π: 1}', /Unexpected 'π' \(U\+03C0\), expected a name/, 1, 2],
     ['{"""a""": 1}', /Three quotation marks in a row do not delimit a string; a string in " may extend across several lines/, 1, 2],
     ['"""a""": 1', /Three quotation marks in a row/, 1, 1],
     ["'''a'''", /Three quotation marks in a row/, 1, 1],

@@ -60,17 +60,25 @@ If a name occurs more than once in an object, the member that comes last in
 the document applies, as with `JSON.parse`. In [strict mode](#strict-mode)
 it is an error instead.
 
-### Literals and the directive `%strict`
+### Names and values without quotation marks
 
-The values without quotation marks are the literals `true`, `false`, `null`
-and `nil` (section 6.4); `nil` is another notation for `null`. They are
-written in lower case. Any other identifier at a value position is an error;
-it is never read as a string. At a name position the literals are ordinary
-names: `{nil: nil}` is `{ nil: null }`.
+The values without quotation marks are `true`, `false`, `null` and `nil`
+(section 6.3); `nil` is another notation for `null`. They are written in
+lower case. Any other identifier at a value position is an error; it is
+never read as a string. At a name position they are ordinary names:
+`{nil: nil}` is `{ nil: null }`.
 
-A document can begin with the directive `%strict` (6.5). `%strict: true`
-makes the parser read the content of the document in
-[strict mode](#strict-mode).
+A name without quotation marks (7.2) consists of ASCII letters, `_`, `$`,
+`µ` and the letters `À` to `ÿ` of Latin-1 Supplement without `×` and `÷`
+(`größe`, `café`, `µm`); after the first character also of digits. `ª`, `º`
+and `·` are not permitted. Other names are written in quotation marks. Names are not
+normalized.
+
+### Directives
+
+A document can begin with the directives `%strict` (6.5) and `%extends`
+(6.6), in either order and each at most once. `%strict: true` makes the
+parser read the content of the document in [strict mode](#strict-mode).
 
 ```js
 parse(`
@@ -82,12 +90,51 @@ tags: [true, false, null]
 // { owner: null, tags: [true, false, null] }
 ```
 
-- The value of `%strict` is the literal `true` or `false`, nothing else.
-- `%strict` occurs at most once, only at the start of the document, and is
-  separated from the content by a comma or a line break.
+- The value of `%strict` is `true` or `false`, nothing else.
+- Directives stand only at the start of the document and are separated from
+  each other and from the content by a comma or a line break.
 - There are no other directives, and neither the document nor the
   application can define values, directives or number suffixes; there are
   no options for them.
+
+`%extends: './defaults.json'` makes the document extend a base value
+according to JSON Merge Patch (RFC 7396): members of the document replace or
+add members of the base value, objects are merged at any depth, arrays are
+replaced, and a member with the value `null` or `nil` removes the member of
+the base value. The base value comes from the option `resolver`, a function
+that receives the string and returns the base value; how it reads the
+source, and whether the source is JSON, XTJSON or something else, is up to
+the application. Without a resolver, `%extends` is an error.
+
+```js
+import { readFileSync } from 'node:fs';
+import { resolve, dirname } from 'node:path';
+
+const file = 'config/app.xtj';
+const config = parse(readFileSync(file, 'utf8'), {
+  // Resolve only paths below the directory of the document.
+  resolver: (reference) => {
+    const dir = resolve(dirname(file));
+    const path = resolve(dir, reference);
+    if (!path.startsWith(dir)) throw new Error('outside the configuration directory');
+    return JSON.parse(readFileSync(path, 'utf8'));
+  },
+});
+```
+
+- The resolver is called once, after the content has been read, with the
+  value of the string. It must be synchronous and return a JSON value: an
+  object, an array, a string, a finite number, a BigInt, `true`, `false` or
+  `null`. Any other value, or an exception of the resolver, is a
+  `ParserError` (the exception is its `cause`). The returned value is
+  copied, not changed.
+- A base value that itself uses `%extends` is the task of the resolver; it
+  can call `parse` with a resolver of its own. Guard against cycles.
+- A document from an untrusted source can make the resolver read files or
+  fetch URLs. Restrict the resolver, or do not give one (section 13).
+- In strict mode the result of the merge is checked as well: its names and
+  strings must not contain surrogates or noncharacters, and its root value
+  must be an object or an array.
 
 ### Options
 
@@ -105,6 +152,9 @@ parse('ratio: 50pct\nowner: "me"', options);   // { ratio: 0.5, owner: 'me' }
   `ParserError`. A very large
   limit can exceed the call stack of the JavaScript engine (with Node.js at
   a depth of a few thousand); `parse` then reports a `ParserError` too.
+- `resolver`: a function `(reference) => value` that returns the base value
+  for the string of `%extends`, see [Directives](#directives). Default none:
+  `%extends` is an error.
 - `strict`: `true` for strict mode, see [below](#strict-mode). Default
   `false`.
 
@@ -187,7 +237,8 @@ enforced.
 
 Strict mode applies if the application requests it with `strict: true` or if
 the document contains `%strict: true` (6.5). It applies to the content of
-the document, the part after the directive. With `strict: true`, a
+the document, the part after the directives, and with `%extends` also to the
+result of the merge. With `strict: true`, a
 document with `%strict: false` is an error, because it contradicts the
 application.
 
@@ -296,7 +347,7 @@ are the supported test environments; Deno uses the same engine as Node.js
   ```
 
 - `test/parse.test.js` tests the API of `parse` and `Parser`, the
-  literals and the directive, strict mode, error messages and
+  names and values, the directives and `%extends`, strict mode, error messages and
   positions, numbers and limits.
 - `test/format.test.js` tests `format`: the layout, and that every valid text
   of the corpus and the specification keeps its value and is formatted

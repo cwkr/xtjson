@@ -22,8 +22,9 @@ export type JSONValue =
  * Options for `parse`.
  *
  * There are no options for values, directives or number suffixes: the
- * literals, the directive `%strict` and the suffixes are fixed by the
- * specification (6.4, 6.5, 9.5). Unknown properties are a `TypeError`.
+ * values without quotation marks, the directives and the suffixes are fixed
+ * by the specification (6.3 to 6.6, 9.5). Unknown properties are a
+ * `TypeError`.
  */
 export interface OptionsInit {
   /**
@@ -34,6 +35,16 @@ export interface OptionsInit {
    * `ParserError`.
    */
   maxDepth?: number;
+  /**
+   * Resolver for the directive `%extends` (section 6.6): receives the string
+   * after `%extends` and returns the base value, a JSON value (an object, an
+   * array, a string, a finite number, a bigint, `true`, `false` or `null`).
+   * The document is merged into a copy of it according to JSON Merge Patch
+   * (RFC 7396). An exception of the resolver or another value is a
+   * `ParserError`. Default: none; then a document with `%extends` is an
+   * error. The resolver decides which sources a document may name.
+   */
+  resolver?: ((reference: string) => any) | null;
   /**
    * Strict mode (section 12). `parse` rejects a document in which an object
    * contains a name twice, in which a name or string value contains an
@@ -54,6 +65,8 @@ export class Options implements OptionsInit {
   constructor(init?: OptionsInit | null);
   /** The maximum nesting depth of objects and arrays. */
   get maxDepth(): number;
+  /** The resolver for `%extends`, or undefined if `%extends` is disabled. */
+  get resolver(): ((reference: string) => any) | undefined;
   /** True for strict mode. */
   get strict(): boolean;
   get [Symbol.toStringTag](): 'Options';

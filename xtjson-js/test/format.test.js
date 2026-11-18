@@ -18,6 +18,7 @@ function validTexts() {
     ...corpus.b_valid.map(([text]) => text),
     ...corpus.c_valid.map(([text]) => text),
     ...corpus.d_valid.map(([text]) => text),
+    ...corpus.d_extends_valid.map(([text]) => text),
   ];
   for (const lang of ['de', 'en']) {
     const path = fileURLToPath(new URL(`../../docs/xtjson-spec-${lang}.md`, import.meta.url));
@@ -75,19 +76,21 @@ describe('format', () => {
     assert.throws(() => format('[1]', true), TypeError);
   });
 
-  test('lays out the directive like a member', () => {
-    const text = '%strict:true\n# c\n\nid: 1\nproxy: nil';
-    assert.equal(format(text, 2), '%strict: true\n# c\n\nid: 1\nproxy: nil');
-    assert.equal(format(text), '%strict:true # c\nid:1,proxy:nil');
+  test('lays out directives like members', () => {
+    const text = "%strict:true,%extends:'./a.json'\n# c\n\nid: 1\nproxy: nil";
+    assert.equal(format(text, 2), "%strict: true,\n%extends: './a.json'\n# c\n\nid: 1\nproxy: nil");
+    assert.equal(format(text), "%strict:true,%extends:'./a.json' # c\nid:1,proxy:nil");
     assert.equal(format('%strict:\n  true,[1]', 2), '%strict: true,\n[\n  1\n]');
   });
 
   test('valid documents keep their value and formatting is stable', () => {
+    // Documents with %extends are read with a base value of their own.
+    const options = { resolver: () => ({ base: true }) };
     for (const text of validTexts()) {
-      const expected = parse(text);
+      const expected = parse(text, options);
       for (const space of [2, '\t', 0]) {
         const formatted = format(text, space);
-        assert.deepEqual(parse(formatted), expected, `${JSON.stringify(text)} with ${JSON.stringify(space)}`);
+        assert.deepEqual(parse(formatted, options), expected, `${JSON.stringify(text)} with ${JSON.stringify(space)}`);
         assert.equal(format(formatted, space), formatted, `stable: ${JSON.stringify(text)}`);
       }
     }

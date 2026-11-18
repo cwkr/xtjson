@@ -108,6 +108,33 @@ test('strict mode: valid texts give the same value or a strict mode error', () =
   assert.ok(rejected > 0 && rejected < all.length, `rejected ${rejected}`);
 });
 
+/** A resolver that returns the base value for a reference, or throws for an unknown one. */
+function resolverFor(bases) {
+  return (reference) => {
+    if (!Object.hasOwn(bases, reference)) throw new Error(`unknown reference ${show(reference)}`);
+    return bases[reference];
+  };
+}
+
+test('tests_direktiven.py: %extends with a resolver, valid texts', () => {
+  for (const [text, bases, expected] of corpus.d_extends_valid) {
+    let actual;
+    try {
+      actual = parse(text, { resolver: resolverFor(bases) });
+    } catch (error) {
+      assert.fail(`should be valid with a resolver: ${show(text)} (${error.message})`);
+    }
+    assert.deepEqual(asNumbers(actual), expected, show(text));
+    assert.throws(() => parse(text), /%extends is disabled/, `should be invalid without a resolver: ${show(text)}`);
+  }
+});
+
+test('tests_direktiven.py: %extends with a resolver, invalid texts', () => {
+  for (const [text, bases] of corpus.d_extends_invalid) {
+    assert.throws(() => parse(text, { resolver: resolverFor(bases) }), ParserError, `should be invalid: ${show(text)}`);
+  }
+});
+
 test('tests_definitionen.py: the application cannot define values or suffixes', () => {
   assert.throws(() => parse('nil', { namedValues: { nil: null } }), (error) => {
     return error instanceof TypeError && /there are no named values/.test(error.message);
@@ -127,7 +154,10 @@ for (const lang of ['de', 'en']) {
     blocks.forEach(([tag, body], i) => {
       if (tag !== 'xtjson') return;
       count++;
-      const value = parse(body);
+      // A json block directly before an xtjson block is the base value of its %extends.
+      const before = blocks[i - 1];
+      const options = before?.[0] === 'json' ? { resolver: () => JSON.parse(before[1]) } : undefined;
+      const value = parse(body, options);
       if (blocks[i + 1]?.[0] === 'json') {
         assert.deepEqual(asNumbers(value), JSON.parse(blocks[i + 1][1]), `example ${count}`);
       }

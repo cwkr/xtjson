@@ -64,6 +64,8 @@ const RADIX_PREFIX = { 2: '0b', 8: '0o', 16: '0x' };
 
 const SUFFIX_LIST = 'k, kb, m, mb, ms, s, min, h, pct and n';
 
+const DIRECTIVE_LIST = '%strict and %extends';
+
 /**
  * The suffixes of 9.5 (rules `suffix` and `int-suffix`), ordered so that the
  * first one that matches is the longest match.
@@ -74,29 +76,30 @@ const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[
 
 
 // Flags for ASCII characters in the table `flags` of `characterTables()`
-const ID_START = 1; // ALPHA / "_" / "$"                       (7.2)
-const ID_PART = 2; // ALPHA / DIGIT / "_" / "$"                (7.2)
+const ID_START = 1; // ALPHA / "_" / "$" / letters of Latin-1 Supplement (7.2)
+const ID_PART = 2; // ID_START / DIGIT                                     (7.2)
 
 /** @type {{flags: Uint8Array, hex: Int8Array} | undefined} */
 let tables;
 
 /**
  * Lookup tables for ASCII characters, built on first use and shared by all
- * parsers. `flags`: the flags `ID_START` and `ID_PART` of
- * each ASCII character. `hex`: the value of a hexadecimal digit, or -1.
+ * parsers. `flags`: the flags `ID_START` and `ID_PART` of each character
+ * up to U+00FF. `hex`: the value of a hexadecimal digit, or -1.
  * @returns {{flags: Uint8Array, hex: Int8Array}}
  */
 function characterTables() {
   if (tables === undefined) {
-    const flags = new Uint8Array(128);
+    const flags = new Uint8Array(256);
     const hex = new Int8Array(128).fill(-1);
-    for (let c = 0; c < 128; c++) {
+    for (let c = 0; c < 256; c++) {
       const ch = String.fromCharCode(c);
       let f = 0;
-      if (/[A-Za-z_$]/.test(ch)) f |= ID_START | ID_PART;
+      // U+00B5 and the letters U+00C0 to U+00FF of Latin-1 Supplement, without U+00D7 and U+00F7.
+      if (/[A-Za-z_$\xB5\xC0-\xD6\xD8-\xF6\xF8-\xFF]/.test(ch)) f |= ID_START | ID_PART;
       if (/[0-9]/.test(ch)) f |= ID_PART;
       flags[c] = f;
-      if (/[0-9A-Fa-f]/.test(ch)) hex[c] = parseInt(ch, 16);
+      if (c < 128 && /[0-9A-Fa-f]/.test(ch)) hex[c] = parseInt(ch, 16);
     }
     tables = { flags, hex };
   }
@@ -148,7 +151,7 @@ function strictStringIssue(s) {
 
 /** True for `c` (a code unit, NaN or EOF) with one of the given flags in `flags`. */
 function hasFlag(flags, c, flag) {
-  return c >= 0 && c < 128 && (flags[c] & flag) !== 0;
+  return c >= 0 && c < 256 && (flags[c] & flag) !== 0;
 }
 
 /** Value of the hexadecimal digit `c` according to the table `hex`, or -1. */
@@ -248,13 +251,14 @@ function setMember(obj, name, value) {
 // ---------------------------------------------------------------------------
 // Options: strict mode (12) and limits (11)
 
-const OPTION_NAMES = ['maxDepth', 'strict'];
-const OPTION_LIST = '"maxDepth" and "strict"';
+const OPTION_NAMES = ['maxDepth', 'resolver', 'strict'];
+const OPTION_LIST = '"maxDepth", "resolver" and "strict"';
 
 /**
  * Internal state of an `Options` instance, read by the parser.
  * @typedef {object} OptionsState
  * @property {number} maxDepth
+ * @property {((reference: string) => any) | undefined} resolver
  * @property {boolean} strict
  */
 
@@ -262,12 +266,12 @@ const OPTION_LIST = '"maxDepth" and "strict"';
 let resolve;
 
 /**
- * Validated, immutable options for `parse()`: strict mode (12) and limits
- * (11).
+ * Validated, immutable options for `parse()`: strict mode (12), limits (11)
+ * and the resolver for `%extends` (6.6).
  *
- * The literals, the directive `%strict` and the number suffixes are fixed by
- * sections 6.4, 6.5 and 9.5; the application can define none of them.
- * Validate once and reuse the instance for many calls.
+ * The values without quotation marks, the directives and the number suffixes
+ * are fixed by sections 6.3 to 6.6 and 9.5; the application can define none
+ * of them. Validate once and reuse the instance for many calls.
  */
 export class Options {
   /** @type {OptionsState} */
@@ -287,8 +291,10 @@ export class Options {
   }
 
   /**
-   * @param {{maxDepth?: number, strict?: boolean} | Options} [init]
+   * @param {{maxDepth?: number, resolver?: (reference: string) => any, strict?: boolean} | Options} [init]
    *   `maxDepth`: maximum nesting depth of objects and arrays (default 1000).
+   *   `resolver`: a function that returns the base value for the string of
+   *   `%extends` (default none: `%extends` is an error).
    *   `strict`: true for strict mode (default false).
    * @throws {TypeError} if an option is unknown or invalid
    */
@@ -317,7 +323,11 @@ export class Options {
       throw new TypeError(`Invalid XTJSON option: "strict" must be true or false, not ${quote(strict)}`);
     }
     const maxDepth = Options.#limitOption(init, 'maxDepth', DEFAULT_MAX_DEPTH);
-    this.#state = { maxDepth, strict };
+    const resolver = init?.resolver ?? undefined;
+    if (resolver !== undefined && typeof resolver !== 'function') {
+      throw new TypeError(`Invalid XTJSON option: "resolver" must be a function, not ${quote(resolver)}`);
+    }
+    this.#state = { maxDepth, resolver, strict };
     Object.freeze(this);
   }
 
@@ -328,6 +338,15 @@ export class Options {
    */
   get maxDepth() {
     return this.#state.maxDepth;
+  }
+
+  /**
+   * The function that returns the base value for the string of `%extends`
+   * (6.6), or undefined if `%extends` is disabled.
+   * @returns {((reference: string) => any) | undefined}
+   */
+  get resolver() {
+    return this.#state.resolver;
   }
 
   /**
@@ -380,6 +399,8 @@ export class Parser {
   /** Strict mode requested by the application (12). */
   #strict = false;
   #maxDepth = 0;
+  /** @type {((reference: string) => any) | undefined} resolver for %extends (6.6) */
+  #resolver;
   /** @type {Uint8Array} */
   #flags;
   /** @type {Int8Array} */
@@ -394,6 +415,10 @@ export class Parser {
   #depth = 0;
   /** True if the content is read in strict mode (12). */
   #check = false;
+  /** @type {string | undefined} the string of `%extends` (6.6) */
+  #extends;
+  /** Offset of the string of `%extends`. */
+  #extendsOffset = 0;
 
   /**
    * The number suffixes of 9.5, built on first use; the table is exhaustive.
@@ -412,6 +437,7 @@ export class Parser {
     const state = resolveOptions(options);
     this.#strict = state.strict;
     this.#maxDepth = state.maxDepth;
+    this.#resolver = state.resolver;
     const tables = characterTables();
     this.#flags = tables.flags;
     this.#hex = tables.hex;
@@ -438,6 +464,7 @@ export class Parser {
     this.#pos = 0;
     this.#depth = 0;
     this.#check = false;
+    this.#extends = undefined;
     try {
       if (typeof source.isWellFormed === 'function' ? !source.isWellFormed() : LONE_SURROGATE.test(source)) {
         const offset = source.search(LONE_SURROGATE);
@@ -565,7 +592,7 @@ export class Parser {
     // The content is checked in strict mode (12), requested by the
     // application or by %strict: true (6.5).
     this.#check = this.#strict;
-    if (this.#peek() === PERCENT) this.#parseDirective();
+    this.#parseDirectives();
     const start = this.#pos;
     const c = this.#peek();
 
@@ -588,9 +615,6 @@ export class Parser {
       value = this.#parseValue();
     }
 
-    if (this.#check && (value === null || typeof value !== 'object')) {
-      this.#fail('In strict mode the root value must be an object or an array', start);
-    }
     const end = this.#pos;
     this.#skipSpace();
     if (this.#pos < this.#len) {
@@ -598,40 +622,143 @@ export class Parser {
       if (this.#peek() === PERCENT && this.#pos > end) this.#failDirectivePosition();
       this.#fail(`Unexpected ${describeAt(this.#text, this.#pos)} after the root value; a document contains exactly one value`);
     }
+    if (this.#extends !== undefined) value = this.#extendBase(value);
+    if (this.#check && (value === null || typeof value !== 'object')) {
+      this.#fail(this.#extends === undefined
+        ? 'In strict mode the root value must be an object or an array'
+        : 'In strict mode the root value must be an object or an array; with %extends this applies to the result of the merge', start);
+    }
     return value;
   }
 
-  // ----- Directive (6.5) -------------------------------------------------
+  // ----- %extends (6.6) ---------------------------------------------------
 
   /**
-   * The directive `%strict` at the start of the document, with the separator
-   * after it. Its value is the literal `true` or `false`.
+   * Calls the resolver for the string of `%extends` and applies the content
+   * `patch` to the base value as a JSON Merge Patch (RFC 7396).
    */
-  #parseDirective() {
+  #extendBase(patch) {
+    const reference = this.#extends;
+    const offset = this.#extendsOffset;
+    let base;
+    try {
+      base = this.#resolver(reference);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      this.#fail(`The resolver of %extends reports an error for ${JSON.stringify(reference)}: ${reason}`, offset, error);
+    }
+    // A copy, so that merging does not change the value of the resolver.
+    const target = this.#copyBase(base, 0, offset);
+    const result = mergePatch(target, patch);
+    if (this.#check) this.#checkBase(result, offset);
+    return result;
+  }
+
+  /**
+   * A copy of the base value; an error if it is not a JSON value or nests
+   * deeper than maxDepth.
+   */
+  #copyBase(value, depth, offset) {
+    if (value === null || typeof value === 'string' || typeof value === 'boolean' || typeof value === 'bigint') {
+      return value;
+    }
+    if (typeof value === 'number') {
+      if (Number.isFinite(value)) return value;
+    } else if (typeof value === 'object') {
+      if (depth >= this.#maxDepth) {
+        this.#fail(`The base value of %extends is nested deeper than the limit of ${this.#maxDepth} (option maxDepth)`, offset);
+      }
+      if (Array.isArray(value)) return value.map((item) => this.#copyBase(item, depth + 1, offset));
+      const proto = Object.getPrototypeOf(value);
+      if (proto === Object.prototype || proto === null) {
+        const obj = {};
+        for (const name of Object.keys(value)) setMember(obj, name, this.#copyBase(value[name], depth + 1, offset));
+        return obj;
+      }
+    }
+    return this.#fail(`The resolver of %extends returned a value that is not a JSON value for ${JSON.stringify(this.#extends)}`, offset);
+  }
+
+  /** Strict mode for the result of %extends: names and strings (12). */
+  #checkBase(value, offset) {
+    if (typeof value === 'string') {
+      const issue = strictStringIssue(value);
+      if (issue !== undefined) {
+        this.#fail(`The result of %extends contains a string with ${issue}, which is not permitted in strict mode`, offset);
+      }
+    } else if (Array.isArray(value)) {
+      for (const item of value) this.#checkBase(item, offset);
+    } else if (value !== null && typeof value === 'object') {
+      for (const name of Object.keys(value)) {
+        const issue = strictStringIssue(name);
+        if (issue !== undefined) {
+          this.#fail(`The result of %extends contains a name with ${issue}, which is not permitted in strict mode`, offset);
+        }
+        this.#checkBase(value[name], offset);
+      }
+    }
+  }
+
+  // ----- Directives (6.4 to 6.6) ------------------------------------------
+
+  /** The directives at the start of the document, each with the separator after it. */
+  #parseDirectives() {
+    const seen = new Map();
+    while (this.#peek() === PERCENT) this.#parseDirective(seen);
+  }
+
+  /**
+   * A directive, `%strict` (6.5) or `%extends` (6.6), with the separator
+   * after it. `seen` maps the names of the directives read so far to their
+   * offsets.
+   */
+  #parseDirective(seen) {
     const start = this.#pos;
     const text = this.#text;
     this.#pos++; // '%'
     if (!hasFlag(this.#flags, this.#peek(), ID_START)) {
-      this.#fail("'strict' must follow '%' directly, without white space or comments; the only directive is %strict");
+      this.#fail(`The name of a directive must follow '%' directly, without white space or comments; the directives are ${DIRECTIVE_LIST}`);
     }
     const name = this.#readIdentifier();
-    if (name !== 'strict') {
-      const hint = name.toLowerCase() === 'strict' ? "; did you mean '%strict'? Directives are case-sensitive" : '';
-      this.#fail(`Unknown directive '%${name}'${hint}. The only directive is %strict`, start);
+    if (name !== 'strict' && name !== 'extends') {
+      const lower = name.toLowerCase();
+      const hint = lower === 'strict' || lower === 'extends' ? `; did you mean '%${lower}'? Directives are case-sensitive` : '';
+      this.#fail(`Unknown directive '%${name}'${hint}. The directives are ${DIRECTIVE_LIST}`, start);
     }
+    const earlier = seen.get(name);
+    if (earlier !== undefined) {
+      const { line, column } = locate(text, earlier);
+      this.#fail(`%${name} is already stated at line ${line}, column ${column}; each directive may occur only once`, start);
+    }
+    seen.set(name, start);
     this.#skipSpace();
-    if (this.#peek() !== COLON) this.#failUnexpected("':' after '%strict'");
+    if (this.#peek() !== COLON) this.#failUnexpected(`':' after '%${name}'`);
     this.#pos++;
     this.#skipSpace();
     const valueStart = this.#pos;
-    const word = hasFlag(this.#flags, this.#peek(), ID_START) ? this.#readIdentifier() : undefined;
-    if (word !== 'true' && word !== 'false') {
-      this.#fail("The value of %strict must be the literal true or false", valueStart);
+    if (name === 'strict') {
+      const word = hasFlag(this.#flags, this.#peek(), ID_START) ? this.#readIdentifier() : undefined;
+      if (word !== 'true' && word !== 'false') {
+        this.#fail('The value of %strict must be true or false', valueStart);
+      }
+      if (word === 'false' && this.#strict) {
+        this.#fail('%strict: false contradicts strict mode, which the application requests with the option strict', start);
+      }
+      if (word === 'true') this.#check = true;
+    } else {
+      const q = this.#peek();
+      if (q !== DQUOTE && q !== SQUOTE) this.#fail('The value of %extends must be a string', valueStart);
+      // The string of a directive is not content; strict mode does not apply to it.
+      const check = this.#check;
+      this.#check = false;
+      const reference = this.#readString(q);
+      this.#check = check;
+      if (this.#resolver === undefined) {
+        this.#fail('%extends is disabled: the application has given the parser no resolver (option resolver)', start);
+      }
+      this.#extends = reference;
+      this.#extendsOffset = valueStart;
     }
-    if (word === 'false' && this.#strict) {
-      this.#fail('%strict: false contradicts strict mode, which the application requests with the option strict', start);
-    }
-    if (word === 'true') this.#check = true;
 
     const before = this.#pos;
     const newline = this.#skipSpace();
@@ -650,15 +777,12 @@ export class Parser {
       this.#fail(reason);
     }
     if (this.#peek() === EOF) {
-      this.#fail('The document contains only the directive; expected a value or at least one member after it');
-    }
-    if (this.#peek() === PERCENT) {
-      this.#fail('%strict may occur only once, and there are no other directives');
+      this.#fail('The document contains only directives; expected a value or at least one member after them');
     }
   }
 
   #failDirectivePosition(offset = this.#pos) {
-    this.#fail('The directive %strict is permitted only at the top level, before the content of the document', offset);
+    this.#fail('A directive is permitted only at the top level, before the content of the document', offset);
   }
 
   // ----- Values (6.3) -----------------------------------------------------
@@ -846,10 +970,10 @@ export class Parser {
     const flags = this.#flags;
     let c;
     // At the end of the text `c` is NaN, which ends the loop.
-    while ((c = text.charCodeAt(pos)) < 128 && (flags[c] & ID_PART) !== 0) pos++;
+    while ((c = text.charCodeAt(pos)) < 256 && (flags[c] & ID_PART) !== 0) pos++;
     this.#pos = pos;
     if (c === MINUS || c === DOT || (c >= 0x80 && !isBlank(c))) {
-      this.#fail(`Unexpected ${describeAt(text, pos)} in an identifier; identifiers consist of ASCII letters, digits, "_" and "$", other names must be written in quotation marks`);
+      this.#fail(`Unexpected ${describeAt(text, pos)} in an identifier; identifiers consist of ASCII letters, digits, "_", "$" and the letters of Latin-1 Supplement, other names must be written in quotation marks`);
     }
     return text.slice(start, pos);
   }
@@ -1162,7 +1286,7 @@ export class Parser {
         }
         // The number ends here unless the next character continues it or is
         // an error after a number.
-        if (digits <= 15 && (!(c < 128) || (c !== DOT && (this.#flags[c] & ID_PART) === 0))) {
+        if (digits <= 15 && (!(c < 256) || (c !== DOT && (this.#flags[c] & ID_PART) === 0))) {
           this.#pos = pos;
           if (fraction !== 0) n /= POWERS_OF_TEN[fraction];
           return negative ? -n : n;
@@ -1383,6 +1507,24 @@ export class Parser {
     }
     return result;
   }
+}
+
+/**
+ * MergePatch(target, patch) of RFC 7396 (6.6). `target` is a copy that may be
+ * changed; the result is returned.
+ */
+function mergePatch(target, patch) {
+  if (patch === null || typeof patch !== 'object' || Array.isArray(patch)) return patch;
+  const result = target !== null && typeof target === 'object' && !Array.isArray(target) ? target : {};
+  for (const name of Object.keys(patch)) {
+    const value = patch[name];
+    if (value === null) {
+      delete result[name];
+    } else {
+      setMember(result, name, mergePatch(Object.hasOwn(result, name) ? result[name] : undefined, value));
+    }
+  }
+  return result;
 }
 
 /**
