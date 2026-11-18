@@ -60,6 +60,10 @@ describe('grammar', () => {
     assert.equal(scopeOf('{"max-age" : 1}', 'max-age'), 'support.type.property-name.xtjson');
     assert.equal(scopeOf("{'a\\'b': 1}", '\\\''), 'constant.character.escape.xtjson');
     assert.equal(scopeOf('{nil: nil}', 'nil'), 'support.type.property-name.xtjson');
+    for (const n of ['größe', 'µm', 'À', 'ÿ', 'Ö9_$']) {
+      assert.equal(scopeOf(`{${n}: 1}`, n), 'support.type.property-name.xtjson', n);
+    }
+    assert.equal(scopeOf('a: größe', 'größe'), 'variable.other.xtjson');
     assert.deepEqual(tokens('{nil: nil}').filter(([t]) => t === 'nil').map(([, s]) => s), [
       'support.type.property-name.xtjson',
       'constant.language.xtjson',
@@ -72,6 +76,15 @@ describe('grammar', () => {
     assert.equal(scopeOf('a: True', 'True'), 'variable.other.xtjson');
     assert.equal(scopeOf('a: nullable', 'nullable'), 'variable.other.xtjson');
     assert.equal(scopeOf('a = 1', '='), 'invalid.illegal.xtjson');
+  });
+
+  test('%extends', () => {
+    const text = "%extends: './defaults.json'\n{}";
+    assert.equal(scopeOf(text, '%extends'), 'keyword.control.directive.xtjson');
+    assert.equal(scopeOf(text, './defaults.json'), 'string.quoted.single.xtjson');
+    assert.equal(scopeOf('%strict: true, %extends: "a"\n{}', '%extends'), 'keyword.control.directive.xtjson');
+    assert.equal(scopeOf('%extendsx: "a"', '%extendsx'), 'invalid.illegal.unknown-directive.xtjson');
+    assert.equal(scopeOf('%Extends: "a"', '%Extends'), 'invalid.illegal.unknown-directive.xtjson');
   });
 
   test('%strict', () => {

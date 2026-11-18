@@ -35,25 +35,32 @@
       ]
     },
     "directives": {
-      "comment": "The directive %strict (6.5): '%strict' as one token, then ':' and true or false. Other directives and '%' without a name are errors; whether the directive stands at the start of the document is not checked.",
+      "comment": "The directives %strict and %extends (6.4 to 6.6): the name directly after '%', then ':' and true or false, or a string. Other directives and '%' without a name are errors; whether a directive stands at the start of the document is not checked.",
       "patterns": [
         {
-          "match": "(%strict)(?![A-Za-z0-9_$])(?:[ \\t]*(:))?",
+          "match": "(%strict)(?![A-Za-z0-9_$\\x{B5}\\x{C0}-\\x{D6}\\x{D8}-\\x{F6}\\x{F8}-\\x{FF}])(?:[ \\t]*(:))?",
           "captures": {
             "1": { "name": "keyword.control.directive.xtjson" },
             "2": { "name": "punctuation.separator.key-value.xtjson" }
           }
         },
-        { "name": "invalid.illegal.unknown-directive.xtjson", "match": "%[A-Za-z_$][A-Za-z0-9_$]*" },
+        {
+          "match": "(%extends)(?![A-Za-z0-9_$\\x{B5}\\x{C0}-\\x{D6}\\x{D8}-\\x{F6}\\x{F8}-\\x{FF}])(?:[ \\t]*(:))?",
+          "captures": {
+            "1": { "name": "keyword.control.directive.xtjson" },
+            "2": { "name": "punctuation.separator.key-value.xtjson" }
+          }
+        },
+        { "name": "invalid.illegal.unknown-directive.xtjson", "match": "%[A-Za-z_$\\x{B5}\\x{C0}-\\x{D6}\\x{D8}-\\x{F6}\\x{F8}-\\x{FF}][A-Za-z0-9_$\\x{B5}\\x{C0}-\\x{D6}\\x{D8}-\\x{F6}\\x{F8}-\\x{FF}]*" },
         { "name": "invalid.illegal.directive.xtjson", "match": "%" }
       ]
     },
     "property-names": {
-      "comment": "A name: an identifier or a string that is followed by ':' on the same line (7.2). A name across several lines is highlighted as a string, because a TextMate grammar cannot look beyond the end of the line.",
+      "comment": "A name: an identifier (ASCII letters, '_', '$', U+00B5 and the letters U+00C0 to U+00FF without U+00D7 and U+00F7; after the first character also digits) or a string that is followed by ':' on the same line (7.2). A name across several lines is highlighted as a string, because a TextMate grammar cannot look beyond the end of the line.",
       "patterns": [
         {
           "name": "support.type.property-name.xtjson",
-          "match": "(?<![A-Za-z0-9_$])[A-Za-z_$][A-Za-z0-9_$]*(?=[ \\t]*:)"
+          "match": "(?<![A-Za-z0-9_$\\x{B5}\\x{C0}-\\x{D6}\\x{D8}-\\x{F6}\\x{F8}-\\x{FF}])[A-Za-z_$\\x{B5}\\x{C0}-\\x{D6}\\x{D8}-\\x{F6}\\x{F8}-\\x{FF}][A-Za-z0-9_$\\x{B5}\\x{C0}-\\x{D6}\\x{D8}-\\x{F6}\\x{F8}-\\x{FF}]*(?=[ \\t]*:)"
         },
         {
           "name": "support.type.property-name.xtjson",
@@ -120,14 +127,14 @@
       "comment": "Numbers (9.1 to 9.3) with an optional suffix from 9.5: n only after an integer, the other suffixes after every number. Anything else that begins like a number is an error.",
       "patterns": [
         {
-          "match": "(?<![A-Za-z0-9_$.])(-?(?:0[xX]\\h(?:_?\\h)*|0[oO][0-7](?:_?[0-7])*|0[bB][01](?:_?[01])*|0|[1-9](?:_?[0-9])*))(n)(?![A-Za-z0-9_$.])",
+          "match": "(?<![A-Za-z0-9_$\\x{B5}\\x{C0}-\\x{D6}\\x{D8}-\\x{F6}\\x{F8}-\\x{FF}.])(-?(?:0[xX]\\h(?:_?\\h)*|0[oO][0-7](?:_?[0-7])*|0[bB][01](?:_?[01])*|0|[1-9](?:_?[0-9])*))(n)(?![A-Za-z0-9_$\\x{B5}\\x{C0}-\\x{D6}\\x{D8}-\\x{F6}\\x{F8}-\\x{FF}.])",
           "captures": {
             "1": { "name": "constant.numeric.xtjson" },
             "2": { "name": "keyword.other.unit.suffix.xtjson" }
           }
         },
         {
-          "match": "(?<![A-Za-z0-9_$.])(-?(?:0[xX]\\h(?:_?\\h)*|0[oO][0-7](?:_?[0-7])*|0[bB][01](?:_?[01])*|(?:0|[1-9](?:_?[0-9])*)(?:\\.[0-9](?:_?[0-9])*)?(?:[eE][+-]?[0-9](?:_?[0-9])*)?))(min|ms|mb|m|kb|k|s|h|pct)?(?![A-Za-z0-9_$.])",
+          "match": "(?<![A-Za-z0-9_$\\x{B5}\\x{C0}-\\x{D6}\\x{D8}-\\x{F6}\\x{F8}-\\x{FF}.])(-?(?:0[xX]\\h(?:_?\\h)*|0[oO][0-7](?:_?[0-7])*|0[bB][01](?:_?[01])*|(?:0|[1-9](?:_?[0-9])*)(?:\\.[0-9](?:_?[0-9])*)?(?:[eE][+-]?[0-9](?:_?[0-9])*)?))(min|ms|mb|m|kb|k|s|h|pct)?(?![A-Za-z0-9_$\\x{B5}\\x{C0}-\\x{D6}\\x{D8}-\\x{F6}\\x{F8}-\\x{FF}.])",
           "captures": {
             "1": { "name": "constant.numeric.xtjson" },
             "2": { "name": "keyword.other.unit.suffix.xtjson" }
@@ -135,21 +142,21 @@
         },
         {
           "name": "invalid.illegal.number.xtjson",
-          "match": "(?<![A-Za-z0-9_$.])(?:-?[0-9.](?:[eE][+-]|[A-Za-z0-9_$.])*|-)"
+          "match": "(?<![A-Za-z0-9_$\\x{B5}\\x{C0}-\\x{D6}\\x{D8}-\\x{F6}\\x{F8}-\\x{FF}.])(?:-?[0-9.](?:[eE][+-]|[A-Za-z0-9_$\\x{B5}\\x{C0}-\\x{D6}\\x{D8}-\\x{F6}\\x{F8}-\\x{FF}.])*|-)"
         }
       ]
     },
     "literals": {
       "patterns": [
         {
-          "comment": "The literals of 6.4; nil is the same value as null.",
+          "comment": "The values without quotation marks of 6.3; nil is the same value as null.",
           "name": "constant.language.xtjson",
-          "match": "(?<![A-Za-z0-9_$])(?:true|false|null|nil)(?![A-Za-z0-9_$])"
+          "match": "(?<![A-Za-z0-9_$\\x{B5}\\x{C0}-\\x{D6}\\x{D8}-\\x{F6}\\x{F8}-\\x{FF}])(?:true|false|null|nil)(?![A-Za-z0-9_$\\x{B5}\\x{C0}-\\x{D6}\\x{D8}-\\x{F6}\\x{F8}-\\x{FF}])"
         },
         {
-          "comment": "Any other identifier that is not followed by ':' on its line: a name whose ':' follows on a later line, or an error at a value position (6.4). A lexical grammar cannot tell them apart, so it is not marked as invalid.",
+          "comment": "Any other identifier that is not followed by ':' on its line: a name whose ':' follows on a later line, or an error at a value position (6.3). A lexical grammar cannot tell them apart, so it is not marked as invalid.",
           "name": "variable.other.xtjson",
-          "match": "(?<![A-Za-z0-9_$])[A-Za-z_$][A-Za-z0-9_$]*"
+          "match": "(?<![A-Za-z0-9_$\\x{B5}\\x{C0}-\\x{D6}\\x{D8}-\\x{F6}\\x{F8}-\\x{FF}])[A-Za-z_$\\x{B5}\\x{C0}-\\x{D6}\\x{D8}-\\x{F6}\\x{F8}-\\x{FF}][A-Za-z0-9_$\\x{B5}\\x{C0}-\\x{D6}\\x{D8}-\\x{F6}\\x{F8}-\\x{FF}]*"
         }
       ]
     },
