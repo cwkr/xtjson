@@ -199,7 +199,7 @@ CHARS_DQ = 'any character except " \\ and control characters'
 CHARS_SQ = "any character except ' \\ and control characters"
 
 DIAGRAMS = {
-    'document': Seq(Opt(Seq(N('directive'), Opt(Seq(N('separator'), N('directive'))), N('separator'))),
+    'document': Seq(Many(Seq(N('directive'), N('separator')), Label('each directive at most once')),
                     Choice(N('value'), N('members'))),
     'directive': Choice(
         Seq(T('%strict'), T(':'), Choice(T('true'), T('false'))),
