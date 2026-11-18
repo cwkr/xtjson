@@ -156,7 +156,7 @@ describe('grammar', () => {
     for (const n of ['0', '-1', '1.5e-3', '10_485_760', '0x1e3', '0XDEAD_BEEF', '0o644', '0b1010_0101']) {
       assert.equal(scopeOf(`a: ${n}`, n), 'constant.numeric.xtjson', n);
     }
-    for (const [n, s] of [['64', 'mb'], ['5', 'min'], ['100', 'ms'], ['0x10', 'k'], ['5', 'L'], ['1e3', 'pct']]) {
+    for (const [n, s] of [['64', 'mb'], ['5', 'min'], ['100', 'ms'], ['0x10', 'k'], ['5', 'n'], ['0xFF', 'n'], ['2.5', 'm'], ['1', 'kb'], ['1e3', 'pct']]) {
       assert.equal(scopeOf(`a: ${n}${s}`, n), 'constant.numeric.xtjson', n + s);
       assert.equal(scopeOf(`a: ${n}${s}`, s), 'keyword.other.unit.suffix.xtjson', n + s);
     }
@@ -185,7 +185,8 @@ describe('grammar', () => {
   });
 
   test('invalid numbers', () => {
-    for (const n of ['0755', '1_', '10_k', '123abc', '5l', '0b102', '.5', '1.', '- 1'.slice(0, 1), '1__0']) {
+    for (const n of ['0755', '1_', '10_k', '123abc', '5l', '0b102', '.5', '1.', '- 1'.slice(0, 1), '1__0',
+      '10K', '64MB', '12px', '100L', '1.5n', '1e3n', '10mi', '10kbs']) {
       assert.equal(scopeOf(`a: ${n}`, n), 'invalid.illegal.number.xtjson', n);
     }
   });

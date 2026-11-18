@@ -9,7 +9,7 @@ of JSON for files maintained by people, in files with the extension
   sequences including the line continuation, numbers in all bases with digit grouping, number suffixes,
   named values, and the directives `%define`, `%version` and `%strict`. Invalid escape
   sequences, unescaped control characters in strings, three quotation marks
-  in a row, malformed numbers (`0755`, `10_k`, `5l`) and unknown directives
+  in a row, malformed numbers (`0755`, `10_k`, `10K`, `1.5n`) and unknown directives
   are marked as errors.
 - **Folding** of objects, arrays, strings across several lines, block comments, runs of
   line comments, and regions between `// #region` and `// #endregion` (or
@@ -22,7 +22,7 @@ of JSON for files maintained by people, in files with the extension
   between items is kept.
 - Comment toggling, bracket matching and auto-closing of brackets and quotes.
 
-Implements the XTJSON specification, draft 0.6
+Implements the XTJSON specification, draft 0.7
 ([`docs/xtjson-spec-en.md`](https://github.com/cwkr/xtjson/blob/main/docs/xtjson-spec-en.md)).
 
 ## Limits
