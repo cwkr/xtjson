@@ -10,8 +10,6 @@ Aufruf:
 
 Standard fuer Datei: xtjson-js/test/corpus.json
 
-d_versions enthaelt Paare aus Text und den erwarteten Versionsangaben
-(6.7), {Bezeichner: Wert}; die Version der Spezifikation steht unter 'xtjson'.
 d_strict_valid und d_strict_invalid gelten fuer den Strict-Modus, den die
 Anwendung verlangt (12); die Texte in d_strict_invalid sind ohne ihn gueltig.
 """
@@ -65,7 +63,6 @@ def corpus():
         'c_invalid': tc.INVALID,
         'd_valid': [[t, v] for t, v in td.VALID],
         'd_invalid': td.INVALID,
-        'd_versions': [[t, v] for t, v in td.VERSIONS],
         'd_strict_valid': [[t, v] for t, v in td.STRICT_VALID],
         'd_strict_invalid': td.STRICT_INVALID,
     }

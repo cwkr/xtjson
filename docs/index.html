@@ -46,8 +46,8 @@
     <li><strong>Hexadecimal, octal and binary integers:</strong> <code>0xFF</code>, <code>0o755</code>, <code>0b1010</code>.</li>
     <li><strong>Digit grouping</strong> with <code>_</code>: <code>1_000_000</code>.</li>
     <li><strong>Number suffixes:</strong> <code>10k</code>, <code>64mb</code>, <code>250ms</code>.</li>
-    <li><strong>Named values:</strong> identifiers that the document defines as aliases for JSON values, such as <code>nil</code>.</li>
-    <li><strong>Directives</strong> at the start of the document: <code>%define</code> for named values, <code>%version</code> for versions and <code>%strict</code> for strict mode.</li>
+    <li><strong><code>nil</code></strong> as another notation for <code>null</code>.</li>
+    <li><strong>The directive <code>%strict</code></strong> at the start of the document, for strict mode.</li>
     <li><strong>More white space characters:</strong> all white space characters of ECMAScript.</li>
   </ul>
 </section>
@@ -59,17 +59,16 @@
     <figure>
       <figcaption>XTJSON</figcaption>
       <pre><code># Service configuration – the root braces are omitted
-%version: &#x27;0.7&#x27;
 %strict: true
-%define: any_host = &quot;0.0.0.0&quot;
 
 name: &#x27;demo-service&#x27;
 version: &quot;1.4.0&quot;
 $schema: &quot;https://example.org/schema/service.json&quot;
 
 listen: {
-  host: any_host        // named value from %define
+  host: &quot;0.0.0.0&quot;
   port: 8080            // the line break replaces the comma
+  proxy: nil            // nil is the same as null
   tls: false,           // commas remain permitted
 }
 
@@ -105,7 +104,7 @@ tags: [
   &quot;name&quot;: &quot;demo-service&quot;,
   &quot;version&quot;: &quot;1.4.0&quot;,
   &quot;$schema&quot;: &quot;https://example.org/schema/service.json&quot;,
-  &quot;listen&quot;: { &quot;host&quot;: &quot;0.0.0.0&quot;, &quot;port&quot;: 8080, &quot;tls&quot;: false },
+  &quot;listen&quot;: { &quot;host&quot;: &quot;0.0.0.0&quot;, &quot;port&quot;: 8080, &quot;proxy&quot;: null, &quot;tls&quot;: false },
   &quot;limits&quot;: {
     &quot;max_body_bytes&quot;: 10485760,
     &quot;file_mode&quot;: 420,
@@ -130,97 +129,67 @@ tags: [
 
   <section class="form" id="document">
     <h3>document</h3>
-    <p>A <dfn>document</dfn> begins with optional <a href="#directive">directives</a>. They are followed either by a single <a href="#value">value</a>, as in JSON, or by a sequence of <a href="#members">members</a> without enclosing braces. The second form denotes the object that contains exactly these members and needs at least one member. It exists only at the top level; an empty object is written as <code>{}</code>.</p>
-    <div class="diagram"><svg class="rr" viewBox="0 0 420 92" width="420" height="92" role="img" aria-label="Railroad diagram: document">
+    <p>A <dfn>document</dfn> begins with an optional <a href="#directive">directive</a>. It is followed either by a single <a href="#value">value</a>, as in JSON, or by a sequence of <a href="#members">members</a> without enclosing braces. The second form denotes the object that contains exactly these members and needs at least one member. It exists only at the top level; an empty object is written as <code>{}</code>.</p>
+    <div class="diagram"><svg class="rr" viewBox="0 0 400 72" width="400" height="72" role="img" aria-label="Railroad diagram: document">
 <path class="cap" d="M8 12v16m4 -16v16"/>
 <path d="M12 20H30"/>
 <path d="M30 20H50"/>
-<path d="M250 20H270"/>
-<path d="M50 20H250"/>
+<path d="M230 20H250"/>
+<path d="M50 20H230"/>
 <path d="M30 20a10 10 0 0 1 10 10v0a10 10 0 0 0 10 10"/>
-<path d="M250 40a10 10 0 0 0 10 -10v0a10 10 0 0 1 10 -10"/>
-<path d="M50 40H60"/>
+<path d="M230 40a10 10 0 0 0 10 -10v0a10 10 0 0 1 10 -10"/>
 <a href="#directive">
-<rect class="n" x="60" y="28" width="85" height="24" rx="0"/>
-<text class="n" x="102.5" y="40">directive</text>
+<rect class="n" x="50" y="28" width="85" height="24" rx="0"/>
+<text class="n" x="92.5" y="40">directive</text>
 </a>
-<path d="M145 40H155"/>
-<path d="M145 40a10 10 0 0 1 10 10v12a10 10 0 0 1 -10 10"/>
-<path d="M60 72a10 10 0 0 1 -10 -10v-12a10 10 0 0 1 10 -10"/>
+<path d="M135 40H145"/>
 <a href="#separator">
-<rect class="n" x="60" y="60" width="85" height="24" rx="0"/>
-<text class="n" x="102.5" y="72">separator</text>
+<rect class="n" x="145" y="28" width="85" height="24" rx="0"/>
+<text class="n" x="187.5" y="40">separator</text>
 </a>
-<path d="M155 40H165"/>
-<a href="#separator">
-<rect class="n" x="165" y="28" width="85" height="24" rx="0"/>
-<text class="n" x="207.5" y="40">separator</text>
-</a>
-<path d="M270 20H280"/>
-<path d="M280 20H300"/>
-<path d="M370 20H390"/>
+<path d="M250 20H260"/>
+<path d="M260 20H280"/>
+<path d="M350 20H370"/>
 <a href="#value">
-<rect class="n" x="300" y="8" width="56" height="24" rx="0"/>
-<text class="n" x="328" y="20">value</text>
+<rect class="n" x="280" y="8" width="56" height="24" rx="0"/>
+<text class="n" x="308" y="20">value</text>
 </a>
-<path d="M356 20H370"/>
-<path d="M280 20a10 10 0 0 1 10 10v12a10 10 0 0 0 10 10"/>
-<path d="M370 52a10 10 0 0 0 10 -10v-12a10 10 0 0 1 10 -10"/>
+<path d="M336 20H350"/>
+<path d="M260 20a10 10 0 0 1 10 10v12a10 10 0 0 0 10 10"/>
+<path d="M350 52a10 10 0 0 0 10 -10v-12a10 10 0 0 1 10 -10"/>
 <a href="#members">
-<rect class="n" x="300" y="40" width="70" height="24" rx="0"/>
-<text class="n" x="335" y="52">members</text>
+<rect class="n" x="280" y="40" width="70" height="24" rx="0"/>
+<text class="n" x="315" y="52">members</text>
 </a>
-<path d="M390 20H408"/>
-<path class="cap" d="M408 12v16m4 -16v16"/>
+<path d="M370 20H388"/>
+<path class="cap" d="M388 12v16m4 -16v16"/>
 </svg></div>
   </section>
 
   <section class="form" id="directive">
     <h3>directive</h3>
-    <p>A <dfn>directive</dfn> is a statement at the start of the document. The <code>%</code> and the name of the directive are written without white space between them. Directives are separated like items, and a separator also follows the last one. There are exactly three directives; any other is an error. The values of directives are always checked like strict mode checks names and strings: duplicate names, surrogates and noncharacters are errors there. A directive has no effect on the directives before it.</p>
-    <p><code>%define: nil = null</code> defines a <a href="#named-value">named value</a>. The value can be any value, including an object or an array, and can use the named values defined before it. A named value can be defined only once, and <code>true</code>, <code>false</code> and <code>null</code> cannot be redefined.</p>
-    <p><code>%version: '0.7'</code> states the version of the specification that the document is written for; a parser may reject a version that it does not support. With an identifier, as in <code>%version: schema = '2026.05.01b'</code>, it states the version of something else, as information for the application. The value is a string or a number, also with a suffix or as a named value, for example <code>%version: windows = 2k</code>; each version is stated at most once.</p>
-    <p><code>%strict: true</code> makes the parser read the content of the document in <a href="#strict-mode">strict mode</a>. The value is <code>true</code> or <code>false</code>, also as a named value, and <code>%strict</code> occurs at most once. If the application has requested strict mode, <code>%strict: false</code> is an error.</p>
-    <div class="diagram"><svg class="rr" viewBox="0 0 467 104" width="467" height="104" role="img" aria-label="Railroad diagram: directive">
+    <p>The only <dfn>directive</dfn> is <code>%strict</code>, a statement at the start of the document. It is written in lower case, without white space after the <code>%</code>, occurs at most once and is separated from the content like an item. Any other directive is an error.</p>
+    <p><code>%strict: true</code> makes the parser read the content of the document in <a href="#strict-mode">strict mode</a>. The value is <code>true</code> or <code>false</code>. If the application has requested strict mode, <code>%strict: false</code> is an error.</p>
+    <div class="diagram"><svg class="rr" viewBox="0 0 283 72" width="283" height="72" role="img" aria-label="Railroad diagram: directive">
 <path class="cap" d="M8 12v16m4 -16v16"/>
 <path d="M12 20H30"/>
-<path d="M30 20H50"/>
-<path d="M133 20H153"/>
-<rect class="t" x="50" y="8" width="75" height="24" rx="12"/>
-<text class="t" x="87.5" y="20">%define</text>
-<path d="M125 20H133"/>
-<path d="M30 20a10 10 0 0 1 10 10v12a10 10 0 0 0 10 10"/>
-<path d="M133 52a10 10 0 0 0 10 -10v-12a10 10 0 0 1 10 -10"/>
-<rect class="t" x="50" y="40" width="83" height="24" rx="12"/>
-<text class="t" x="91.5" y="52">%version</text>
-<path d="M30 20a10 10 0 0 1 10 10v44a10 10 0 0 0 10 10"/>
-<path d="M133 84a10 10 0 0 0 10 -10v-44a10 10 0 0 1 10 -10"/>
-<rect class="t" x="50" y="72" width="75" height="24" rx="12"/>
-<text class="t" x="87.5" y="84">%strict</text>
-<path d="M125 84H133"/>
-<path d="M153 20H163"/>
-<rect class="t" x="163" y="8" width="28" height="24" rx="12"/>
-<text class="t" x="177" y="20">:</text>
-<path d="M191 20H201"/>
-<path d="M201 20H221"/>
-<path d="M351 20H371"/>
-<path d="M221 20H351"/>
-<path d="M201 20a10 10 0 0 1 10 10v0a10 10 0 0 0 10 10"/>
-<path d="M351 40a10 10 0 0 0 10 -10v0a10 10 0 0 1 10 -10"/>
-<a href="#identifier">
-<rect class="n" x="221" y="28" width="92" height="24" rx="0"/>
-<text class="n" x="267" y="40">identifier</text>
-</a>
-<path d="M313 40H323"/>
-<rect class="t" x="323" y="28" width="28" height="24" rx="12"/>
-<text class="t" x="337" y="40">=</text>
-<path d="M371 20H381"/>
-<a href="#value">
-<rect class="n" x="381" y="8" width="56" height="24" rx="0"/>
-<text class="n" x="409" y="20">value</text>
-</a>
-<path d="M437 20H455"/>
-<path class="cap" d="M455 12v16m4 -16v16"/>
+<rect class="t" x="30" y="8" width="75" height="24" rx="12"/>
+<text class="t" x="67.5" y="20">%strict</text>
+<path d="M105 20H115"/>
+<rect class="t" x="115" y="8" width="28" height="24" rx="12"/>
+<text class="t" x="129" y="20">:</text>
+<path d="M143 20H153"/>
+<path d="M153 20H173"/>
+<path d="M233 20H253"/>
+<rect class="t" x="173" y="8" width="52" height="24" rx="12"/>
+<text class="t" x="199" y="20">true</text>
+<path d="M225 20H233"/>
+<path d="M153 20a10 10 0 0 1 10 10v12a10 10 0 0 0 10 10"/>
+<path d="M233 52a10 10 0 0 0 10 -10v-12a10 10 0 0 1 10 -10"/>
+<rect class="t" x="173" y="40" width="60" height="24" rx="12"/>
+<text class="t" x="203" y="52">false</text>
+<path d="M253 20H271"/>
+<path class="cap" d="M271 12v16m4 -16v16"/>
 </svg></div>
   </section>
 
@@ -355,79 +324,77 @@ tags: [
 
   <section class="form" id="value">
     <h3>value</h3>
-    <p>A <dfn>value</dfn> can be an <a href="#object">object</a>, an <a href="#array">array</a>, a <a href="#string">string</a>, a <a href="#number">number</a> or a <a href="#named-value">named value</a>. These structures can be nested.</p>
-    <div class="diagram"><svg class="rr" viewBox="0 0 199 168" width="199" height="168" role="img" aria-label="Railroad diagram: value">
+    <p>A <dfn>value</dfn> can be an <a href="#object">object</a>, an <a href="#array">array</a>, a <a href="#string">string</a>, a <a href="#number">number</a> or a <a href="#literal">literal</a>. These structures can be nested.</p>
+    <div class="diagram"><svg class="rr" viewBox="0 0 170 168" width="170" height="168" role="img" aria-label="Railroad diagram: value">
 <path class="cap" d="M8 12v16m4 -16v16"/>
 <path d="M12 20H30"/>
 <path d="M30 20H50"/>
-<path d="M149 20H169"/>
+<path d="M120 20H140"/>
 <a href="#object">
 <rect class="n" x="50" y="8" width="63" height="24" rx="0"/>
 <text class="n" x="81.5" y="20">object</text>
 </a>
-<path d="M113 20H149"/>
+<path d="M113 20H120"/>
 <path d="M30 20a10 10 0 0 1 10 10v12a10 10 0 0 0 10 10"/>
-<path d="M149 52a10 10 0 0 0 10 -10v-12a10 10 0 0 1 10 -10"/>
+<path d="M120 52a10 10 0 0 0 10 -10v-12a10 10 0 0 1 10 -10"/>
 <a href="#array">
 <rect class="n" x="50" y="40" width="56" height="24" rx="0"/>
 <text class="n" x="78" y="52">array</text>
 </a>
-<path d="M106 52H149"/>
+<path d="M106 52H120"/>
 <path d="M30 20a10 10 0 0 1 10 10v44a10 10 0 0 0 10 10"/>
-<path d="M149 84a10 10 0 0 0 10 -10v-44a10 10 0 0 1 10 -10"/>
+<path d="M120 84a10 10 0 0 0 10 -10v-44a10 10 0 0 1 10 -10"/>
 <a href="#string">
 <rect class="n" x="50" y="72" width="63" height="24" rx="0"/>
 <text class="n" x="81.5" y="84">string</text>
 </a>
-<path d="M113 84H149"/>
+<path d="M113 84H120"/>
 <path d="M30 20a10 10 0 0 1 10 10v76a10 10 0 0 0 10 10"/>
-<path d="M149 116a10 10 0 0 0 10 -10v-76a10 10 0 0 1 10 -10"/>
+<path d="M120 116a10 10 0 0 0 10 -10v-76a10 10 0 0 1 10 -10"/>
 <a href="#number">
 <rect class="n" x="50" y="104" width="63" height="24" rx="0"/>
 <text class="n" x="81.5" y="116">number</text>
 </a>
-<path d="M113 116H149"/>
+<path d="M113 116H120"/>
 <path d="M30 20a10 10 0 0 1 10 10v108a10 10 0 0 0 10 10"/>
-<path d="M149 148a10 10 0 0 0 10 -10v-108a10 10 0 0 1 10 -10"/>
-<a href="#named-value">
-<rect class="n" x="50" y="136" width="99" height="24" rx="0"/>
-<text class="n" x="99.5" y="148">named value</text>
+<path d="M120 148a10 10 0 0 0 10 -10v-108a10 10 0 0 1 10 -10"/>
+<a href="#literal">
+<rect class="n" x="50" y="136" width="70" height="24" rx="0"/>
+<text class="n" x="85" y="148">literal</text>
 </a>
-<path d="M169 20H187"/>
-<path class="cap" d="M187 12v16m4 -16v16"/>
+<path d="M140 20H158"/>
+<path class="cap" d="M158 12v16m4 -16v16"/>
 </svg></div>
   </section>
 
-  <section class="form" id="named-value">
-    <h3>named value</h3>
-    <p>A <dfn>named value</dfn> is an <a href="#identifier">identifier</a> at a value position. It is another notation for the JSON value that a definition assigns to it, and is replaced by a copy of that value. <code>true</code>, <code>false</code> and <code>null</code> are predefined and cannot be changed. All other named values are defined by the document itself with the <a href="#directive">directive</a> <code>%define</code>, for example <code>nil</code> for <code>null</code>; the application cannot define named values. Case is significant, and an identifier without a definition is an error; it is never read as a string.</p>
-    <div class="diagram"><svg class="rr" viewBox="0 0 340 136" width="340" height="136" role="img" aria-label="Railroad diagram: named value">
+  <section class="form" id="literal">
+    <h3>literal</h3>
+    <p>There are exactly four <dfn>literals</dfn>: <code>true</code>, <code>false</code> and <code>null</code> as in JSON, and <code>nil</code>, another notation for <code>null</code>. They are written in lower case and cannot be changed. Any other <a href="#identifier">identifier</a> at a value position is an error; it is never read as a string. At a name position the literals are ordinary names.</p>
+    <div class="diagram"><svg class="rr" viewBox="0 0 266 136" width="266" height="136" role="img" aria-label="Railroad diagram: literal">
 <path class="cap" d="M8 12v16m4 -16v16"/>
 <path d="M12 20H30"/>
 <path d="M30 20H50"/>
-<path d="M290 20H310"/>
+<path d="M216 20H236"/>
 <rect class="t" x="50" y="8" width="52" height="24" rx="12"/>
 <text class="t" x="76" y="20">true</text>
-<path d="M102 20H290"/>
+<path d="M102 20H216"/>
 <path d="M30 20a10 10 0 0 1 10 10v12a10 10 0 0 0 10 10"/>
-<path d="M290 52a10 10 0 0 0 10 -10v-12a10 10 0 0 1 10 -10"/>
+<path d="M216 52a10 10 0 0 0 10 -10v-12a10 10 0 0 1 10 -10"/>
 <rect class="t" x="50" y="40" width="60" height="24" rx="12"/>
 <text class="t" x="80" y="52">false</text>
-<path d="M110 52H290"/>
+<path d="M110 52H216"/>
 <path d="M30 20a10 10 0 0 1 10 10v44a10 10 0 0 0 10 10"/>
-<path d="M290 84a10 10 0 0 0 10 -10v-44a10 10 0 0 1 10 -10"/>
+<path d="M216 84a10 10 0 0 0 10 -10v-44a10 10 0 0 1 10 -10"/>
 <rect class="t" x="50" y="72" width="52" height="24" rx="12"/>
 <text class="t" x="76" y="84">null</text>
-<path d="M102 84H290"/>
+<path d="M102 84H216"/>
 <path d="M30 20a10 10 0 0 1 10 10v76a10 10 0 0 0 10 10"/>
-<path d="M290 116a10 10 0 0 0 10 -10v-76a10 10 0 0 1 10 -10"/>
-<a href="#identifier">
-<rect class="n" x="50" y="104" width="92" height="24" rx="0"/>
-<text class="n" x="96" y="116">identifier</text>
-</a>
-<text class="l" x="156" y="116">defined with %define</text>
-<path d="M310 20H328"/>
-<path class="cap" d="M328 12v16m4 -16v16"/>
+<path d="M216 116a10 10 0 0 0 10 -10v-76a10 10 0 0 1 10 -10"/>
+<rect class="t" x="50" y="104" width="44" height="24" rx="12"/>
+<text class="t" x="72" y="116">nil</text>
+<text class="l" x="108" y="116">the same as null</text>
+<path d="M236 20H254"/>
+<path class="cap" d="M254 12v16m4 -16v16"/>
 </svg></div>
   </section>
 
@@ -1170,22 +1137,22 @@ tags: [
     <li>An identifier at a name position becomes the JSON string with the same characters.</li>
     <li>Strings become JSON strings in double quotation marks with the same value.</li>
     <li>Numbers are written as JSON numbers: without <code>_</code>, in decimal notation, and with the suffix replaced by the result of its conversion.</li>
-    <li>Named values other than <code>true</code>, <code>false</code> and <code>null</code> are replaced by the JSON value assigned to them.</li>
-    <li>Directives are removed.</li>
+    <li><code>nil</code> is replaced by <code>null</code>.</li>
+    <li>The directive is removed.</li>
   </ol>
   <p>A document that uses at least one of the extensions is not a JSON text. It must not be labelled with the media type <code>application/json</code> or sent to recipients that expect JSON.</p>
 </section>
 
 <section id="strict-mode">
   <h2>Strict mode</h2>
-  <p>In <dfn>strict mode</dfn> a parser also rejects documents with duplicate names, with surrogates or Unicode noncharacters in names and strings, or with a root value that is not an object or an array. Strict mode applies if the application requests it or if the document contains <code>%strict: true</code>, and it covers the content of the document; the values of the directives are checked in any case. Every conforming parser offers it. The JSON equivalent of a document that is valid in strict mode, and whose numbers stay within the range of IEEE 754 binary64, is an <a href="https://www.rfc-editor.org/rfc/rfc7493">I-JSON</a> message.</p>
+  <p>In <dfn>strict mode</dfn> a parser also rejects documents with duplicate names, with surrogates or Unicode noncharacters in names and strings, or with a root value that is not an object or an array. Strict mode applies if the application requests it or if the document contains <code>%strict: true</code>, and it covers the content of the document. Every conforming parser offers it. The JSON equivalent of a document that is valid in strict mode, and whose numbers stay within the range of IEEE 754 binary64, is an <a href="https://www.rfc-editor.org/rfc/rfc7493">I-JSON</a> message.</p>
 </section>
 
 <section id="principles">
   <h2>Principles</h2>
   <ul>
-    <li><strong>Every document is portable.</strong> Named values are defined only in the document, with <code>%define</code>; suffixes and directives are fixed by the specification. The application can add none of them, so the value of a document depends only on its text, and every conforming parser reads it in the same way.</li>
-    <li><strong>Errors instead of guessing.</strong> Unknown escape sequences, white space after a line continuation, undefined identifiers, unknown directives, unknown suffixes and mixed indentation are errors and are not silently interpreted.</li>
+    <li><strong>Every document is portable.</strong> The literals, the suffixes and the directive are fixed by the specification. Neither the document nor the application can define values or add any of them, so the value of a document depends only on its text, and every conforming parser reads it in the same way.</li>
+    <li><strong>Errors instead of guessing.</strong> Unknown escape sequences, white space after a line continuation, identifiers other than the literals at a value position, unknown directives, unknown suffixes and mixed indentation are errors and are not silently interpreted.</li>
     <li><strong>Never code.</strong> XTJSON is not a subset of a programming language and is never read by evaluating it as program code.</li>
   </ul>
 </section>
@@ -1202,18 +1169,19 @@ tags: [
   <h2 id="grammar-title">Grammar</h2>
   <p>The complete grammar in <a href="https://www.rfc-editor.org/rfc/rfc5234">ABNF</a>, taken from Appendix A of the specification.</p>
   <pre><code>; ---------- Document ----------
-XTJSON-text    = S [ directives item-sep ] ( value / root-members ) S [ line-comment ]
+XTJSON-text    = S [ directive item-sep ] ( value / root-members ) S [ line-comment ]
 root-members   = member-list                 ; implicit root object
 
-; ---------- Directives ----------
-directives     = directive *( item-sep directive )
-directive      = &quot;%&quot; identifier S &quot;:&quot; S [ identifier S &quot;=&quot; S ] value
-                                             ; only %define, %version and %strict (6.5)
+; ---------- Directive ----------
+directive      = %x25.73.74.72.69.63.74 S &quot;:&quot; S ( true / false )   ; %strict
 
 ; ---------- Values ----------
-value          = object / array / string / number / named-value
-named-value    = identifier                  ; true, false, null and
-                                             ; definitions with %define (6.4)
+value          = object / array / string / number / literal
+literal        = true / false / null / nil
+true           = %x74.72.75.65               ; true
+false          = %x66.61.6C.73.65            ; false
+null           = %x6E.75.6C.6C               ; null
+nil            = %x6E.69.6C                  ; nil, the same value as null
 
 ; ---------- Objects ----------
 object         = &quot;{&quot; S [ member-list S ] &quot;}&quot;

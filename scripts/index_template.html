@@ -46,8 +46,8 @@
     <li><strong>Hexadecimal, octal and binary integers:</strong> <code>0xFF</code>, <code>0o755</code>, <code>0b1010</code>.</li>
     <li><strong>Digit grouping</strong> with <code>_</code>: <code>1_000_000</code>.</li>
     <li><strong>Number suffixes:</strong> <code>10k</code>, <code>64mb</code>, <code>250ms</code>.</li>
-    <li><strong>Named values:</strong> identifiers that the document defines as aliases for JSON values, such as <code>nil</code>.</li>
-    <li><strong>Directives</strong> at the start of the document: <code>%define</code> for named values, <code>%version</code> for versions and <code>%strict</code> for strict mode.</li>
+    <li><strong><code>nil</code></strong> as another notation for <code>null</code>.</li>
+    <li><strong>The directive <code>%strict</code></strong> at the start of the document, for strict mode.</li>
     <li><strong>More white space characters:</strong> all white space characters of ECMAScript.</li>
   </ul>
 </section>
@@ -73,16 +73,14 @@
 
   <section class="form" id="document">
     <h3>document</h3>
-    <p>A <dfn>document</dfn> begins with optional <a href="#directive">directives</a>. They are followed either by a single <a href="#value">value</a>, as in JSON, or by a sequence of <a href="#members">members</a> without enclosing braces. The second form denotes the object that contains exactly these members and needs at least one member. It exists only at the top level; an empty object is written as <code>{}</code>.</p>
+    <p>A <dfn>document</dfn> begins with an optional <a href="#directive">directive</a>. It is followed either by a single <a href="#value">value</a>, as in JSON, or by a sequence of <a href="#members">members</a> without enclosing braces. The second form denotes the object that contains exactly these members and needs at least one member. It exists only at the top level; an empty object is written as <code>{}</code>.</p>
     <div class="diagram">{{rr:document}}</div>
   </section>
 
   <section class="form" id="directive">
     <h3>directive</h3>
-    <p>A <dfn>directive</dfn> is a statement at the start of the document. The <code>%</code> and the name of the directive are written without white space between them. Directives are separated like items, and a separator also follows the last one. There are exactly three directives; any other is an error. The values of directives are always checked like strict mode checks names and strings: duplicate names, surrogates and noncharacters are errors there. A directive has no effect on the directives before it.</p>
-    <p><code>%define: nil = null</code> defines a <a href="#named-value">named value</a>. The value can be any value, including an object or an array, and can use the named values defined before it. A named value can be defined only once, and <code>true</code>, <code>false</code> and <code>null</code> cannot be redefined.</p>
-    <p><code>%version: '0.7'</code> states the version of the specification that the document is written for; a parser may reject a version that it does not support. With an identifier, as in <code>%version: schema = '2026.05.01b'</code>, it states the version of something else, as information for the application. The value is a string or a number, also with a suffix or as a named value, for example <code>%version: windows = 2k</code>; each version is stated at most once.</p>
-    <p><code>%strict: true</code> makes the parser read the content of the document in <a href="#strict-mode">strict mode</a>. The value is <code>true</code> or <code>false</code>, also as a named value, and <code>%strict</code> occurs at most once. If the application has requested strict mode, <code>%strict: false</code> is an error.</p>
+    <p>The only <dfn>directive</dfn> is <code>%strict</code>, a statement at the start of the document. It is written in lower case, without white space after the <code>%</code>, occurs at most once and is separated from the content like an item. Any other directive is an error.</p>
+    <p><code>%strict: true</code> makes the parser read the content of the document in <a href="#strict-mode">strict mode</a>. The value is <code>true</code> or <code>false</code>. If the application has requested strict mode, <code>%strict: false</code> is an error.</p>
     <div class="diagram">{{rr:directive}}</div>
   </section>
 
@@ -112,14 +110,14 @@
 
   <section class="form" id="value">
     <h3>value</h3>
-    <p>A <dfn>value</dfn> can be an <a href="#object">object</a>, an <a href="#array">array</a>, a <a href="#string">string</a>, a <a href="#number">number</a> or a <a href="#named-value">named value</a>. These structures can be nested.</p>
+    <p>A <dfn>value</dfn> can be an <a href="#object">object</a>, an <a href="#array">array</a>, a <a href="#string">string</a>, a <a href="#number">number</a> or a <a href="#literal">literal</a>. These structures can be nested.</p>
     <div class="diagram">{{rr:value}}</div>
   </section>
 
-  <section class="form" id="named-value">
-    <h3>named value</h3>
-    <p>A <dfn>named value</dfn> is an <a href="#identifier">identifier</a> at a value position. It is another notation for the JSON value that a definition assigns to it, and is replaced by a copy of that value. <code>true</code>, <code>false</code> and <code>null</code> are predefined and cannot be changed. All other named values are defined by the document itself with the <a href="#directive">directive</a> <code>%define</code>, for example <code>nil</code> for <code>null</code>; the application cannot define named values. Case is significant, and an identifier without a definition is an error; it is never read as a string.</p>
-    <div class="diagram">{{rr:named value}}</div>
+  <section class="form" id="literal">
+    <h3>literal</h3>
+    <p>There are exactly four <dfn>literals</dfn>: <code>true</code>, <code>false</code> and <code>null</code> as in JSON, and <code>nil</code>, another notation for <code>null</code>. They are written in lower case and cannot be changed. Any other <a href="#identifier">identifier</a> at a value position is an error; it is never read as a string. At a name position the literals are ordinary names.</p>
+    <div class="diagram">{{rr:literal}}</div>
   </section>
 
   <section class="form" id="name">
@@ -232,22 +230,22 @@
     <li>An identifier at a name position becomes the JSON string with the same characters.</li>
     <li>Strings become JSON strings in double quotation marks with the same value.</li>
     <li>Numbers are written as JSON numbers: without <code>_</code>, in decimal notation, and with the suffix replaced by the result of its conversion.</li>
-    <li>Named values other than <code>true</code>, <code>false</code> and <code>null</code> are replaced by the JSON value assigned to them.</li>
-    <li>Directives are removed.</li>
+    <li><code>nil</code> is replaced by <code>null</code>.</li>
+    <li>The directive is removed.</li>
   </ol>
   <p>A document that uses at least one of the extensions is not a JSON text. It must not be labelled with the media type <code>application/json</code> or sent to recipients that expect JSON.</p>
 </section>
 
 <section id="strict-mode">
   <h2>Strict mode</h2>
-  <p>In <dfn>strict mode</dfn> a parser also rejects documents with duplicate names, with surrogates or Unicode noncharacters in names and strings, or with a root value that is not an object or an array. Strict mode applies if the application requests it or if the document contains <code>%strict: true</code>, and it covers the content of the document; the values of the directives are checked in any case. Every conforming parser offers it. The JSON equivalent of a document that is valid in strict mode, and whose numbers stay within the range of IEEE 754 binary64, is an <a href="https://www.rfc-editor.org/rfc/rfc7493">I-JSON</a> message.</p>
+  <p>In <dfn>strict mode</dfn> a parser also rejects documents with duplicate names, with surrogates or Unicode noncharacters in names and strings, or with a root value that is not an object or an array. Strict mode applies if the application requests it or if the document contains <code>%strict: true</code>, and it covers the content of the document. Every conforming parser offers it. The JSON equivalent of a document that is valid in strict mode, and whose numbers stay within the range of IEEE 754 binary64, is an <a href="https://www.rfc-editor.org/rfc/rfc7493">I-JSON</a> message.</p>
 </section>
 
 <section id="principles">
   <h2>Principles</h2>
   <ul>
-    <li><strong>Every document is portable.</strong> Named values are defined only in the document, with <code>%define</code>; suffixes and directives are fixed by the specification. The application can add none of them, so the value of a document depends only on its text, and every conforming parser reads it in the same way.</li>
-    <li><strong>Errors instead of guessing.</strong> Unknown escape sequences, white space after a line continuation, undefined identifiers, unknown directives, unknown suffixes and mixed indentation are errors and are not silently interpreted.</li>
+    <li><strong>Every document is portable.</strong> The literals, the suffixes and the directive are fixed by the specification. Neither the document nor the application can define values or add any of them, so the value of a document depends only on its text, and every conforming parser reads it in the same way.</li>
+    <li><strong>Errors instead of guessing.</strong> Unknown escape sequences, white space after a line continuation, identifiers other than the literals at a value position, unknown directives, unknown suffixes and mixed indentation are errors and are not silently interpreted.</li>
     <li><strong>Never code.</strong> XTJSON is not a subset of a programming language and is never read by evaluating it as program code.</li>
   </ul>
 </section>

@@ -9,7 +9,7 @@
 3. [Compatibility](#3-compatibility)
 4. [Encoding](#4-encoding)
 5. [White space, line breaks and comments](#5-white-space-line-breaks-and-comments)
-6. [Document, directives, root object and values](#6-document-directives-root-object-and-values)
+6. [Document, directive, root object and values](#6-document-directive-root-object-and-values)
 7. [Objects, arrays and separators](#7-objects-arrays-and-separators)
 8. [Strings](#8-strings)
 9. [Numbers](#9-numbers)
@@ -45,9 +45,9 @@ The extensions over JSON are:
 | E9 | Additional escape sequences: `\v`, `\0`, `\xHH`, `\u{…}` | [8.2](#82-escape-sequences) |
 | E10 | Additional white space characters: all white space characters of ECMAScript | [5.1](#51-white-space) |
 | E11 | Strings across several lines, with indentation removed, and line continuation with `\` | [8.3](#83-line-breaks-in-strings) |
-| E12 | Named values: identifiers as values, aliases for JSON values defined in the document (`nil`) | [6.4](#64-named-values) |
+| E12 | `nil` as another notation for `null` | [6.4](#64-literals) |
 | E13 | Number suffixes (`10k`, `64mb`, `50pct`) | [9.5](#95-number-suffixes) |
-| E14 | Directives at the start of the document: `%define`, `%version` and `%strict` | [6.5](#65-directives) |
+| E14 | The directive `%strict` at the start of the document | [6.5](#65-the-directive-strict) |
 
 Non-goals: XTJSON introduces no new data types, no expressions and no references (see [Appendix C](#appendix-c--deliberately-not-included)). XTJSON is not an interchange format between machines; for that purpose JSON or I-JSON remains the format of choice.
 
@@ -63,13 +63,13 @@ The grammar is written in ABNF [RFC5234]. The rules in sections 5–9 are excerp
 | XTJSON document | a text that conforms to the rule `XTJSON-text` in Appendix A |
 | item | a member of an object or a value of an array |
 | name | the key of a member |
-| identifier | a character sequence conforming to the rule `identifier` (7.2); a name at a name position, a named value at a value position |
+| identifier | a character sequence conforming to the rule `identifier` (7.2); a name without quotation marks |
+| literal | one of the values `true`, `false`, `null` and `nil` (6.4) |
 | white space character | one of the characters in the table in 5.1 |
 | line break | U+000A, U+000D or the sequence U+000D U+000A (5.2) |
 | escaped, unescaped | escaped: written as an escape sequence according to 8.2; unescaped: written as the character itself |
 | line continuation | a `\` immediately before a line break in a string; it contributes nothing to the value (8.2) |
-| directive | a statement at the start of the document that begins with `%` (6.5) |
-| definition | the assignment of a JSON value to a named value by the directive `%define` (6.6) |
+| directive | the statement `%strict` at the start of the document (6.5) |
 | predefined | fixed by this specification and not changeable |
 | strict mode | the mode in which a parser additionally enforces the prohibitions of section 12 |
 | JSON equivalent | the JSON text onto which an XTJSON document is mapped according to [section 10](#10-mapping-to-json) |
@@ -82,7 +82,7 @@ This section is normative. It states what "fully compatible" with [RFC8259] (STD
 
 **K2 – Preservation of meaning.** As an XTJSON document, a JSON text denotes the same value as it does as a JSON text. No extension changes the meaning of a text that is already valid JSON.
 
-**K3 – Unchanged data model.** Every XTJSON document has a JSON equivalent ([section 10](#10-mapping-to-json)) that determines its value. Named values and number suffixes are only other notations for JSON values. Directives contribute to the value only through the named values that they define. A value that cannot be represented in JSON cannot be represented in XTJSON either.
+**K3 – Unchanged data model.** Every XTJSON document has a JSON equivalent ([section 10](#10-mapping-to-json)) that determines its value. `nil` and number suffixes are only other notations for JSON values. The directive `%strict` contributes nothing to the value. A value that cannot be represented in JSON cannot be represented in XTJSON either.
 
 **K4 – Inherited semantics.** Everything that this specification does not explicitly extend applies as in [RFC8259]: the meaning of `true`, `false` and `null`, the escape sequences of JSON, the treatment of number range and precision, the insignificance of member order, and string comparison.
 
@@ -92,7 +92,7 @@ This section is normative. It states what "fully compatible" with [RFC8259] (STD
 - An XTJSON parser is not a conforming processor in the sense of [ECMA-404], because such a processor is not to accept non-conforming input. It is, however, a permitted parser in the sense of [RFC8259] section 9, which explicitly allows parsers to accept extensions.
 - Whoever generates JSON MUST adhere strictly to the JSON grammar ([RFC8259] section 10). The mapping in section 10 is the bridge.
 
-Informative – why K1 and K2 hold: every extension occupies only notations that are a syntax error in JSON. `/`, `#`, `%`, `'` and the additional white space characters (5.1) do not occur in JSON outside strings; the additional escape sequences are invalid `\` sequences in JSON; an unescaped line break or tab in a string is invalid in JSON; a name without quotation marks, a comma before a closing bracket, a `:` after the root value, two items without a comma, and `0x`, `0o`, `0b` and `_` in numbers are invalid in JSON; so are an identifier at a value position other than `true`, `false` and `null`, and a suffix directly after a number. The three literals of JSON are predefined and cannot be changed, and no suffix begins with `e` or `E`, so the exponent of a JSON number is never read as a suffix. A string without a line break keeps its JSON value, because the rules of 8.3 change only strings that extend across several lines. The line break rule (E5) applies only where JSON requires a comma; everywhere else a line break remains insignificant white space.
+Informative – why K1 and K2 hold: every extension occupies only notations that are a syntax error in JSON. `/`, `#`, `%`, `'` and the additional white space characters (5.1) do not occur in JSON outside strings; the additional escape sequences are invalid `\` sequences in JSON; an unescaped line break or tab in a string is invalid in JSON; a name without quotation marks, a comma before a closing bracket, a `:` after the root value, two items without a comma, and `0x`, `0o`, `0b` and `_` in numbers are invalid in JSON; so are an identifier at a value position other than `true`, `false` and `null` (and thus also `nil`), and a suffix directly after a number. The three literals of JSON are predefined and cannot be changed, and no suffix begins with `e` or `E`, so the exponent of a JSON number is never read as a suffix. A string without a line break keeps its JSON value, because the rules of 8.3 change only strings that extend across several lines. The line break rule (E5) applies only where JSON requires a comma; everywhere else a line break remains insignificant white space.
 
 ## 4. Encoding
 
@@ -129,7 +129,7 @@ The white space characters are exactly the characters in the following table. Th
 - Inside strings the tab and the line breaks (U+0009, U+000A, U+000D) may appear unescaped, unlike in JSON (8.1). The vertical tab U+000B and the form feed U+000C MUST be escaped as in JSON; all other characters in the table may appear unescaped.
 - Characters that are not in the table are not white space, even if they are invisible or have the Unicode property White_Space (for example U+0085, U+180E, U+200B). Outside strings and comments they are an error.
 
-White space and comments are permitted between any tokens. Inside a number, including its suffix, and inside an identifier they are an error (`- 1`, `10 k`, `tr ue`); inside a string they are content.
+White space and comments are permitted between any tokens. Inside a number, including its suffix, and inside an identifier or a literal they are an error (`- 1`, `10 k`, `tr ue`); inside a string they are content.
 
 ### 5.2 Line breaks
 
@@ -162,18 +162,18 @@ Because `#` starts a comment, a shebang line (`#!…`) at the start of the docum
 { "url": "http://example.org/#anchor" /* '#' and '//' in a string are not a comment */ }
 ```
 
-## 6. Document, directives, root object and values
+## 6. Document, directive, root object and values
 
 ### 6.1 Document
 
 ```abnf
-XTJSON-text  = S [ directives item-sep ] ( value / root-members ) S [ line-comment ]
+XTJSON-text  = S [ directive item-sep ] ( value / root-members ) S [ line-comment ]
 root-members = member-list
 ```
 
 A line comment at the end of the document does not need a final line break.
 
-An XTJSON document begins with optional directives (6.5). They are followed either by a single value (as in JSON) or by an implicit root object. A document that consists only of white space, comments and directives is an error, just as an empty text is not a JSON text.
+An XTJSON document begins with an optional directive (6.5). It is followed either by a single value (as in JSON) or by an implicit root object. A document that consists only of white space, comments and the directive is an error, just as an empty text is not a JSON text.
 
 ### 6.2 Implicit root object
 
@@ -192,43 +192,39 @@ Rules:
 - The short form exists only at the top level. Nested objects need braces.
 - Mixed forms are invalid: nothing may follow a braced root value (`{a: 1} b: 2` is an error), and an implicit root object is not closed with `}`.
 
-**Detection.** A parser decides after the first token that follows the directives: if it is a string or an identifier and the next token is a `:`, the document is an implicit root object. Otherwise a single value is read. Because a `:` never follows the root value in JSON, no JSON text is reinterpreted.
+**Detection.** A parser decides after the first token that follows the directive: if it is a string or an identifier and the next token is a `:`, the document is an implicit root object. Otherwise a single value is read. Because a `:` never follows the root value in JSON, no JSON text is reinterpreted.
 
 ### 6.3 Values
 
 ```abnf
-value        = object / array / string / number / named-value
-named-value  = identifier
+value        = object / array / string / number / literal
 ```
 
-A value is an object or an array (section 7), a string (section 8), a number (section 9) or a named value (6.4). The literals `true`, `false` and `null` of JSON are named values with a fixed meaning in XTJSON.
+A value is an object or an array (section 7), a string (section 8), a number (section 9) or a literal (6.4).
 
-### 6.4 Named values
+### 6.4 Literals
 
-A named value is an identifier (7.2) at a value position. It therefore consists of the same characters as a name without quotation marks. It stands for the JSON value that a definition assigns to it.
+```abnf
+literal      = true / false / null / nil
+true         = %x74.72.75.65         ; true
+false        = %x66.61.6C.73.65      ; false
+null         = %x6E.75.6C.6C         ; null
+nil          = %x6E.69.6C            ; nil
+```
 
-- **Predefined** are exactly three named values: `true`, `false` and `null`, with the meaning they have in JSON. They MUST NOT be redefined, overridden or removed.
-- **Definitions in the document.** All further named values are defined by the document itself with the directive `%define` (6.6). Each definition assigns exactly one JSON value to an identifier: a string, a number, an object, an array, `true`, `false` or `null`. The application cannot define named values.
-- **Alias, not a data type.** In the JSON equivalent, the assigned JSON value appears in place of the named value, at every position as a copy of its own. A named value is only another notation for that value; neither new data types nor references arise.
-- **Case is significant.** `nil`, `Nil` and `NIL` are three different named values, and `True` is not `true`.
-- **Undefined is an error.** An identifier at a value position for which there is no definition is an error. A parser MUST NOT interpret it as a string or in any other way instead.
-- **Name position.** At a name position an identifier is always a name and never a named value (7.2): `{nil: nil}` has the name `"nil"`.
-- **Scope.** A definition applies from the directive that contains it to the end of the document: in the values of all following directives and in the content of the document.
+XTJSON has exactly four literals. `true`, `false` and `null` have the meaning they have in JSON. `nil` is another notation for `null` and denotes the same value.
+
+- **Fixed.** The literals are predefined. They MUST NOT be redefined, overridden or removed, and there are no further literals: neither the document nor the application can define values.
+- **Case is significant.** Literals are written in lower case: `True`, `NULL` and `Nil` are not literals.
+- **No other values without quotation marks.** At a value position only the four literals are permitted without quotation marks. Every other identifier there is an error (`colour: red`, `undefined`, `NaN`). A parser MUST NOT interpret it as a string or in any other way instead.
+- **Name position.** At a name position `true`, `false`, `null` and `nil` are identifiers like any other and yield ordinary names (7.2): `{nil: nil}` has the name `"nil"` and the value `null`.
+- **Mapping.** In the JSON equivalent, `nil` is replaced by `null` (section 10).
 
 ```xtjson
-%define: nil = null
-%define: zero = 0
-%define: unknown = "not specified"
-%define: address = {
-  city: unknown
-  postcode: nil
-}
-
 {
   middle_name: nil
-  children: zero
-  home: address
-  work: address
+  children: null
+  married: false
   nil: "an ordinary name at a name position"
 }
 ```
@@ -238,101 +234,22 @@ JSON equivalent:
 ```json
 {
   "middle_name": null,
-  "children": 0,
-  "home": { "city": "not specified", "postcode": null },
-  "work": { "city": "not specified", "postcode": null },
+  "children": null,
+  "married": false,
   "nil": "an ordinary name at a name position"
 }
 ```
 
-Without the four directives the same document is an error, because `nil`, `zero` and `address` are not defined.
-
-### 6.5 Directives
+### 6.5 The directive `%strict`
 
 ```abnf
-directives   = directive *( item-sep directive )
-directive    = "%" identifier S ":" S [ identifier S "=" S ] value
+directive    = %x25.73.74.72.69.63.74 S ":" S ( true / false )   ; %strict
 ```
 
-A directive is a statement at the start of the document. It begins with `%`, followed immediately by the name of the directive and a `:`. After that comes either an identifier, a `=` and a value, or a value alone.
+A document can begin with the directive `%strict`. It states whether the document is to be read in strict mode (section 12).
 
 ```xtjson
-%version: '0.7', %define: empty = "", [null, 543, empty]
-```
-
-JSON equivalent:
-
-```json
-[null, 543, ""]
-```
-
-Rules:
-
-- **Notation.** The name of a directive is an identifier (7.2) and follows the `%` immediately; white space and comments between them are an error (`% define`). Before the `%`, before and after the `:` and before and after the `=`, white space and comments are permitted as between any tokens (5.1), line breaks included.
-- **Position.** Directives are permitted only at the top level, before the root value or before the first member of the implicit root object. A directive inside an object or an array, or after the content has begun, is an error.
-- **Separators.** Two consecutive directives, and the last directive and the content of the document, MUST be separated like two items according to 7.3: by a comma or by white space that contains a line break. `%define: a = 1 [a]` is an error.
-- **Known directives.** This specification defines exactly three directives: `%define` (6.6), `%version` (6.7) and `%strict` (6.8). Every other directive is an error. Case is significant: `%Define` is not `%define`. A parser MUST NOT know further directives or accept any from the application. Further directive names are reserved for later versions of this specification.
-- **Repetition.** A directive MAY occur more than once, unless its section restricts this.
-- **Value.** The value of a directive is a value according to 6.3. It can use the named values that earlier directives have defined.
-- **Checked values.** The values of directives MUST satisfy the prohibitions of section 12 on names, string values and duplicate names, also when the document is not read in strict mode, and even where a named value defined by them is not used.
-- **Order.** A directive has no effect on the directives that come before it in the document.
-- **Effect.** Directives contribute nothing to the JSON equivalent except the definitions of named values (section 10).
-
-### 6.6 The directive `%define`
-
-`%define` defines a named value (6.4). The identifier before the `=` is the named value; the value after the `=` is assigned to it.
-
-```xtjson
-%version: '0.7'
-%version: schema = '2026.05.01b'
-%define: nil = null
-# hypermedia reference
-%define: self = {
-  href: 'http://api.example.org/people/1234'
-}
-
-id: 1234
-name: 'Bob'
-email: nil
-self: self
-```
-
-JSON equivalent:
-
-```json
-{
-  "id": 1234,
-  "name": "Bob",
-  "email": null,
-  "self": { "href": "http://api.example.org/people/1234" }
-}
-```
-
-Rules:
-
-- **Form.** `%define` MUST be written with an identifier and `=`. A `%define` with a value alone (`%define: "foobar"`) is an error.
-- **Only once.** An identifier that is already defined MUST NOT be defined again: neither `true`, `false` and `null` nor a named value that an earlier `%define` has defined. A second definition is an error, even if it assigns the same value.
-- **Order.** The value can use the named values that earlier `%define` directives have defined. A named value that is defined only by a later directive is not yet defined at this position and therefore an error; so is the identifier that is being defined (`%define: a = [a]`). There are thus no forward references and no cycles.
-- **Identifier before the `=`.** It names the named value that is being defined; it is not itself a named value and needs no definition.
-
-### 6.7 The directive `%version`
-
-`%version` states for which version of this specification, or of another specification, the document is written.
-
-- **Version of this specification.** `%version: '0.7'` states the version of this specification that a parser must support in order to read the document. `%version: xtjson = '0.7'` has the same meaning. This specification states its version in the line below its title: this document has the version `0.7`.
-- **Further versions.** With another identifier before the `=`, the directive states the version of something else, for example of a schema: `%version: schema = '2026.05.01b'`. Such a statement is information for the application. It defines no named value.
-- **Value.** The value MUST be a string or a number. A number can carry a suffix (9.5), and a named value can be used whose value is a string or a number: `%version: windows = 2k` states the version `2000`. `true`, `false`, `null`, an object, an array, and a named value with such a value are an error. A string is RECOMMENDED, because a number distinguishes neither `0.1` from `0.10` nor `2k` from `2000`.
-- **Only once.** Each version MUST be stated at most once. Two `%version` without identifier, one without identifier and one with `xtjson`, and two with the same identifier are therefore an error.
-- **Effect on the parser.** A parser MAY reject a document as an error if it does not support the stated version of this specification; it MAY also ignore the statement. It SHOULD make all version statements of the document available to the application, each with its identifier and its value.
-- **No effect on the value.** The JSON equivalent does not depend on the `%version` directives.
-
-### 6.8 The directive `%strict`
-
-`%strict` states whether the document is to be read in strict mode (section 12).
-
-```xtjson
-%define: yes = true
-%strict: yes
+%strict: true
 
 name: 'demo'
 port: 8080
@@ -346,12 +263,15 @@ JSON equivalent:
 
 Rules:
 
-- **Form.** `%strict` MUST be written without an identifier and `=`. Its value MUST be `true` or `false`, or a named value whose value is `true` or `false`. Any other value is an error (`%strict: 1`, `%strict: 'true'`).
+- **Notation.** `%strict` is written in lower case and is a single token; white space and comments after the `%` are an error (`% strict`). Before and after the `:`, white space and comments are permitted as between any tokens (5.1), line breaks included.
+- **Value.** The value MUST be `true` or `false`. Any other value is an error (`%strict: 1`, `%strict: 'true'`, `%strict: nil`).
+- **Position.** The directive is permitted only at the top level, before the root value or before the first member of the implicit root object. Inside an object or an array, or after the content has begun, it is an error.
+- **Separator.** The directive and the content of the document MUST be separated like two items according to 7.3: by a comma or by white space that contains a line break. `%strict: true [1]` is an error.
 - **Only once.** `%strict` MUST occur at most once in a document. A second `%strict` is an error, even if it states the same value.
+- **No other directives.** `%strict` is the only directive. Any other text that begins with `%` is an error (`%include: "a.xtj"`, `%Strict: true`). A parser MUST NOT know further directives or accept any from the application.
 - **`%strict: true`.** A parser MUST read the content of the document in strict mode, even if the application has not requested it.
 - **`%strict: false`.** The document does not require strict mode. If the application has requested strict mode, the document contradicts it, and a parser MUST reject it as an error.
 - **Without `%strict`.** A parser reads the document in strict mode if the application requests it.
-- **Scope.** Strict mode applies to the content of the document, the part after the directives. The values of the directives satisfy its prohibitions on names, string values and duplicate names in every case (6.5).
 - **No effect on the value.** The JSON equivalent does not depend on `%strict`. The directive decides only whether the document is accepted.
 
 ## 7. Objects, arrays and separators
@@ -379,8 +299,8 @@ id-continue  = ALPHA / DIGIT / "_" / "$"
 - A name is a string (section 8) or an identifier. Like every other string, a name may extend across several lines; its value is determined according to 8.3.
 - An identifier begins with an ASCII letter, `_` or `$`; after that, ASCII digits are permitted as well. As a name it stands for exactly the character sequence as written; there are no escape sequences in identifiers.
 - Every other name MUST be in quotation marks: names with spaces, hyphens, dots or non-ASCII characters, names that begin with a digit, and the empty name.
-- `true`, `false`, `null` and all other named values (6.4) are permitted as identifiers at a name position and yield ordinary names there (`"true"`, `"nil"`). A value never appears at a name position, so this is unambiguous.
-- At a value position an identifier is a named value (6.4). There are no freely chosen values without quotation marks: `colour: red` is valid only if `red` is defined.
+- The literals `true`, `false`, `null` and `nil` (6.4) are permitted as identifiers at a name position and yield ordinary names there (`"true"`, `"nil"`). A value never appears at a name position, so this is unambiguous.
+- At a value position only the literals are permitted (6.4). There are no freely chosen values without quotation marks: `colour: red` is an error.
 - The notation is irrelevant to the identity of a name: `a`, `"a"`, `'a'` and `"\u0061"` denote the same name.
 
 ```xtjson
@@ -599,7 +519,7 @@ exp      = e [ minus / plus ] digits
 digits   = DIGIT *( [ "_" ] DIGIT )
 ```
 
-Without `_` and without a suffix this is exactly the number grammar of JSON. In particular the following remain invalid: leading zeros (`0755`), a leading `+`, a missing integer or fraction part (`.5`, `5.`). `Infinity` and `NaN` are not numbers; as identifiers they are named values and an error without a definition (6.4).
+Without `_` and without a suffix this is exactly the number grammar of JSON. In particular the following remain invalid: leading zeros (`0755`), a leading `+`, a missing integer or fraction part (`.5`, `5.`). `Infinity` and `NaN` are neither numbers nor literals; at a value position they are an error (6.4).
 
 ### 9.2 Hexadecimal, octal, binary
 
@@ -740,8 +660,8 @@ The **JSON equivalent** of an XTJSON document is obtained by the following steps
 4. **Names:** an identifier at a name position becomes the JSON string with the same character sequence.
 5. **Strings:** a `'` string becomes the `"` string with the same content; unescaped `"` become `\"`. Escape sequences that JSON does not have are replaced in both string forms: `\'` by `'`, `\v` by `\u000B`, `\0` by `\u0000`, `\xHH` by `\u00HH`, `\u{…}` by the `\uXXXX` sequence of the same code point, above U+FFFF by the corresponding surrogate pair. A string with a line break becomes the `"` string that represents its value according to 8.3; line continuations are thereby dropped, and characters that may not appear unescaped in a JSON string (`"`, `\` and control characters such as line break and tab) are escaped.
 6. **Numbers:** all `_` are removed from decimal numbers; otherwise the notation remains unchanged. Hexadecimal, octal and binary numbers become the decimal integer of the same value, with a leading minus sign if preceded by `-`. A number with a suffix is replaced by the result of the conversion, written as a JSON number (9.5).
-7. **Named values:** `true`, `false` and `null` remain unchanged. Every other named value is replaced, at every position where it is used, by the JSON equivalent of the value that its definition assigns to it (6.4, 6.6).
-8. **Directives** are removed, each together with the separator that follows it (6.5).
+7. **Literals:** `true`, `false` and `null` remain unchanged; `nil` is replaced by `null` (6.4).
+8. **Directive:** `%strict` is removed together with the separator that follows it (6.5).
 
 The JSON equivalent is unique up to white space and the choice of equivalent escape sequences. If it contains an object with duplicate names, the rule from 7.2 applies to its value: the last member applies. Two XTJSON documents are **equivalent** if their JSON equivalents denote the same value. A document that is already a JSON text is its own JSON equivalent (up to white space).
 
@@ -749,15 +669,15 @@ An example with a side-by-side comparison is given in [Appendix B.1](#b1-complet
 
 ## 11. Conformance
 
-**Document.** A text is a conforming XTJSON document if it is encoded according to section 4, conforms to the rule `XTJSON-text`, each of its directives satisfies the rules of 6.5 to 6.8, each of its named values is defined (6.4) and, if it contains `%strict: true`, it satisfies the prohibitions of section 12. Every conforming document is **portable**: its value depends only on its text and on this specification, and every conforming parser can read it, unless a limit or a restriction of the application applies (section 11) or the parser does not support the version stated with `%version` (6.7).
+**Document.** A text is a conforming XTJSON document if it is encoded according to section 4, conforms to the rule `XTJSON-text`, its directive satisfies the rules of 6.5 and, if it contains `%strict: true`, it satisfies the prohibitions of section 12. Every conforming document is **portable**: its value depends only on its text and on this specification, and every conforming parser can read it, unless a limit or a restriction of the application applies (section 11).
 
 **Parser.** A conforming XTJSON parser
 
-- MUST accept every conforming XTJSON document and deliver the value of its JSON equivalent – and thus also every JSON text and every I-JSON message – unless a limit or restriction according to the fourth item applies or the parser rejects the version stated with `%version` (6.7);
-- MUST reject as an error every text that is not a conforming XTJSON document, in particular one with an undefined named value or an unknown directive, and MUST NOT silently accept any further syntax extensions;
-- MUST know the predefined named values, the directives from 6.5 and all suffixes from 9.5. It MUST NOT allow them to be redefined, and MUST NOT accept named values, directives or suffixes from the application;
-- MAY set limits on document size, nesting depth, number range and precision, string length, and the size of the value after the named values have been replaced, and enforce semantic restrictions (for example strict mode according to section 12);
-- MUST offer strict mode according to section 12 to the application, and MUST read a document with `%strict: true` in strict mode (6.8).
+- MUST accept every conforming XTJSON document and deliver the value of its JSON equivalent – and thus also every JSON text and every I-JSON message – unless a limit or restriction according to the fourth item applies;
+- MUST reject as an error every text that is not a conforming XTJSON document, in particular one with an identifier other than a literal at a value position or an unknown directive, and MUST NOT silently accept any further syntax extensions;
+- MUST know the literals from 6.4, the directive from 6.5 and all suffixes from 9.5. It MUST NOT allow them to be redefined, and MUST NOT accept literals, directives or suffixes from the application;
+- MAY set limits on document size, nesting depth, number range and precision, and string length, and enforce semantic restrictions (for example strict mode according to section 12);
+- MUST offer strict mode according to section 12 to the application, and MUST read a document with `%strict: true` in strict mode (6.5).
 
 **Generator.** An XTJSON generator MUST output conforming XTJSON documents. Every JSON generator that outputs UTF-8 is therefore also an XTJSON generator. If the recipient is a program, JSON SHOULD be output.
 
@@ -765,7 +685,7 @@ An example with a side-by-side comparison is given in [Appendix B.1](#b1-complet
 
 ## 12. Strict mode
 
-In **strict mode** a parser enforces the following prohibitions beyond sections 4–9. Strict mode applies if the application requests it or if the document contains `%strict: true` (6.8). The prohibitions apply to the content of the document; the values of the directives satisfy the prohibitions on names, string values and duplicate names in every case (6.5). The values that result from named values and number suffixes are also relevant here.
+In **strict mode** a parser enforces the following prohibitions beyond sections 4–9. Strict mode applies if the application requests it or if the document contains `%strict: true` (6.5). The prohibitions apply to the content of the document, the part after the directive.
 
 - Names and string values MUST NOT contain surrogates or Unicode noncharacters, neither directly nor as an escape sequence. A single `"\uDEAD"` is invalid; a correct surrogate pair is permitted.
 - An object MUST NOT contain duplicate names. The comparison is made after all escape sequences have been resolved and independently of the notation of the name (identifier or string in one of the forms from section 8).
@@ -784,8 +704,7 @@ The recommendations of [I-JSON] for protocols also apply unchanged to XTJSON doc
 - **No `eval`.** XTJSON is not a subset of JavaScript or of any other programming language and MUST NOT be read by evaluating it as program code.
 - **Resource limits.** Deeply nested structures, very long strings or numbers, and unterminated block comments and strings can overload parsers. Parsers SHOULD set limits (section 11).
 - **Divergent interpretation.** If two components process the same document differently, checks can be bypassed. This concerns above all duplicate names, which other JSON tools may treat differently from what 7.2 specifies, and numbers outside the exact range. Where a document controls security-relevant decisions, strict mode (section 12) is RECOMMENDED.
-- **Definitions.** Named values are defined only in the document itself (6.6), and only the directives of this specification exist. The meaning of a document therefore does not depend on the configuration of the parser, and the application cannot change it. The conversions of the suffixes are fixed by this specification alone; a document can bring along no code.
-- **Size after replacing named values.** A named value whose value is an object or an array is copied to every position where it is used (6.4). Definitions that use one another can therefore make the value grow exponentially from a short document: `%define: a = [1, 1, 1, 1]`, `%define: b = [a, a, a, a]` and so on. Parsers SHOULD limit the size of the value after the named values have been replaced (section 11).
+- **No definitions.** The literals, the directive and the conversions of the suffixes are fixed by this specification alone; neither the document nor the application can define values. The meaning of a document therefore does not depend on the configuration of the parser, and a document can bring along no code.
 - **Confusion with JSON.** An XTJSON document that is passed off as JSON leads to errors with strict recipients and to inconsistent behaviour with lenient ones. Hence the delimitation in K5.
 - **Comments.** Comments are lost in the mapping to JSON and are not seen by programs. Invisible characters and characters that control text direction in comments and strings can make the displayed text differ from the processed text; tools SHOULD point this out.
 - **U+2028 and U+2029.** Some editors display these characters as a line change. In XTJSON they neither end a line comment nor separate items. Text that is displayed below a line comment can therefore still belong to the comment and is then not processed. Tools SHOULD make these characters visible outside strings or warn about them.
@@ -800,18 +719,19 @@ Normative. The core rules `ALPHA`, `DIGIT`, `HEXDIG`, `BIT` and `DQUOTE` come fr
 
 ```abnf
 ; ---------- Document ----------
-XTJSON-text    = S [ directives item-sep ] ( value / root-members ) S [ line-comment ]
+XTJSON-text    = S [ directive item-sep ] ( value / root-members ) S [ line-comment ]
 root-members   = member-list                 ; implicit root object
 
-; ---------- Directives ----------
-directives     = directive *( item-sep directive )
-directive      = "%" identifier S ":" S [ identifier S "=" S ] value
-                                             ; only %define, %version and %strict (6.5)
+; ---------- Directive ----------
+directive      = %x25.73.74.72.69.63.74 S ":" S ( true / false )   ; %strict
 
 ; ---------- Values ----------
-value          = object / array / string / number / named-value
-named-value    = identifier                  ; true, false, null and
-                                             ; definitions with %define (6.4)
+value          = object / array / string / number / literal
+literal        = true / false / null / nil
+true           = %x74.72.75.65               ; true
+false          = %x66.61.6C.73.65            ; false
+null           = %x6E.75.6C.6C               ; null
+nil            = %x6E.69.6C                  ; nil, the same value as null
 
 ; ---------- Objects ----------
 object         = "{" S [ member-list S ] "}"
@@ -892,15 +812,15 @@ e              = %x65 / %x45                 ; e E
 Notes on tokenization (informative):
 
 - The longest match applies. `0x1e3` is a single hexadecimal number, and `10min` is the number `10` with the suffix `min`.
-- Three conditions apply in addition to the grammar: no decimal digit follows `null-escape`, the value in `codepoint-escape` is not in the range D800 to DFFF, and every `directive` satisfies the rules of 6.5 to 6.8.
+- Two conditions apply in addition to the grammar: no decimal digit follows `null-escape`, and the value in `codepoint-escape` is not in the range D800 to DFFF.
 - Two values always need a separator according to 7.3. Character sequences such as `0755`, `1_`, `0b102`, `123abc`, `10_k`, `10kbs` or `1.5n` can therefore never be read as a valid sequence of several tokens and are errors.
-- Whether a `named-value` is defined is decided not by the grammar but by the `%define` directives that precede it (6.4, 6.6).
-- The `%` of a directive and the following identifier form a single token; white space between them is an error.
+- An identifier is read with the longest match. At a value position it must be a literal: `nullable` and `nil2` are errors, not a literal followed by further characters.
+- `%strict` is a single token; white space after the `%` is an error.
 - A line comment always extends to the next line break: `eol` requires a `newline` after it, and `non-eol` excludes only U+000A and U+000D. Only at the end of the document may the line break be missing.
 - The sequence CR LF is always a single `newline`, never two.
 - For strings the grammar describes only the notation. Their value results from the steps in 8.3.
 - Three quotation marks in a row (`"""` or `'''`) do not delimit a string: they are an empty string followed directly by the start of another string, and therefore always an error (7.3).
-- Apart from the current character, a parser needs only the information "since the last token a line break has occurred outside a block comment". Only at the start of the content (6.2) and after the `:` of a directive, where an identifier can be followed by `=` (6.5), is one further token of lookahead needed.
+- Apart from the current character, a parser needs only the information "since the last token a line break has occurred outside a block comment". Only at the start of the content (6.2) is one further token of lookahead needed.
 
 ## Appendix B – Examples
 
@@ -910,17 +830,16 @@ XTJSON document:
 
 ```xtjson
 # Service configuration – the root braces are omitted
-%version: '0.7'
 %strict: true
-%define: any_host = "0.0.0.0"
 
 name: 'demo-service'
 version: "1.4.0"
 $schema: "https://example.org/schema/service.json"
 
 listen: {
-  host: any_host        // named value from %define
+  host: "0.0.0.0"
   port: 8080            // the line break replaces the comma
+  proxy: nil            // nil is the same as null
   tls: false,           // commas remain permitted
 }
 
@@ -958,7 +877,7 @@ JSON equivalent:
   "name": "demo-service",
   "version": "1.4.0",
   "$schema": "https://example.org/schema/service.json",
-  "listen": { "host": "0.0.0.0", "port": 8080, "tls": false },
+  "listen": { "host": "0.0.0.0", "port": 8080, "proxy": null, "tls": false },
   "limits": {
     "max_body_bytes": 10485760,
     "file_mode": 420,
@@ -998,35 +917,24 @@ In the tables `⏎` stands for a line break.
 | `[,]` and `{,}` | comma without a preceding item |
 | `{a: 1} b: 2` | text after the root value |
 | `a: 1 }` | the implicit root object is not closed with `}` |
-| `[abc]` | the named value `abc` is not defined |
-| `[True]` | `True` is not defined; case is significant |
+| `[abc]` | `abc` is not a literal; there are no values without quotation marks |
+| `[True]` and `[Nil]` | not a literal; case is significant |
 
 **Directives**
 
 | Text | Reason |
 |---|---|
-| `% define: a = 1` ⏎ `[a]` | white space between `%` and the name of the directive |
-| `%include: "a.xtj"` ⏎ `{}` and `%Define: a = 1` ⏎ `[a]` | unknown directive; case is significant |
-| `%define: "x"` ⏎ `{}` | `%define` without identifier and `=` |
-| `%define: true = 1` ⏎ `[true]` | a predefined named value cannot be redefined |
-| `%define: a = 1` ⏎ `%define: a = 2` ⏎ `[a]` | `a` is defined twice |
-| `%define: a = b` ⏎ `%define: b = 1` ⏎ `[a]` | `b` is not yet defined in the first directive |
-| `%define: a = [a]` ⏎ `a` | `a` is not yet defined in its own value |
-| `%define: a = 1 [a]` | no separator between the directive and the content |
-| `%define: a = 1` | only directives; the document has no content |
-| `a: 1` ⏎ `%define: b = 2` | directive after the first member |
-| `[%define: a = 1]` | directive not at the top level |
-| `%version: '0.7'` ⏎ `%version: xtjson = '0.7'` ⏎ `{}` | version of this specification stated twice |
-| `%version: s = 1` ⏎ `%version: s = 2` ⏎ `{}` | version `s` stated twice |
-| `%version: [0, 6]` and `%version: true` | not a string and not a number |
-| `%define: nil = null` ⏎ `%version: nil` ⏎ `{}` | the value of the named value is not a string and not a number |
-| `%strict: 1` ⏎ `{}` and `%strict: 'true'` ⏎ `{}` | not `true` or `false` |
-| `%strict: s = true` ⏎ `{}` | `%strict` with an identifier |
+| `% strict: true` ⏎ `{}` | white space after the `%` |
+| `%include: "a.xtj"` ⏎ `{}` and `%Strict: true` ⏎ `{}` | unknown directive; case is significant |
+| `%strict: true [1]` | no separator between the directive and the content |
+| `%strict: true` | only the directive; the document has no content |
+| `a: 1` ⏎ `%strict: true` | directive after the first member |
+| `[%strict: true]` | directive not at the top level |
+| `%strict: 1` ⏎ `{}`, `%strict: 'true'` ⏎ `{}` and `%strict: nil` ⏎ `{}` | not `true` or `false` |
 | `%strict: true` ⏎ `%strict: true` ⏎ `{}` | `%strict` twice |
 | `%strict: true` ⏎ `"x"` | strict mode: the root value is not an object and not an array |
 | `%strict: true` ⏎ `{a: 1, a: 2}` | strict mode: duplicate name |
-| `%define: d = {a: 1, a: 2}` ⏎ `[d]` | duplicate name in the value of a directive, also outside strict mode |
-| `%define: n = "\uFFFF"` ⏎ `[1]` | noncharacter in the value of a directive, also outside strict mode |
+| `%strict: true` ⏎ `["\uFFFF"]` | strict mode: noncharacter in a string |
 | `%strict: false` ⏎ `{}`, if the application requests strict mode | the document contradicts the application |
 
 **Names**
@@ -1077,7 +985,7 @@ In the tables `⏎` stands for a line break.
 | `0x1.8` | fraction part on a non-decimal number |
 | `- 1` | white space between sign and digits |
 | `+1`, `.5`, `5.` | invalid as in JSON |
-| `NaN`, `Infinity` | not numbers; not defined as named values |
+| `NaN`, `Infinity` | neither numbers nor literals |
 | `10q`, `12px` and `100L` | not a suffix from the table in 9.5 |
 | `10K`, `64MB` and `5Min` | suffixes are written in lower case only |
 | `10 k` and `10_k` | white space or `_` between number and suffix |
@@ -1089,11 +997,11 @@ In the tables `⏎` stands for a line break.
 
 The following extensions, known from other JSON dialects, are **not** part of XTJSON. A conforming parser rejects them.
 
-- freely chosen values without quotation marks (`colour: red`); an identifier at a value position is valid only as a defined named value
-- named values defined by the application; named values are defined only in the document with `%define`
-- a second definition of the same named value, forward references to named values defined later, and recursive definitions
+- freely chosen values without quotation marks (`colour: red`); at a value position only the literals `true`, `false`, `null` and `nil` are permitted
+- values defined in the document or by the application, such as aliases, constants or variables
+- other notations of the literals (`True`, `NULL`, `Nil`) and further literals such as `undefined`
 - switching off strict mode that the application has requested; `%strict: false` is then an error
-- directives other than `%define`, `%version` and `%strict`, directives of the parser or of the application, and directives inside objects and arrays or after the start of the content
+- directives other than `%strict`, directives of the parser or of the application, and directives inside objects and arrays or after the start of the content; version statements in the document
 - suffixes defined in the document or by the application; further suffixes such as `px` or `L`; suffixes in upper case and other spellings of a suffix (`10K`, `64MB`); white space before the suffix; `n` after a number with a fraction part or an exponent; suffixes that yield anything other than a number
 - strings delimited by three quotation marks (`"""…"""`, `'''…'''`), heredocs and raw strings without escape sequences
 - a line continuation with white space between `\` and the line break
@@ -1117,7 +1025,7 @@ Informative. Decisions at points where several solutions were possible, with the
 | Empty document | an error, not `{}` | An empty or truncated file should be noticed; JSON behaves the same way. |
 | Duplicate names | the last member applies; forbidden in strict mode | A fixed behaviour prevents two parsers from reading the same document differently. A general prohibition would exclude valid JSON texts and violate K1. |
 | Characters in identifiers | ASCII letters, digits, `_`, `$` | Needs no Unicode tables and avoids confusable characters. Names such as `max-age` are written in quotation marks. |
-| `true`/`false`/`null` as a name | permitted | Unambiguous at a name position; avoids a special rule. |
+| Literals as a name | permitted | Unambiguous at a name position; avoids a special rule. |
 | Line break | LF, CR or CR LF; CR LF counts as one | A single definition that is the same everywhere for separators, line comments and strings, independent of the line endings of the file. |
 | Additional white space | all white space and line terminator characters of ECMAScript 2026; only the line break according to 5.2 is a separator | In this way the structure of a document does not depend on characters that editors display inconsistently or not at all. Unlike in ECMAScript, U+2028 and U+2029 are therefore not line terminators. |
 | Category Zs | given as a fixed list | Parsers need no Unicode tables, and the grammar does not change with new Unicode versions. ECMAScript, by contrast, refers to the current category in each case. |
@@ -1143,9 +1051,10 @@ Informative. Decisions at points where several solutions were possible, with the
 | Prefixes `0x`/`0o`/`0b` | upper and lower case equivalent | Consistent with `e`/`E` in the exponent. Lower case is recommended. |
 | Sign on non-decimal numbers | `-` permitted, `+` not | Consistent with the JSON rule `[ minus ]`. |
 | `_` in numbers | single, only between two digits | A simple rule that is easy to check. |
-| Named values | only defined identifiers, no free text | A typo such as `ture` is reported as an error instead of being read as a string. |
-| Named values: result | any JSON value, including an object or an array | Parts that recur in a document, such as an address or a link, are written once. Because the value is copied to every position, the value of the document remains a tree; there are no references. |
+| Values without quotation marks | only the four literals | A typo such as `ture` is reported as an error instead of being read as a string. |
 | `true`, `false`, `null` | predefined, not changeable | Otherwise a valid JSON text could change its meaning (K2). |
+| `nil` | another notation for `null`, fixed in the grammar | Many programming languages write the null value as `nil`. `nil` is a syntax error in JSON, so no JSON text changes its meaning (K1, K2). |
+| No definitions | neither the document nor the application can define values | The value of a document can be read from its text without resolving definitions. Every document is portable, two parsers cannot read the same document differently, and the value cannot grow beyond the size of the text through copies. |
 | Suffixes: notation | a fixed list in the grammar; only lower case, exactly one notation per suffix | A reader recognizes every suffix without a list of alternative spellings, and a parser needs no character rules for suffixes. No suffix begins with `a`–`f`, `o`, `x` or `_`, so hexadecimal digits, the exponent, number prefixes and digit grouping remain unambiguous. Every other character after a number needs a separator and remains an error; later versions can therefore add suffixes without changing the value of a valid document. |
 | Suffix `m` | number times 1000000 | Large numbers are written as briefly as with `k`. The longest match distinguishes `m` from `mb`, `ms` and `min`. |
 | Suffix `n` | only after an integer, not after a fraction part or an exponent | As in ECMAScript, where `n` marks an integer literal (BigInt) and `1.5n` and `1e3n` are errors as well. |
@@ -1153,18 +1062,12 @@ Informative. Decisions at points where several solutions were possible, with the
 | Suffixes without effect | `s` and `n` leave the value unchanged | A time can be written with its unit, and an integer in the form familiar from ECMAScript, without its value changing. |
 | Suffix: result | always a number | A suffix converts; it does not create another data type. |
 | Suffix: precision | exact result | `0.1kb` should yield `102.4` and `100ms` should yield `0.1`, independent of the floating-point arithmetic of the parser. |
-| Definitions | only in the document, with `%define`; the application cannot define named values | The value of a document depends only on its text and this specification. Every document is portable, and two parsers cannot read the same document differently. A document cannot inject code. |
-| Definitions: order | a named value can be used only after its definition; a second definition is an error | There are no forward references and no cycles, and a parser reads the document in one pass. The meaning of a named value does not depend on the position at which it is used. |
-| Directives: notation | `%`, name and `:`, then a value, optionally preceded by an identifier and `=` | `%` does not occur in JSON outside strings, so no JSON text changes its meaning (K1, K2). The `:` corresponds to the notation of a member; the `=` distinguishes the identifier being defined from a named value. |
-| Directives: position | only at the top level, before the content | Readers and parsers know all definitions before the content begins. A directive cannot change the meaning of a part that has already been read. |
-| Directives: which exist | only `%define`, `%version` and `%strict`; every other directive is an error, and the parser and the application cannot add any | Every document is read in the same way by every parser. Further directives can be added by later versions; permitting directives of the parser later would be compatible, restricting them would not. |
-| `%version`: value | a string or a number, also with a suffix or as a named value; at most once per version | The same notations apply as for any other value; a named value can, for example, give the version both in a `%version` statement and in the content. `true`, `false`, `null`, objects and arrays do not state a version. A second statement for the same version could only contradict the first one. |
-| `%version`: effect | the parser may reject an unsupported version or ignore the statement | A parser that does not know a version can still read documents that use only rules it knows; unknown rules are errors anyway. Versions of other things, such as a schema, are information for the application. |
-| Directives and strict mode | the values of directives always satisfy the prohibitions on names, string values and duplicate names; `%strict` applies only to the content | A definition with a duplicate name or a noncharacter is almost always a mistake. A parser checks every value of a directive where it reads it and reports an error where it occurs, independent of whether a later `%strict` follows. Named values that are inserted into the content therefore satisfy the prohibitions of strict mode as well. |
-| Directives: order | a directive has no effect on the directives before it | Every directive can be checked completely when it is read, and a parser reads the directives in one pass. This also holds for directives that later versions add. |
+| Directive: notation | `%strict`, `:` and `true` or `false`, fixed in the grammar | `%` does not occur in JSON outside strings, so no JSON text changes its meaning (K1, K2). The `:` corresponds to the notation of a member. Every other text after a `%` is an error; later versions can therefore add directives without changing the value of a valid document. |
+| Directive: position | only at the top level, before the content | Readers and parsers know whether strict mode applies before the content begins. |
+| Directive: which exist | only `%strict`; the parser and the application cannot add any | Every document is read in the same way by every parser. |
 | Strict mode: root value | an object or an array | [I-JSON] only recommends this. A single string or number as the root value cannot be extended later by further members; in strict mode the recommendation becomes a rule that a parser can check. |
 | Strict mode: support | every parser must offer it | Otherwise one parser would accept a document with `%strict: true` that another rejects; every document remains portable. |
-| `%strict`: value | `true` or `false`, also as a named value; at most once | A switch has two states. A second `%strict` could only repeat or contradict the first one. |
+| `%strict`: value | `true` or `false`; at most once | A switch has two states. A second `%strict` could only repeat or contradict the first one. |
 | `%strict: false` and the application | an error if the application requests strict mode | A document can tighten the checks of the application but cannot switch them off. A contradiction is reported instead of silently preferring one side. |
 
 ## References
@@ -1193,7 +1096,10 @@ Informative. Decisions at points where several solutions were possible, with the
 - 9.5: every suffix has a single notation, in lower case. The suffixes `K`, `Kb`, `kB`, `KB`, `Mb`, `mB`, `MB`, `px` and `L` are dropped.
 - 9.5: new suffix `m` (times 1000000).
 - 9.5: `n` is permitted only after an integer, not after a number with a fraction part or an exponent.
-- 9, 11 and Appendices A to D are adapted to these changes.
+- 6.3, 6.4: named values are dropped. The only values without quotation marks are the literals `true`, `false` and `null` and the new literal `nil`, another notation for `null`; the literals are fixed in the grammar. Section 6.4 is now called "Literals".
+- 6.5: the directives `%define` and `%version` are dropped. `%strict` is the only directive and is fixed in the grammar; its value is `true` or `false`. Sections 6.6 to 6.8 are dropped, 6.5 is now called "The directive `%strict`", and section 6 is now called "Document, directive, root object and values".
+- 11, 12, 13: the limit on the size of the value after replacing named values and the rules for the values of directives are dropped.
+- 1, 2, 3, 5.1, 7.2, 9, 10, 11 and Appendices A to D are adapted to these changes.
 
 **Draft 0.6**
 

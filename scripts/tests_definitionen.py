@@ -1,7 +1,7 @@
-"""Zusatztests: benannte Werte (6.4, 6.6) und Zahlen-Suffixe (9.5).
+"""Zusatztests: Literale (6.4) und Zahlen-Suffixe (9.5).
 
-Benannte Werte werden nur im Dokument mit %define definiert; D ist eine
-Folge solcher Direktiven, die vielen Faellen vorangestellt wird.
+Der Dateiname stammt aus einer Zeit, in der Dokumente benannte Werte
+definieren konnten; heute gibt es nur die vier Literale.
 """
 import os
 import sys
@@ -9,30 +9,23 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from xtjson_ref import parse, XTJSONError  # noqa: E402
 
-D = ("%define: nil = null\n%define: zero = 0\n%define: unbekannt = 'keine Angaben'\n"
-     "%define: halb = 0.5\n%define: ja = true\n")
-
 # (Text, erwarteter Wert)
 VALID = [
-    # benannte Werte
-    (D + 'nil', None),
-    (D + '[nil, zero, unbekannt]', [None, 0, 'keine Angaben']),
-    (D + '[nil\nzero\nunbekannt]', [None, 0, 'keine Angaben']),
-    (D + '{nil: nil}', {'nil': None}),
-    (D + 'nil: zero\nzero: nil', {'nil': 0, 'zero': None}),
-    (D + 'a: halb, b: ja', {'a': 0.5, 'b': True}),
+    # Literale; nil ist derselbe Wert wie null
+    ('nil', None), ('null', None), ('true', True), ('false', False),
+    ('[nil, null, true, false]', [None, None, True, False]),
+    ('[nil\nnull\ntrue]', [None, None, True]),
     ('[true\nfalse\nnull]', [True, False, None]),
+    ('{nil: nil}', {'nil': None}), ('{"nil": nil}', {'nil': None}),
+    ('nil: null\nnull: nil', {'nil': None, 'null': None}),
+    ('a: nil, b: true', {'a': None, 'b': True}),
     ('true: false', {'true': False}),
-    ("%define: $a = 1\n%define: _b = 'x'\n[$a, _b]", [1, 'x']),
-    ('%define: Nil = 1, %define: nil = 2, [Nil, nil]', [1, 2]),
-    ('%define: NaN = null\n%define: Infinity = "∞"\n[NaN, Infinity]', [None, '∞']),
-    ('%define: px = 1, %define: ms = 2, %define: k = 3\n[px, ms, k]', [1, 2, 3]),
-    # Objekte und Arrays als benannte Werte; jede Stelle erhaelt eine Kopie
-    (D + '%define: liste = [nil, zero, halb]\n%define: obj = {l: liste, j: ja}\n[obj, liste]',
-     [{'l': [None, 0, 0.5], 'j': True}, [None, 0, 0.5]]),
-    ('%define: e = {}\n%define: a = []\n[e, a, {e: e}]', [{}, [], {'e': {}}]),
-    ('%define: o = {a: 1, b: 2}\no', {'a': 1, 'b': 2}),
-    ('%define: s = "\n  zwei\n  Zeilen\n  "\n[s]', ['zwei\nZeilen\n']),
+    ('{true: true, false: false, null: null, nil: nil}', {'true': True, 'false': False, 'null': None, 'nil': None}),
+    ('[nil,nil]', [None, None]), ('a: nil // Kommentar', {'a': None}), ('[nil/* k */]', [None]),
+    ('[[nil], {a: [nil]}]', [[None], {'a': [None]}]), ('a: nil\n', {'a': None}),
+    # Bezeichner an Namensposition sind gewoehnliche Namen
+    ('{$a: 1, _b: nil, Nil: 2, NaN: 3, px: 4, ms: 5, k: 6}',
+     {'$a': 1, '_b': None, 'Nil': 2, 'NaN': 3, 'px': 4, 'ms': 5, 'k': 6}),
     # Suffixe: Faktor 1000, 1024, 1000000, 1048576
     ('10k', 10000), ('1kb', 1024), ('2m', 2000000), ('1mb', 1048576),
     ('1.5k', 1500), ('0.5kb', 512), ('0.1kb', 102.4), ('-2k', -2000),
@@ -67,22 +60,22 @@ VALID = [
     ('9007199254740993n', 9007199254740993), ('[1n,2n\n3n]', [1, 2, 3]),
     # ein '_' nach einer Ziffer ist immer Zifferngruppierung
     ('1_0', 10), ('1_0k', 10000), ('1_0s', 10), ('0x1_0n', 16), ('1_0m', 10000000),
-    # benannte Werte und Suffixe zusammen
-    (D + '[50pct, 10k, nil]', [0.5, 10000, None]),
-    ('%define: t = 30s\n%define: g = 64mb\n[t, g]', [30, 67108864]),
+    # Literale und Suffixe zusammen
+    ('[50pct, 10k, nil]', [0.5, 10000, None]),
+    ('{t: 30s, g: 64mb, n: null}', {'t': 30, 'g': 67108864, 'n': None}),
 ]
 
 # Texte, die abgelehnt werden muessen
 INVALID = [
-    'nil', '[abc]', 'True', 'NULL', '%define: nil = 1\n[Nil]',
-    D + '[nil nil]', D + 'nil zero', 'NaN', 'Infinity', D + '[ture]',
-    # Definitionen, die gegen 6.4 bis 6.6 verstossen; doppelter Name im Wert (6.5)
-    '%define: o = {a: 1, a: 2}\no',
-    '%define: true = 1\n1', '%define: false = false\n1', '%define: null = null\n1',
-    '%define: a-b = 1\n1', '%define: 1a = 1\n1', '%define: "" = 1\n1', "%define: 'a' = 1\n1",
-    '%define: ä = 1\n1', '%define: x = NaN\n1', '%define: x = undefined\n1',
-    D + '%define: nil = null\n1', D + '%define: halb = 0.5\nhalb',
-    '%define: a = [b]\n%define: b = 1\na', '%define: a = {x: a}\na',
+    # nur die vier Literale, nur in Kleinbuchstaben
+    '[abc]', 'True', 'NULL', 'False', 'Nil', 'NIL', 'nIl', '[None]', '[none]',
+    'NaN', 'Infinity', 'undefined', '[ture]', '[nul]', '[yes]', '[on]', 'a: red',
+    # laengste Uebereinstimmung: weitere Zeichen gehoeren zum Bezeichner
+    'nill', 'nil2', 'nil_', 'nil$', '_nil', '$nil', 'nullable', 'trueish', 'falsey',
+    # Leerraum und fehlende Trenner
+    '[nil nil]', 'nil null', '[n il]', '[ni l]', 'a: nil nil', 'tr ue',
+    # Werte koennen nicht definiert werden
+    '%define: a = 1\n[a]', '%define: nil = null\nnil', '%define: x = 1\n1',
     # Suffixe, die es nicht gibt; Zeichen direkt nach einem Suffix
     '10q', '10kk', '10kbs', '10k5', '10y', '10wx',
     '10g', '10mi', '10mins', '10sec', '10hs', '10ss',
@@ -98,7 +91,7 @@ INVALID = [
     '1_0.5n', '1.0_0n',
     # kein Suffix beginnt mit '_'
     '10_s', '10_ms', '10_n', '0x10_k', '1e3_k', '1.5_k', '10_m',
-    '[10_k]', '%define: _k = 1\n10_k', '%define: _ = 1\n[1_]',
+    '[10_k]', '[_k]', '[1_]',
     # Gross- und Kleinschreibung
     '10l', '10S', '10MS', '10Ms', '10mS', '10Min',
     '10MIN', '10H', '10PX', '10Px', '10pX', '10N',
@@ -113,9 +106,8 @@ INVALID = [
     '[10k 20k]', '[30s 5min]', '1.k', '1.s', 'k', 'ms',
     '0x', '0xk', '0o', '0Xy', '0O', '-0x', '0ok',
     '0b', '0B', '0xs', '0bn',
-    # ein gleichnamiger benannter Wert macht ein Suffix nicht gueltig und umgekehrt
-    '%define: q = 2\n10q', D + '10nil', '[px]', '%define: px = 1\n12px',
-    '%define: L = 1\n[100L]', '%define: K = 1\n[10K]', '[m]', '[n]',
+    # Suffixe sind keine Werte, Literale keine Suffixe
+    '10nil', '10null', '1true', '[px]', '[m]', '[n]', '[k]', '[ms]',
 ]
 
 
@@ -138,8 +130,8 @@ def main():
             continue
         fails += 1
         print('FEHLER: sollte ungueltig sein: %r -> %r' % (text, got))
-    # die Anwendung kann weder benannte Werte noch Suffixe definieren
-    for extra in (dict(values={'nil': None}), dict(suffixes={'q': abs})):
+    # die Anwendung kann weder Werte noch Suffixe definieren
+    for extra in (dict(values={'nil': None}), dict(suffixes={'q': abs}), dict(max_expansion=10)):
         try:
             parse('1', **extra)
         except TypeError:
