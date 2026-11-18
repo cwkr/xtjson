@@ -15,7 +15,7 @@
     <h1>Introducing XTJSON</h1>
     <p class="tagline">A syntactic superset of JSON for files that are written and maintained by people.</p>
     <p class="meta">
-      Specification draft 0.6 · 17 November 2026 ·
+      Specification draft 0.7 · 18 November 2026 ·
       <a href="https://github.com/cwkr/xtjson/blob/main/docs/xtjson-spec-en.md">Specification (English)</a> ·
       <a href="https://github.com/cwkr/xtjson/blob/main/docs/xtjson-spec-de.md">Spezifikation (Deutsch)</a> ·
       <a href="https://github.com/cwkr/xtjson">GitHub</a>
@@ -59,7 +59,7 @@
     <figure>
       <figcaption>XTJSON</figcaption>
       <pre><code># Service configuration – the root braces are omitted
-%version: &#x27;0.6&#x27;
+%version: &#x27;0.7&#x27;
 %strict: true
 %define: any_host = &quot;0.0.0.0&quot;
 
@@ -179,7 +179,7 @@ tags: [
     <h3>directive</h3>
     <p>A <dfn>directive</dfn> is a statement at the start of the document. The <code>%</code> and the name of the directive are written without white space between them. Directives are separated like items, and a separator also follows the last one. There are exactly three directives; any other is an error. The values of directives are always checked like strict mode checks names and strings: duplicate names, surrogates and noncharacters are errors there. A directive has no effect on the directives before it.</p>
     <p><code>%define: nil = null</code> defines a <a href="#named-value">named value</a>. The value can be any value, including an object or an array, and can use the named values defined before it. A named value can be defined only once, and <code>true</code>, <code>false</code> and <code>null</code> cannot be redefined.</p>
-    <p><code>%version: '0.6'</code> states the version of the specification that the document is written for; a parser may reject a version that it does not support. With an identifier, as in <code>%version: schema = '2026.05.01b'</code>, it states the version of something else, as information for the application. The value is a string or a number, also with a suffix or as a named value, for example <code>%version: windows = 2k</code>; each version is stated at most once.</p>
+    <p><code>%version: '0.7'</code> states the version of the specification that the document is written for; a parser may reject a version that it does not support. With an identifier, as in <code>%version: schema = '2026.05.01b'</code>, it states the version of something else, as information for the application. The value is a string or a number, also with a suffix or as a named value, for example <code>%version: windows = 2k</code>; each version is stated at most once.</p>
     <p><code>%strict: true</code> makes the parser read the content of the document in <a href="#strict-mode">strict mode</a>. The value is <code>true</code> or <code>false</code>, also as a named value, and <code>%strict</code> occurs at most once. If the application has requested strict mode, <code>%strict: false</code> is an error.</p>
     <div class="diagram"><svg class="rr" viewBox="0 0 467 104" width="467" height="104" role="img" aria-label="Railroad diagram: directive">
 <path class="cap" d="M8 12v16m4 -16v16"/>
@@ -733,7 +733,7 @@ tags: [
   <section class="form" id="number">
     <h3>number</h3>
     <p>A <dfn>number</dfn> is a <a href="#decimal">decimal</a> number as in JSON or an <a href="#integer">integer</a> in hexadecimal, octal or binary notation, optionally with a minus sign in front and a <a href="#suffix">suffix</a> directly behind. White space inside a number is an error.</p>
-    <div class="diagram"><svg class="rr" viewBox="0 0 361 72" width="361" height="72" role="img" aria-label="Railroad diagram: number">
+    <div class="diagram"><svg class="rr" viewBox="0 0 599 92" width="599" height="92" role="img" aria-label="Railroad diagram: number">
 <path class="cap" d="M8 12v16m4 -16v16"/>
 <path d="M12 20H30"/>
 <path d="M30 20H50"/>
@@ -758,16 +758,22 @@ tags: [
 </a>
 <path d="M218 20H228"/>
 <path d="M228 20H248"/>
-<path d="M311 20H331"/>
-<path d="M248 20H311"/>
+<path d="M549 20H569"/>
+<path d="M248 20H549"/>
 <path d="M228 20a10 10 0 0 1 10 10v0a10 10 0 0 0 10 10"/>
-<path d="M311 40a10 10 0 0 0 10 -10v0a10 10 0 0 1 10 -10"/>
+<path d="M549 40a10 10 0 0 0 10 -10v0a10 10 0 0 1 10 -10"/>
 <a href="#suffix">
 <rect class="n" x="248" y="28" width="63" height="24" rx="0"/>
 <text class="n" x="279.5" y="40">suffix</text>
 </a>
-<path d="M331 20H349"/>
-<path class="cap" d="M349 12v16m4 -16v16"/>
+<path d="M311 40H549"/>
+<path d="M228 20a10 10 0 0 1 10 10v32a10 10 0 0 0 10 10"/>
+<path d="M549 72a10 10 0 0 0 10 -10v-32a10 10 0 0 1 10 -10"/>
+<rect class="t" x="248" y="60" width="28" height="24" rx="12"/>
+<text class="t" x="262" y="72">n</text>
+<text class="l" x="290" y="72">only without fraction part and exponent</text>
+<path d="M569 20H587"/>
+<path class="cap" d="M587 12v16m4 -16v16"/>
 </svg></div>
   </section>
 
@@ -969,71 +975,73 @@ tags: [
 
   <section class="form" id="suffix">
     <h3>suffix</h3>
-    <p>A <dfn>suffix</dfn> directly after the last digit stands for a conversion that turns the number into another number. It consists of the same characters as an <a href="#identifier">identifier</a>, with a restricted first character. Case is significant and the longest match applies.</p>
-    <div class="diagram"><svg class="rr" viewBox="0 0 466 164" width="466" height="164" role="img" aria-label="Railroad diagram: suffix">
+    <p>A <dfn>suffix</dfn> directly after the last digit stands for a conversion that turns the number into another number. The suffixes are a fixed list. Each has exactly one notation, in lower case, and the longest match applies: <code>10min</code> carries the suffix <code>min</code>, not <code>m</code>.</p>
+    <div class="diagram"><svg class="rr" viewBox="0 0 144 296" width="144" height="296" role="img" aria-label="Railroad diagram: suffix">
 <path class="cap" d="M8 12v16m4 -16v16"/>
 <path d="M12 20H30"/>
 <path d="M30 20H50"/>
-<path d="M236 20H256"/>
-<rect class="c" x="50" y="8" width="186" height="24" rx="4"/>
-<text class="c" x="143" y="20">g–n p–w y z G–N P–W Y Z</text>
+<path d="M94 20H114"/>
+<rect class="t" x="50" y="8" width="28" height="24" rx="12"/>
+<text class="t" x="64" y="20">k</text>
+<path d="M78 20H94"/>
 <path d="M30 20a10 10 0 0 1 10 10v12a10 10 0 0 0 10 10"/>
-<path d="M236 52a10 10 0 0 0 10 -10v-12a10 10 0 0 1 10 -10"/>
-<rect class="t" x="50" y="40" width="28" height="24" rx="12"/>
-<text class="t" x="64" y="52">$</text>
-<path d="M78 52H236"/>
-<path d="M256 20H266"/>
-<path d="M266 20H286"/>
-<path d="M416 20H436"/>
-<path d="M286 20H416"/>
-<path d="M266 20a10 10 0 0 1 10 10v0a10 10 0 0 0 10 10"/>
-<path d="M416 40a10 10 0 0 0 10 -10v0a10 10 0 0 1 10 -10"/>
-<path d="M286 40H296"/>
-<path d="M296 40H316"/>
-<path d="M386 40H406"/>
-<rect class="c" x="316" y="28" width="70" height="24" rx="4"/>
-<text class="c" x="351" y="40">a–z A–Z</text>
-<path d="M296 40a10 10 0 0 1 10 10v12a10 10 0 0 0 10 10"/>
-<path d="M386 72a10 10 0 0 0 10 -10v-12a10 10 0 0 1 10 -10"/>
-<rect class="c" x="316" y="60" width="42" height="24" rx="4"/>
-<text class="c" x="337" y="72">0–9</text>
-<path d="M358 72H386"/>
-<path d="M296 40a10 10 0 0 1 10 10v44a10 10 0 0 0 10 10"/>
-<path d="M386 104a10 10 0 0 0 10 -10v-44a10 10 0 0 1 10 -10"/>
-<rect class="t" x="316" y="92" width="28" height="24" rx="12"/>
-<text class="t" x="330" y="104">_</text>
-<path d="M344 104H386"/>
-<path d="M296 40a10 10 0 0 1 10 10v76a10 10 0 0 0 10 10"/>
-<path d="M386 136a10 10 0 0 0 10 -10v-76a10 10 0 0 1 10 -10"/>
-<rect class="t" x="316" y="124" width="28" height="24" rx="12"/>
-<text class="t" x="330" y="136">$</text>
-<path d="M344 136H386"/>
-<path d="M406 40H416"/>
-<path d="M406 40a10 10 0 0 1 10 10v96a10 10 0 0 1 -10 10"/>
-<path d="M296 156a10 10 0 0 1 -10 -10v-96a10 10 0 0 1 10 -10"/>
-<path d="M296 156H351"/>
-<path d="M351 156H406"/>
-<path d="M436 20H454"/>
-<path class="cap" d="M454 12v16m4 -16v16"/>
+<path d="M94 52a10 10 0 0 0 10 -10v-12a10 10 0 0 1 10 -10"/>
+<rect class="t" x="50" y="40" width="36" height="24" rx="12"/>
+<text class="t" x="68" y="52">kb</text>
+<path d="M86 52H94"/>
+<path d="M30 20a10 10 0 0 1 10 10v44a10 10 0 0 0 10 10"/>
+<path d="M94 84a10 10 0 0 0 10 -10v-44a10 10 0 0 1 10 -10"/>
+<rect class="t" x="50" y="72" width="28" height="24" rx="12"/>
+<text class="t" x="64" y="84">m</text>
+<path d="M78 84H94"/>
+<path d="M30 20a10 10 0 0 1 10 10v76a10 10 0 0 0 10 10"/>
+<path d="M94 116a10 10 0 0 0 10 -10v-76a10 10 0 0 1 10 -10"/>
+<rect class="t" x="50" y="104" width="36" height="24" rx="12"/>
+<text class="t" x="68" y="116">mb</text>
+<path d="M86 116H94"/>
+<path d="M30 20a10 10 0 0 1 10 10v108a10 10 0 0 0 10 10"/>
+<path d="M94 148a10 10 0 0 0 10 -10v-108a10 10 0 0 1 10 -10"/>
+<rect class="t" x="50" y="136" width="36" height="24" rx="12"/>
+<text class="t" x="68" y="148">ms</text>
+<path d="M86 148H94"/>
+<path d="M30 20a10 10 0 0 1 10 10v140a10 10 0 0 0 10 10"/>
+<path d="M94 180a10 10 0 0 0 10 -10v-140a10 10 0 0 1 10 -10"/>
+<rect class="t" x="50" y="168" width="44" height="24" rx="12"/>
+<text class="t" x="72" y="180">min</text>
+<path d="M30 20a10 10 0 0 1 10 10v172a10 10 0 0 0 10 10"/>
+<path d="M94 212a10 10 0 0 0 10 -10v-172a10 10 0 0 1 10 -10"/>
+<rect class="t" x="50" y="200" width="28" height="24" rx="12"/>
+<text class="t" x="64" y="212">s</text>
+<path d="M78 212H94"/>
+<path d="M30 20a10 10 0 0 1 10 10v204a10 10 0 0 0 10 10"/>
+<path d="M94 244a10 10 0 0 0 10 -10v-204a10 10 0 0 1 10 -10"/>
+<rect class="t" x="50" y="232" width="28" height="24" rx="12"/>
+<text class="t" x="64" y="244">h</text>
+<path d="M78 244H94"/>
+<path d="M30 20a10 10 0 0 1 10 10v236a10 10 0 0 0 10 10"/>
+<path d="M94 276a10 10 0 0 0 10 -10v-236a10 10 0 0 1 10 -10"/>
+<rect class="t" x="50" y="264" width="44" height="24" rx="12"/>
+<text class="t" x="72" y="276">pct</text>
+<path d="M114 20H132"/>
+<path class="cap" d="M132 12v16m4 -16v16"/>
 </svg></div>
-    <p>The first character cannot be <code>_</code>, and it cannot be <code>a</code> to <code>f</code>, <code>o</code> or <code>x</code> in either case, so a suffix is never confused with a hexadecimal digit, an exponent, a number prefix or digit grouping.</p>
-    <p>All suffixes are predefined and cannot be changed; the application cannot add any. A suffix that is not in this table is an error:</p>
+    <p>The suffix <code>n</code> is permitted only after an integer, not after a number with a fraction part or an exponent: <code>10n</code> and <code>0xFFn</code> are valid, <code>1.5n</code> and <code>1e3n</code> are errors. A character directly after a suffix begins a new token that needs a separator, so <code>10kbs</code> is an error.</p>
+    <p>All suffixes are predefined and cannot be changed; the application cannot add any. Any other notation after a number is an error:</p>
     <div class="table"><table>
       <thead>
         <tr><th>Suffix</th><th>Conversion</th><th>Example</th><th>Result</th></tr>
       </thead>
       <tbody>
-        <tr><td><code>k</code>, <code>K</code></td><td>number times 1000</td><td><code>10k</code></td><td><code>10000</code></td></tr>
-        <tr><td><code>kb</code>, <code>Kb</code>, <code>kB</code>, <code>KB</code></td><td>number times 1024</td><td><code>4kb</code></td><td><code>4096</code></td></tr>
-        <tr><td><code>mb</code>, <code>Mb</code>, <code>mB</code>, <code>MB</code></td><td>number times 1048576</td><td><code>64mb</code></td><td><code>67108864</code></td></tr>
+        <tr><td><code>k</code></td><td>number times 1000</td><td><code>10k</code></td><td><code>10000</code></td></tr>
+        <tr><td><code>kb</code></td><td>number times 1024</td><td><code>4kb</code></td><td><code>4096</code></td></tr>
+        <tr><td><code>m</code></td><td>number times 1000000</td><td><code>2m</code></td><td><code>2000000</code></td></tr>
+        <tr><td><code>mb</code></td><td>number times 1048576</td><td><code>64mb</code></td><td><code>67108864</code></td></tr>
         <tr><td><code>ms</code></td><td>number divided by 1000</td><td><code>100ms</code></td><td><code>0.1</code></td></tr>
         <tr><td><code>s</code></td><td>none; the value remains unchanged</td><td><code>30s</code></td><td><code>30</code></td></tr>
         <tr><td><code>min</code></td><td>number times 60</td><td><code>5min</code></td><td><code>300</code></td></tr>
         <tr><td><code>h</code></td><td>number times 3600</td><td><code>2h</code></td><td><code>7200</code></td></tr>
         <tr><td><code>pct</code></td><td>number divided by 100</td><td><code>50pct</code></td><td><code>0.5</code></td></tr>
-        <tr><td><code>px</code></td><td>none; the value remains unchanged</td><td><code>12px</code></td><td><code>12</code></td></tr>
-        <tr><td><code>L</code></td><td>none; the value remains unchanged</td><td><code>100L</code></td><td><code>100</code></td></tr>
-        <tr><td><code>n</code></td><td>none; the value remains unchanged</td><td><code>10n</code></td><td><code>10</code></td></tr>
+        <tr><td><code>n</code></td><td>none; the value remains unchanged; only after an integer</td><td><code>10n</code></td><td><code>10</code></td></tr>
       </tbody>
     </table></div>
     <p>The result is exact: <code>0.1kb</code> is <code>102.4</code>.</p>
@@ -1260,11 +1268,13 @@ codepoint-escape = %x75 &quot;{&quot; *&quot;0&quot; ( 1*5HEXDIG / ( &quot;10&qu
 SQUOTE         = %x27                        ; &#x27;
 
 ; ---------- Numbers ----------
-number         = [ minus ] ( hex-int / oct-int / bin-int / decimal ) [ suffix ]
-suffix         = suffix-start *id-continue   ; only the suffixes from 9.5
-suffix-start   = %x67-6E / %x70-77 / %x79-7A /       ; g-n p-w y z
-                 %x47-4E / %x50-57 / %x59-5A /       ; G-N P-W Y Z
-                 &quot;$&quot;
+number         = [ minus ] ( ( hex-int / oct-int / bin-int / decimal ) [ suffix ]
+                           / ( hex-int / oct-int / bin-int / int ) int-suffix )
+suffix         = %x6B / %x6B.62 / %x6D /     ; k kb m
+                 %x6D.62 / %x6D.73 /         ; mb ms
+                 %x6D.69.6E / %x73 / %x68 /  ; min s h
+                 %x70.63.74                  ; pct
+int-suffix     = %x6E                        ; n, only after an integer (9.5)
 decimal        = int [ frac ] [ exp ]
 int            = zero / ( digit1-9 *( [ &quot;_&quot; ] DIGIT ) )
 frac           = &quot;.&quot; digits
@@ -1285,7 +1295,7 @@ e              = %x65 / %x45                 ; e E</code></pre>
 
 <footer>
   <div class="wrap">
-    <p>XTJSON specification draft 0.6 · <a href="https://github.com/cwkr/xtjson">github.com/cwkr/xtjson</a></p>
+    <p>XTJSON specification draft 0.7 · <a href="https://github.com/cwkr/xtjson">github.com/cwkr/xtjson</a></p>
   </div>
 </footer>
 

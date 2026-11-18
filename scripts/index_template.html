@@ -81,7 +81,7 @@
     <h3>directive</h3>
     <p>A <dfn>directive</dfn> is a statement at the start of the document. The <code>%</code> and the name of the directive are written without white space between them. Directives are separated like items, and a separator also follows the last one. There are exactly three directives; any other is an error. The values of directives are always checked like strict mode checks names and strings: duplicate names, surrogates and noncharacters are errors there. A directive has no effect on the directives before it.</p>
     <p><code>%define: nil = null</code> defines a <a href="#named-value">named value</a>. The value can be any value, including an object or an array, and can use the named values defined before it. A named value can be defined only once, and <code>true</code>, <code>false</code> and <code>null</code> cannot be redefined.</p>
-    <p><code>%version: '0.6'</code> states the version of the specification that the document is written for; a parser may reject a version that it does not support. With an identifier, as in <code>%version: schema = '2026.05.01b'</code>, it states the version of something else, as information for the application. The value is a string or a number, also with a suffix or as a named value, for example <code>%version: windows = 2k</code>; each version is stated at most once.</p>
+    <p><code>%version: '0.7'</code> states the version of the specification that the document is written for; a parser may reject a version that it does not support. With an identifier, as in <code>%version: schema = '2026.05.01b'</code>, it states the version of something else, as information for the application. The value is a string or a number, also with a suffix or as a named value, for example <code>%version: windows = 2k</code>; each version is stated at most once.</p>
     <p><code>%strict: true</code> makes the parser read the content of the document in <a href="#strict-mode">strict mode</a>. The value is <code>true</code> or <code>false</code>, also as a named value, and <code>%strict</code> occurs at most once. If the application has requested strict mode, <code>%strict: false</code> is an error.</p>
     <div class="diagram">{{rr:directive}}</div>
   </section>
@@ -179,26 +179,25 @@
 
   <section class="form" id="suffix">
     <h3>suffix</h3>
-    <p>A <dfn>suffix</dfn> directly after the last digit stands for a conversion that turns the number into another number. It consists of the same characters as an <a href="#identifier">identifier</a>, with a restricted first character. Case is significant and the longest match applies.</p>
+    <p>A <dfn>suffix</dfn> directly after the last digit stands for a conversion that turns the number into another number. The suffixes are a fixed list. Each has exactly one notation, in lower case, and the longest match applies: <code>10min</code> carries the suffix <code>min</code>, not <code>m</code>.</p>
     <div class="diagram">{{rr:suffix}}</div>
-    <p>The first character cannot be <code>_</code>, and it cannot be <code>a</code> to <code>f</code>, <code>o</code> or <code>x</code> in either case, so a suffix is never confused with a hexadecimal digit, an exponent, a number prefix or digit grouping.</p>
-    <p>All suffixes are predefined and cannot be changed; the application cannot add any. A suffix that is not in this table is an error:</p>
+    <p>The suffix <code>n</code> is permitted only after an integer, not after a number with a fraction part or an exponent: <code>10n</code> and <code>0xFFn</code> are valid, <code>1.5n</code> and <code>1e3n</code> are errors. A character directly after a suffix begins a new token that needs a separator, so <code>10kbs</code> is an error.</p>
+    <p>All suffixes are predefined and cannot be changed; the application cannot add any. Any other notation after a number is an error:</p>
     <div class="table"><table>
       <thead>
         <tr><th>Suffix</th><th>Conversion</th><th>Example</th><th>Result</th></tr>
       </thead>
       <tbody>
-        <tr><td><code>k</code>, <code>K</code></td><td>number times 1000</td><td><code>10k</code></td><td><code>10000</code></td></tr>
-        <tr><td><code>kb</code>, <code>Kb</code>, <code>kB</code>, <code>KB</code></td><td>number times 1024</td><td><code>4kb</code></td><td><code>4096</code></td></tr>
-        <tr><td><code>mb</code>, <code>Mb</code>, <code>mB</code>, <code>MB</code></td><td>number times 1048576</td><td><code>64mb</code></td><td><code>67108864</code></td></tr>
+        <tr><td><code>k</code></td><td>number times 1000</td><td><code>10k</code></td><td><code>10000</code></td></tr>
+        <tr><td><code>kb</code></td><td>number times 1024</td><td><code>4kb</code></td><td><code>4096</code></td></tr>
+        <tr><td><code>m</code></td><td>number times 1000000</td><td><code>2m</code></td><td><code>2000000</code></td></tr>
+        <tr><td><code>mb</code></td><td>number times 1048576</td><td><code>64mb</code></td><td><code>67108864</code></td></tr>
         <tr><td><code>ms</code></td><td>number divided by 1000</td><td><code>100ms</code></td><td><code>0.1</code></td></tr>
         <tr><td><code>s</code></td><td>none; the value remains unchanged</td><td><code>30s</code></td><td><code>30</code></td></tr>
         <tr><td><code>min</code></td><td>number times 60</td><td><code>5min</code></td><td><code>300</code></td></tr>
         <tr><td><code>h</code></td><td>number times 3600</td><td><code>2h</code></td><td><code>7200</code></td></tr>
         <tr><td><code>pct</code></td><td>number divided by 100</td><td><code>50pct</code></td><td><code>0.5</code></td></tr>
-        <tr><td><code>px</code></td><td>none; the value remains unchanged</td><td><code>12px</code></td><td><code>12</code></td></tr>
-        <tr><td><code>L</code></td><td>none; the value remains unchanged</td><td><code>100L</code></td><td><code>100</code></td></tr>
-        <tr><td><code>n</code></td><td>none; the value remains unchanged</td><td><code>10n</code></td><td><code>10</code></td></tr>
+        <tr><td><code>n</code></td><td>none; the value remains unchanged; only after an integer</td><td><code>10n</code></td><td><code>10</code></td></tr>
       </tbody>
     </table></div>
     <p>The result is exact: <code>0.1kb</code> is <code>102.4</code>.</p>

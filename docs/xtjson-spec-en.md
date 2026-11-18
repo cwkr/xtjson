@@ -1,6 +1,6 @@
 # XTJSON
 
-**Specification, draft 0.6** · Date: 17 November 2026
+**Specification, draft 0.7** · Date: 18 November 2026
 
 ## Contents
 
@@ -257,7 +257,7 @@ directive    = "%" identifier S ":" S [ identifier S "=" S ] value
 A directive is a statement at the start of the document. It begins with `%`, followed immediately by the name of the directive and a `:`. After that comes either an identifier, a `=` and a value, or a value alone.
 
 ```xtjson
-%version: '0.6', %define: empty = "", [null, 543, empty]
+%version: '0.7', %define: empty = "", [null, 543, empty]
 ```
 
 JSON equivalent:
@@ -283,7 +283,7 @@ Rules:
 `%define` defines a named value (6.4). The identifier before the `=` is the named value; the value after the `=` is assigned to it.
 
 ```xtjson
-%version: '0.6'
+%version: '0.7'
 %version: schema = '2026.05.01b'
 %define: nil = null
 # hypermedia reference
@@ -319,7 +319,7 @@ Rules:
 
 `%version` states for which version of this specification, or of another specification, the document is written.
 
-- **Version of this specification.** `%version: '0.6'` states the version of this specification that a parser must support in order to read the document. `%version: xtjson = '0.6'` has the same meaning. This specification states its version in the line below its title: this document has the version `0.6`.
+- **Version of this specification.** `%version: '0.7'` states the version of this specification that a parser must support in order to read the document. `%version: xtjson = '0.7'` has the same meaning. This specification states its version in the line below its title: this document has the version `0.7`.
 - **Further versions.** With another identifier before the `=`, the directive states the version of something else, for example of a schema: `%version: schema = '2026.05.01b'`. Such a statement is information for the application. It defines no named value.
 - **Value.** The value MUST be a string or a number. A number can carry a suffix (9.5), and a named value can be used whose value is a string or a number: `%version: windows = 2k` states the version `2000`. `true`, `false`, `null`, an object, an array, and a named value with such a value are an error. A string is RECOMMENDED, because a number distinguishes neither `0.1` from `0.10` nor `2k` from `2000`.
 - **Only once.** Each version MUST be stated at most once. Two `%version` without identifier, one without identifier and one with `xtjson`, and two with the same identifier are therefore an error.
@@ -585,7 +585,8 @@ JSON equivalent:
 ## 9. Numbers
 
 ```abnf
-number   = [ minus ] ( hex-int / oct-int / bin-int / decimal ) [ suffix ]
+number   = [ minus ] ( ( hex-int / oct-int / bin-int / decimal ) [ suffix ]
+                     / ( hex-int / oct-int / bin-int / int ) int-suffix )
 ```
 
 ### 9.1 Decimal numbers
@@ -653,44 +654,43 @@ Like [RFC8259] and [ECMA-404], XTJSON does not prescribe a number type; implemen
 ### 9.5 Number suffixes
 
 ```abnf
-suffix        = suffix-start *id-continue
-suffix-start  = %x67-6E / %x70-77 / %x79-7A /     ; g-n p-w y z
-                %x47-4E / %x50-57 / %x59-5A /     ; G-N P-W Y Z
-                "$"
+suffix      = %x6B / %x6B.62 / %x6D /     ; k kb m
+              %x6D.62 / %x6D.73 /         ; mb ms
+              %x6D.69.6E / %x73 / %x68 /  ; min s h
+              %x70.63.74                  ; pct
+int-suffix  = %x6E                        ; n
 ```
 
-A suffix may be appended to a number. The suffix stands for a conversion: it is applied to the value of the number including the sign and yields a number. In the JSON equivalent, the result appears in place of the number with the suffix. All suffixes are predefined; the table in this section lists them completely.
+A suffix may be appended to a number. The suffix stands for a conversion: it is applied to the value of the number including the sign and yields a number. In the JSON equivalent, the result appears in place of the number with the suffix. All suffixes are predefined; the rules `suffix` and `int-suffix` and the table in this section list them completely.
 
 **Notation**
 
 - The suffix follows the last digit immediately. White space, comments and `_` between the number and the suffix are an error.
-- A suffix consists of the same characters as an identifier (7.2): it begins with an ASCII letter or `$`; after that, ASCII digits and `_` are permitted as well. Its length is not limited.
-- In addition: no suffix begins with `a` to `f` (hexadecimal digits; `e` also introduces the exponent) or with `o` or `x` (number prefixes `0o` and `0x`), in either case.
-- Case is significant: `k` and `K` are two different suffixes, as are `mb`, `Mb`, `mB` and `MB`. `L` is a suffix, `l` is not.
-- The longest match applies: all letters, digits, `_` and `$` that follow its first character immediately belong to the suffix. `10kb` carries the suffix `kb`, not `k` followed by `b`. `10kbs` carries the suffix `kbs` and `10k5` the suffix `k5`; neither exists.
-- Unlike an identifier, a suffix does not begin with `_`. A `_` immediately after a digit is therefore always digit grouping (9.3) or an error: `1_0` is the number 10, `10_k` is an error.
-- Suffixes are permitted on all number forms, including after an exponent and on hexadecimal, octal and binary numbers: `1e3k`, `0x10kb`.
+- Every suffix has exactly one notation, in lower case letters. Case is significant: `10K`, `64MB` and `5Min` are errors.
+- The longest match applies: `10kb` carries the suffix `kb`, not `k` followed by `b`; likewise `10mb`, `10ms` and `10min` carry the suffixes `mb`, `ms` and `min`, not `m`.
+- The suffix ends the number. A letter, digit, `_` or `$` immediately after it does not belong to it but begins a new token, which needs a separator according to 7.3. `10kbs`, `10k5` and `10mi` are therefore errors, and so is `10_k`, because a `_` after a digit is digit grouping (9.3).
+- `n` is permitted only after an integer, that is after a decimal number without fraction part and exponent or after a hexadecimal, octal or binary number (`10n`, `-3n`, `0xFFn`). `1.5n`, `1.0n` and `1e3n` are errors.
+- All other suffixes are permitted on all number forms, including after an exponent and on hexadecimal, octal and binary numbers: `1e3k`, `0x10kb`.
 
 **Overview of the suffixes**
 
 | Suffix | Conversion | Example | Result |
 |---|---|---|---|
-| `k`, `K` | number times 1000 | `10k` | `10000` |
-| `kb`, `Kb`, `kB`, `KB` | number times 1024 | `4kb` | `4096` |
-| `mb`, `Mb`, `mB`, `MB` | number times 1048576 | `64mb` | `67108864` |
+| `k` | number times 1000 | `10k` | `10000` |
+| `kb` | number times 1024 | `4kb` | `4096` |
+| `m` | number times 1000000 | `2m` | `2000000` |
+| `mb` | number times 1048576 | `64mb` | `67108864` |
 | `ms` | number divided by 1000 | `100ms` | `0.1` |
 | `s` | none; the value remains unchanged | `30s` | `30` |
 | `min` | number times 60 | `5min` | `300` |
 | `h` | number times 3600 | `2h` | `7200` |
 | `pct` | number divided by 100 | `50pct` | `0.5` |
-| `px` | none; the value remains unchanged | `12px` | `12` |
-| `L` | none; the value remains unchanged | `100L` | `100` |
-| `n` | none; the value remains unchanged | `10n` | `10` |
+| `n` | none; the value remains unchanged; only after an integer | `10n` | `10` |
 
-- The table is exhaustive. A suffix that is not listed in it is an error (`10q`, `10m`, `10MS`).
+- The table is exhaustive. Any other notation after a number is an error (`10q`, `10K`, `12px`).
 - The suffixes MUST NOT be redefined, overridden or removed. A parser MUST NOT know further suffixes or accept any from the application.
-- The result is the exact product or the exact quotient. In the JSON equivalent its decimal representation appears: `1.5k` yields `1500`, `0.5kb` yields `512`, `0.1kb` yields `102.4`, `-2k` yields `-2000`, `0x10kb` yields `16384`, `1.5h` yields `5400`, `1ms` yields `0.001`, `12.5pct` yields `0.125`.
-- For `s`, `px`, `L` and `n` the result is the value of the number itself: `12px` and `12` denote the same value. The suffix contributes no information to the value of the document.
+- The result is the exact product or the exact quotient. In the JSON equivalent its decimal representation appears: `1.5k` yields `1500`, `0.5kb` yields `512`, `0.1kb` yields `102.4`, `-2k` yields `-2000`, `2.5m` yields `2500000`, `0x10kb` yields `16384`, `1.5h` yields `5400`, `1ms` yields `0.001`, `12.5pct` yields `0.125`.
+- For `s` and `n` the result is the value of the number itself: `30s` and `30` denote the same value. The suffix contributes no information to the value of the document.
 - `ms`, `s`, `min` and `h` convert a time into seconds.
 - The result is always a number. A suffix cannot produce a string or any other data type.
 
@@ -704,11 +704,11 @@ Example:
   delay: 250ms
   cache: 64mb
   block: 0x10kb
-  half: 0.5K
+  half: 0.5k
   ratio: 50pct
   surcharge: 110pct
-  width: 320px
-  counter: 100L
+  budget: 2.5m
+  counter: 100n
 }
 ```
 
@@ -725,7 +725,7 @@ JSON equivalent:
   "half": 500,
   "ratio": 0.5,
   "surcharge": 1.1,
-  "width": 320,
+  "budget": 2500000,
   "counter": 100
 }
 ```
@@ -749,7 +749,7 @@ An example with a side-by-side comparison is given in [Appendix B.1](#b1-complet
 
 ## 11. Conformance
 
-**Document.** A text is a conforming XTJSON document if it is encoded according to section 4, conforms to the rule `XTJSON-text`, each of its directives satisfies the rules of 6.5 to 6.8, each of its named values is defined (6.4), each of its number suffixes is listed in the table in 9.5 and, if it contains `%strict: true`, it satisfies the prohibitions of section 12. Every conforming document is **portable**: its value depends only on its text and on this specification, and every conforming parser can read it, unless a limit or a restriction of the application applies (section 11) or the parser does not support the version stated with `%version` (6.7).
+**Document.** A text is a conforming XTJSON document if it is encoded according to section 4, conforms to the rule `XTJSON-text`, each of its directives satisfies the rules of 6.5 to 6.8, each of its named values is defined (6.4) and, if it contains `%strict: true`, it satisfies the prohibitions of section 12. Every conforming document is **portable**: its value depends only on its text and on this specification, and every conforming parser can read it, unless a limit or a restriction of the application applies (section 11) or the parser does not support the version stated with `%version` (6.7).
 
 **Parser.** A conforming XTJSON parser
 
@@ -866,11 +866,13 @@ codepoint-escape = %x75 "{" *"0" ( 1*5HEXDIG / ( "10" 4HEXDIG ) ) "}"
 SQUOTE         = %x27                        ; '
 
 ; ---------- Numbers ----------
-number         = [ minus ] ( hex-int / oct-int / bin-int / decimal ) [ suffix ]
-suffix         = suffix-start *id-continue   ; only the suffixes from 9.5
-suffix-start   = %x67-6E / %x70-77 / %x79-7A /       ; g-n p-w y z
-                 %x47-4E / %x50-57 / %x59-5A /       ; G-N P-W Y Z
-                 "$"
+number         = [ minus ] ( ( hex-int / oct-int / bin-int / decimal ) [ suffix ]
+                           / ( hex-int / oct-int / bin-int / int ) int-suffix )
+suffix         = %x6B / %x6B.62 / %x6D /     ; k kb m
+                 %x6D.62 / %x6D.73 /         ; mb ms
+                 %x6D.69.6E / %x73 / %x68 /  ; min s h
+                 %x70.63.74                  ; pct
+int-suffix     = %x6E                        ; n, only after an integer (9.5)
 decimal        = int [ frac ] [ exp ]
 int            = zero / ( digit1-9 *( [ "_" ] DIGIT ) )
 frac           = "." digits
@@ -889,9 +891,9 @@ e              = %x65 / %x45                 ; e E
 
 Notes on tokenization (informative):
 
-- The longest match applies. `0x1e3` is a single hexadecimal number.
-- Four conditions apply in addition to the grammar: no decimal digit follows `null-escape`, the value in `codepoint-escape` is not in the range D800 to DFFF, every `suffix` is listed in the table in 9.5, and every `directive` satisfies the rules of 6.5 to 6.8.
-- Two values always need a separator according to 7.3. Character sequences such as `0755`, `1_`, `0b102`, `123abc` or `10_k` can therefore never be read as a valid sequence of several tokens and are errors.
+- The longest match applies. `0x1e3` is a single hexadecimal number, and `10min` is the number `10` with the suffix `min`.
+- Three conditions apply in addition to the grammar: no decimal digit follows `null-escape`, the value in `codepoint-escape` is not in the range D800 to DFFF, and every `directive` satisfies the rules of 6.5 to 6.8.
+- Two values always need a separator according to 7.3. Character sequences such as `0755`, `1_`, `0b102`, `123abc`, `10_k`, `10kbs` or `1.5n` can therefore never be read as a valid sequence of several tokens and are errors.
 - Whether a `named-value` is defined is decided not by the grammar but by the `%define` directives that precede it (6.4, 6.6).
 - The `%` of a directive and the following identifier form a single token; white space between them is an error.
 - A line comment always extends to the next line break: `eol` requires a `newline` after it, and `non-eol` excludes only U+000A and U+000D. Only at the end of the document may the line break be missing.
@@ -908,7 +910,7 @@ XTJSON document:
 
 ```xtjson
 # Service configuration – the root braces are omitted
-%version: '0.6'
+%version: '0.7'
 %strict: true
 %define: any_host = "0.0.0.0"
 
@@ -1014,7 +1016,7 @@ In the tables `⏎` stands for a line break.
 | `%define: a = 1` | only directives; the document has no content |
 | `a: 1` ⏎ `%define: b = 2` | directive after the first member |
 | `[%define: a = 1]` | directive not at the top level |
-| `%version: '0.6'` ⏎ `%version: xtjson = '0.6'` ⏎ `{}` | version of this specification stated twice |
+| `%version: '0.7'` ⏎ `%version: xtjson = '0.7'` ⏎ `{}` | version of this specification stated twice |
 | `%version: s = 1` ⏎ `%version: s = 2` ⏎ `{}` | version `s` stated twice |
 | `%version: [0, 6]` and `%version: true` | not a string and not a number |
 | `%define: nil = null` ⏎ `%version: nil` ⏎ `{}` | the value of the named value is not a string and not a number |
@@ -1076,12 +1078,12 @@ In the tables `⏎` stands for a line break.
 | `- 1` | white space between sign and digits |
 | `+1`, `.5`, `5.` | invalid as in JSON |
 | `NaN`, `Infinity` | not numbers; not defined as named values |
-| `10q`, `10m` and `10MS` | not a suffix from the table in 9.5; case is significant |
+| `10q`, `12px` and `100L` | not a suffix from the table in 9.5 |
+| `10K`, `64MB` and `5Min` | suffixes are written in lower case only |
 | `10 k` and `10_k` | white space or `_` between number and suffix |
-| `10kbs` and `10k5` | the suffixes `kbs` and `k5` do not exist |
-| `50%` | `%` is not permitted in a suffix |
-| `10ab` and `10e` | `a` to `f` cannot start a suffix; `e` introduces the exponent |
-| `10x` and `10oz` | `x` and `o` cannot start a suffix |
+| `10kbs`, `10k5` and `10mi` | further characters after the suffix without a separator |
+| `1.5n` and `1e3n` | `n` only after an integer without fraction part and exponent |
+| `50%` and `10e` | `%` is not a suffix; `e` introduces the exponent, which needs digits |
 
 ## Appendix C – Deliberately not included
 
@@ -1092,7 +1094,7 @@ The following extensions, known from other JSON dialects, are **not** part of XT
 - a second definition of the same named value, forward references to named values defined later, and recursive definitions
 - switching off strict mode that the application has requested; `%strict: false` is then an error
 - directives other than `%define`, `%version` and `%strict`, directives of the parser or of the application, and directives inside objects and arrays or after the start of the content
-- suffixes defined in the document or by the application; suffixes with characters other than those of an identifier (`50%`), or with white space before the suffix; suffixes that yield anything other than a number
+- suffixes defined in the document or by the application; further suffixes such as `px` or `L`; suffixes in upper case and other spellings of a suffix (`10K`, `64MB`); white space before the suffix; `n` after a number with a fraction part or an exponent; suffixes that yield anything other than a number
 - strings delimited by three quotation marks (`"""…"""`, `'''…'''`), heredocs and raw strings without escape sequences
 - a line continuation with white space between `\` and the line break
 - `\` before arbitrary characters (`\a` for `a`) and octal escape sequences (`\1`, `\012`)
@@ -1144,10 +1146,11 @@ Informative. Decisions at points where several solutions were possible, with the
 | Named values | only defined identifiers, no free text | A typo such as `ture` is reported as an error instead of being read as a string. |
 | Named values: result | any JSON value, including an object or an array | Parts that recur in a document, such as an address or a link, are written once. Because the value is copied to every position, the value of the document remains a tree; there are no references. |
 | `true`, `false`, `null` | predefined, not changeable | Otherwise a valid JSON text could change its meaning (K2). |
-| Suffix: permitted characters | the same as in an identifier, but not `_` and not `a`–`f`, `A`–`F`, `o`, `O`, `x`, `X` at the beginning | A single character rule for names, named values and suffixes. `a`–`f` are excluded as the first character because they are hexadecimal digits and `e` introduces the exponent; `o` and `x` because they introduce number prefixes. A forgotten digit part (`0x`) thus remains an error without a special rule. |
-| Suffix: `_` at the beginning | not permitted | A `_` after a digit thus always belongs to digit grouping. `1_0` cannot be read as `1` with the suffix `_0`, and the rules of 9.3 apply without exception. |
+| Suffixes: notation | a fixed list in the grammar; only lower case, exactly one notation per suffix | A reader recognizes every suffix without a list of alternative spellings, and a parser needs no character rules for suffixes. No suffix begins with `a`–`f`, `o`, `x` or `_`, so hexadecimal digits, the exponent, number prefixes and digit grouping remain unambiguous. Every other character after a number needs a separator and remains an error; later versions can therefore add suffixes without changing the value of a valid document. |
+| Suffix `m` | number times 1000000 | Large numbers are written as briefly as with `k`. The longest match distinguishes `m` from `mb`, `ms` and `min`. |
+| Suffix `n` | only after an integer, not after a fraction part or an exponent | As in ECMAScript, where `n` marks an integer literal (BigInt) and `1.5n` and `1e3n` are errors as well. |
 | Suffixes: where defined | exclusively by this specification; no custom suffixes | A number with a suffix has the same value with every parser, and a parser executes no conversion functions of the application. |
-| Suffixes without effect | `s`, `px`, `L` and `n` leave the value unchanged | A number can be written with its unit, or in a form familiar from other languages, without its value changing. |
+| Suffixes without effect | `s` and `n` leave the value unchanged | A time can be written with its unit, and an integer in the form familiar from ECMAScript, without its value changing. |
 | Suffix: result | always a number | A suffix converts; it does not create another data type. |
 | Suffix: precision | exact result | `0.1kb` should yield `102.4` and `100ms` should yield `0.1`, independent of the floating-point arithmetic of the parser. |
 | Definitions | only in the document, with `%define`; the application cannot define named values | The value of a document depends only on its text and this specification. Every document is portable, and two parsers cannot read the same document differently. A document cannot inject code. |
@@ -1183,6 +1186,14 @@ Informative. Decisions at points where several solutions were possible, with the
 - RFC 4648, "The Base16, Base32, and Base64 Data Encodings".
 
 ## Changes
+
+**Draft 0.7**
+
+- 9.5: the suffixes are fixed in the grammar (rules `suffix` and `int-suffix`). The rules on the characters of a suffix are dropped; a character directly after a suffix begins a new token.
+- 9.5: every suffix has a single notation, in lower case. The suffixes `K`, `Kb`, `kB`, `KB`, `Mb`, `mB`, `MB`, `px` and `L` are dropped.
+- 9.5: new suffix `m` (times 1000000).
+- 9.5: `n` is permitted only after an integer, not after a number with a fraction part or an exponent.
+- 9, 11 and Appendices A to D are adapted to these changes.
 
 **Draft 0.6**
 

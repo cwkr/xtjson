@@ -33,12 +33,17 @@ VALID = [
     ('%define: e = {}\n%define: a = []\n[e, a, {e: e}]', [{}, [], {'e': {}}]),
     ('%define: o = {a: 1, b: 2}\no', {'a': 1, 'b': 2}),
     ('%define: s = "\n  zwei\n  Zeilen\n  "\n[s]', ['zwei\nZeilen\n']),
-    # Suffixe: Faktor 1000, 1024, 1048576
-    ('10k', 10000), ('10K', 10000),
-    ('1kb', 1024), ('1Kb', 1024), ('1kB', 1024), ('1KB', 1024),
-    ('1mb', 1048576), ('1Mb', 1048576), ('1mB', 1048576), ('1MB', 1048576),
+    # Suffixe: Faktor 1000, 1024, 1000000, 1048576
+    ('10k', 10000), ('1kb', 1024), ('2m', 2000000), ('1mb', 1048576),
     ('1.5k', 1500), ('0.5kb', 512), ('0.1kb', 102.4), ('-2k', -2000),
-    ('0x10kb', 16384), ('0b11k', 3000), ('0o17K', 15000), ('0XffKB', 261120),
+    ('0x10kb', 16384), ('0b11k', 3000), ('0o17k', 15000), ('0Xffkb', 261120),
+    ('1.5m', 1500000), ('0.1m', 100000), ('0.000001m', 1), ('-3m', -3000000),
+    ('0x10m', 16000000), ('1e3m', 1000000000), ('2.5e-1m', 250000), ('0m', 0),
+    ('1_000m', 1000000000), ('0.000_000_1m', 0.1),
+    # laengste Uebereinstimmung: m, mb, ms, min
+    ('[1m, 1mb, 1ms, 1min]', [1000000, 1048576, 0.001, 60]),
+    ('[1m\n2m]', [1000000, 2000000]), ('a: 5m // Kommentar', {'a': 5000000}),
+    ('a: 1m# Kommentar', {'a': 1000000}), ('[1m/* x */,2k]', [1000000, 2000]),
     ('1e3k', 1000000), ('1_000k', 1000000), ('2.5e-1k', 250), ('0k', 0),
     ('64mb', 67108864), ('0.001k', 1), ('1.0005k', 1000.5),
     ('[10k\n20k]', [10000, 20000]), ('{a: 10k, b: 1mb}', {'a': 10000, 'b': 1048576}),
@@ -56,12 +61,12 @@ VALID = [
     ('100pct', 1), ('1e2pct', 1), ('0x10pct', 0.16), ('0pct', 0),
     # nur das Ergebnis zaehlt fuer den Zahlenbereich (9.4)
     ('4.4e308pct', 44 * 10 ** 305), ('-1e310ms', -10 ** 307),
-    # Suffixe ohne Wirkung
-    ('12px', 12), ('1.5px', 1.5), ('-12px', -12), ('0xFFpx', 255),
-    ('100L', 100), ('0xFFL', 255), ('-1L', -1), ('1_000L', 1000),
-    ('10n', 10), ('-3n', -3), ('0b101n', 5), ('1e3n', 1000.0),
+    # Suffixe ohne Wirkung; n nur nach einer ganzen Zahl
+    ('10n', 10), ('-3n', -3), ('0n', 0), ('-0n', 0), ('1_000n', 1000),
+    ('0b101n', 5), ('0xFFn', 255), ('-0x10n', -16), ('0o17n', 15), ('0XFFn', 255),
+    ('9007199254740993n', 9007199254740993), ('[1n,2n\n3n]', [1, 2, 3]),
     # ein '_' nach einer Ziffer ist immer Zifferngruppierung
-    ('1_0', 10), ('1_0k', 10000), ('1_0s', 10), ('0x1_0L', 16),
+    ('1_0', 10), ('1_0k', 10000), ('1_0s', 10), ('0x1_0n', 16), ('1_0m', 10000000),
     # benannte Werte und Suffixe zusammen
     (D + '[50pct, 10k, nil]', [0.5, 10000, None]),
     ('%define: t = 30s\n%define: g = 64mb\n[t, g]', [30, 67108864]),
@@ -78,31 +83,39 @@ INVALID = [
     '%define: ä = 1\n1', '%define: x = NaN\n1', '%define: x = undefined\n1',
     D + '%define: nil = null\n1', D + '%define: halb = 0.5\nhalb',
     '%define: a = [b]\n%define: b = 1\na', '%define: a = {x: a}\na',
-    # Suffixe, die es nicht gibt
-    '10q', '10m', '10M', '10kk', '10kbs', '10k5',
-    '10y', '10wx', '10g', '10mi', '10mins', '10sec',
-    '10hs', '10ss', '10px2', '10min5', '10pc', '10pcts',
-    '10kB1', '10k_', '10s_', '10_k', '1_s', '10$',
-    '10$s', '10_', '1__0', '1_', '10nn', '10LL',
+    # Suffixe, die es nicht gibt; Zeichen direkt nach einem Suffix
+    '10q', '10kk', '10kbs', '10k5', '10y', '10wx',
+    '10g', '10mi', '10mins', '10sec', '10hs', '10ss',
+    '10px', '10px2', '10min5', '10pc', '10pcts', '10kb1',
+    '10k_', '10s_', '10_k', '1_s', '10$', '10$s',
+    '10_', '1__0', '1_', '10nn', '10L', '10LL',
+    '10mm', '10mn', '10kn', '10nk', '10m5', '10mb_',
+    '10m$', '10ms5', '10mbs', '10msec', '10hh', '10pctx',
+    # entfallene Suffixe und Schreibweisen
+    '10K', '1Kb', '1kB', '1KB', '1Mb', '1mB', '1MB', '12px', '100L', '0xFFL',
+    # n nur nach einer ganzen Zahl
+    '1.5n', '1.0n', '0.0n', '-1.5n', '1e3n', '1E3n', '1e-3n', '1.5e3n', '1e0n',
+    '1_0.5n', '1.0_0n',
     # kein Suffix beginnt mit '_'
-    '10_s', '10_ms', '10_px', '0x10_k', '1e3_k', '1.5_k',
+    '10_s', '10_ms', '10_n', '0x10_k', '1e3_k', '1.5_k', '10_m',
     '[10_k]', '%define: _k = 1\n10_k', '%define: _ = 1\n[1_]',
     # Gross- und Kleinschreibung
     '10l', '10S', '10MS', '10Ms', '10mS', '10Min',
     '10MIN', '10H', '10PX', '10Px', '10pX', '10N',
-    '10PCT', '10Pct',
+    '10PCT', '10Pct', '10M', '10KB', '10Mb', '10mB', '10Kb', '10kB',
     # Zeichen, die kein Suffix einleiten oder nicht in einem Suffix stehen
     '10ab', '10e', '10E', '10Bk', '10bk', '10f',
     '10%', '50%', '10kb%', '10k%', '10pct%', '%',
     '10x', '10X', '10o', '10O', '10xy', '10oz',
     '0.0x', '1e3x', '10b',
     # Leerraum, fehlende Trenner, fehlende Ziffern
-    '10 k', '10 ms', '10 px', '100 pct', '10k k', '10ms ms',
+    '10 k', '10 ms', '10 m', '100 pct', '10k k', '10ms ms', '10 n', '10m m',
     '[10k 20k]', '[30s 5min]', '1.k', '1.s', 'k', 'ms',
     '0x', '0xk', '0o', '0Xy', '0O', '-0x', '0ok',
     '0b', '0B', '0xs', '0bn',
     # ein gleichnamiger benannter Wert macht ein Suffix nicht gueltig und umgekehrt
-    '%define: q = 2\n10q', D + '10nil', '[px]',
+    '%define: q = 2\n10q', D + '10nil', '[px]', '%define: px = 1\n12px',
+    '%define: L = 1\n[100L]', '%define: K = 1\n[10K]', '[m]', '[n]',
 ]
 
 

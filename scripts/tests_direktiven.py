@@ -64,7 +64,8 @@ VALID = [
     # %version: Zahlen mit Suffix und benannte Werte mit String oder Zahl
     ('%version: windows = 2k\n{}', {}),
     ('%version: 1.5pct\n{}', {}),
-    ('%version: 0x10L\n{}', {}),
+    ('%version: 0x10n\n{}', {}),
+    ('%version: 1.5m\n{}', {}),
     ('%define: v = 1\n%version: v\n{}', {}),
     ("%define: v = '1.4.0'\n%version: app = v\nversion: v", {'version': '1.4.0'}),
     ('%define: n = 2k\n%version: s = n\n[n]', [2000]),

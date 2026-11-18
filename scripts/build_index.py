@@ -234,7 +234,8 @@ DIAGRAMS = {
         Seq(N('line break'), Label('line continuation; yields nothing')))),
     'number': Seq(Opt(T('-')),
                   Choice(N('decimal'), N('integer')),
-                  Opt(N('suffix'))),
+                  Choice(Skip(), N('suffix'),
+                         Seq(T('n'), Label('only without fraction part and exponent')))),
     'decimal': Seq(
         Choice(T('0'), Seq(C('1–9'), Opt(Seq(underscore(), N('digits'))))),
         Opt(Seq(T('.'), N('digits'))),
@@ -244,8 +245,8 @@ DIAGRAMS = {
         Seq(Choice(T('x'), T('X')), Loop(C('0–9 a–f A–F'), underscore())),
         Seq(Choice(T('o'), T('O')), Loop(C('0–7'), underscore())),
         Seq(Choice(T('b'), T('B')), Loop(C('0 1'), underscore())))),
-    'suffix': Seq(Choice(C('g–n p–w y z G–N P–W Y Z'), T('$')),
-                  Many(Choice(C('a–z A–Z'), C('0–9'), T('_'), T('$')))),
+    'suffix': Choice(T('k'), T('kb'), T('m'), T('mb'), T('ms'), T('min'),
+                     T('s'), T('h'), T('pct')),
     'white space': Many(Choice(C('white space character'), N('line break'), N('comment'))),
     'comment': Choice(
         Seq(Choice(T('//'), T('#')), Many(C('any character except LF and CR'))),

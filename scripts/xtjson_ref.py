@@ -1,4 +1,4 @@
-"""Referenz-Parser fuer XTJSON (Entwurf 0.6) + Pruefung der Beispiele der Spezifikation."""
+"""Referenz-Parser fuer XTJSON (Entwurf 0.7) + Pruefung der Beispiele der Spezifikation."""
 import copy
 import json
 import re
@@ -22,16 +22,17 @@ CP = re.compile(r'\{0*([0-9A-Fa-f]{1,5}|10[0-9A-Fa-f]{4})\}')
 ESC = {'"': '"', "'": "'", '\\': '\\', '/': '/', 'b': '\b', 'f': '\f',
        'n': '\n', 'r': '\r', 't': '\t', 'v': '\v'}
 
-SUF = re.compile(r'[g-np-wyzG-NP-WYZ$][A-Za-z0-9_$]*')
+# Suffixe nach 9.5, fest in der Grammatik; laengste Uebereinstimmung zuerst.
+SUF = re.compile(r'min|ms|mb|m|kb|k|s|h|pct')
+INT_SUF = 'n'                                     # nur nach einer ganzen Zahl
 FIXED_VALUES = {'true': True, 'false': False, 'null': None}
 # Suffixe nach 9.5: Suffix -> (Faktor, Teiler). Die Tabelle ist abschliessend.
 SUFFIXES = {}
 for _names, _factor, _divisor in (
-        ('k K', 1000, 1), ('kb Kb kB KB', 1024, 1), ('mb Mb mB MB', 1048576, 1),
+        ('k', 1000, 1), ('kb', 1024, 1), ('m', 1000000, 1), ('mb', 1048576, 1),
         ('ms', 1, 1000), ('s', 1, 1), ('min', 60, 1), ('h', 3600, 1),
-        ('pct', 1, 100), ('px', 1, 1), ('L', 1, 1), ('n', 1, 1)):
-    for _n in _names.split():
-        SUFFIXES[_n] = (_factor, _divisor)
+        ('pct', 1, 100), ('n', 1, 1)):
+    SUFFIXES[_names] = (_factor, _divisor)
 
 
 # Grenze fuer die Groesse des Werts nach dem Ersetzen benannter Werte (11, 13):
@@ -217,6 +218,12 @@ def tokenize(s):
             if ms:
                 v = apply_suffix(t, v, ms.group())
                 i = ms.end()
+            elif s.startswith(INT_SUF, i):
+                if not isinstance(v, int):
+                    raise XTJSONError("Suffix 'n' nur nach einer ganzen Zahl (9.5)")
+                i += len(INT_SUF)
+            # Ein Zeichen direkt nach der Zahl beginnt ein neues Token (9.5);
+            # der Parser verlangt davor einen Trenner.
             toks.append(('num', v, nl))
             nl = False
         elif c == '%':                                 # Direktive (6.5): '%' und Name ohne Leerraum
@@ -457,7 +464,7 @@ def main(spec_path):
         '"\\\t"', '"a\x0bb"', '[1\x0b2]', '[1\x0c2]', '"a\\', '0XG', '0B2', '0O8',
         '"\\9"', 'a: 1\x0bb: 2', '[1\u20282]', '[1\u20292]', '[1\xa02]', '{a: 1 /* x\n */ b: 2}', '[1 /* \n */ 2]',
         '[1 // /* \n */ 2]', 'a: 1 /*\n*/ b: 2', '[1, // /* \n */ 2]', "[1,\u200b2]", "[1,\u00852]", "[1,\u180e2]", "[1\u30002]", "[1\ufeff2]", "a: 1\u2003b: 2",
-        '"\\u{110000}"', '"\\u{}"', '"\\u{1_F600}"', '"\\u{ 41 }"', '"\\U{41}"', '"\\u{41"', '"\\u{G}"', '"\\u{0000110000}"', '[_1]', '-', '--1', '0x1E+3', '[0xg]', '50%', '10q', '10kbs', '10_k', '10MS', '1_s', '{a 1}', '{"a" "b"}',
+        '"\\u{110000}"', '"\\u{}"', '"\\u{1_F600}"', '"\\u{ 41 }"', '"\\U{41}"', '"\\u{41"', '"\\u{G}"', '"\\u{0000110000}"', '[_1]', '-', '--1', '0x1E+3', '[0xg]', '50%', '10q', '10kbs', '10_k', '10MS', '1_s', '10K', '12px', '100L', '1.5n', '1e3n', '10mi', '10e', '{a 1}', '{"a" "b"}',
         '{a: 1 /* x */ b: 2}', 'a:', ': 1', '1: 2', '[1] [2]', '1 2', '{} {}',
         '"\\ x"', '"\\a"', '"\\N"', '"\\-"',
         '"\\X41"', '"\\ "', '"\\e"', '"\\U0041"', "'\\.'",
@@ -468,7 +475,7 @@ def main(spec_path):
         '%define: true = 1\n[true]', '%define: a = 1\n%define: a = 2\n[a]',
         '%define: a = b\n%define: b = 1\n[a]', '%define: a = [a]\na', '%define: a = 1 [a]',
         '%define: a = 1', 'a: 1\n%define: b = 2', '[%define: a = 1]',
-        "%version: '0.6'\n%version: xtjson = '0.6'\n{}", '%version: s = 1\n%version: s = 2\n{}',
+        "%version: '0.7'\n%version: xtjson = '0.7'\n{}", '%version: s = 1\n%version: s = 2\n{}',
         '%version: [0, 6]\n{}', '%version: true\n{}', '%define: nil = null\n%version: nil\n{}',
         '%strict: 1\n{}', "%strict: 'true'\n{}", '%strict: s = true\n{}', '%strict: true\n%strict: true\n{}',
         '%strict: true\n"x"', '%strict: true\n{a: 1, a: 2}', '%define: d = {a: 1, a: 2}\n[d]',
@@ -511,13 +518,13 @@ def main(spec_path):
         ('[1,\x0b\x0c2]', [1, 2]), ('\x0c{a\x0b:\x0c1}\x0b', {'a': 1}), ('[1 //k\x0b\x0c\n2]', [1, 2]),
         ('/**/1', 1), ('/***/1', 1), ('/* * / */1', 1), ('#!shebang\n[1]', [1]),
         ('"\\ud83d\\ude00"', '\U0001F600'), ('\ufeff{"a":1}', {'a': 1}),
-        ('5min', 300), ('100ms', 0.1), ('50pct', 0.5), ('12px', 12), ('100L', 100), ('10n', 10),
+        ('5min', 300), ('100ms', 0.1), ('50pct', 0.5), ('2m', 2000000), ('10n', 10), ('0xFFn', 255),
         ('30s', 30), ('2h', 7200), ('1_0', 10),
         ('[[1,2\n3],{a:[{}]}]', [[1, 2, 3], {'a': [{}]}]),
         ('"a\nb"', 'a\nb'), ("'a\nb'", 'a\nb'), ('"a\\\nb"', 'ab'), ('"a\\\r\nb"', 'ab'),
         ('"a\\\rb"', 'ab'), ("'a\\\n  b'", 'a  b'), ('a: "x\\\ny"\nb: 2', {'a': 'xy', 'b': 2}),
         ('"a\tb"', 'a\tb'), ('"a\\\\\nb"', 'a\\\nb'),
-        ('%define: a = 1\n[a]', [1]), ("%version: '0.6', %define: leer = \"\", [null, 543, leer]", [None, 543, '']),
+        ('%define: a = 1\n[a]', [1]), ("%version: '0.7', %define: leer = \"\", [null, 543, leer]", [None, 543, '']),
         ('%define: a = {b: [1]}\nx: a\ny: a', {'x': {'b': [1]}, 'y': {'b': [1]}}),
     ]
     for t, exp in valid:

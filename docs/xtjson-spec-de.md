@@ -1,6 +1,6 @@
 # XTJSON
 
-**Spezifikation, Entwurf 0.6** · Stand: 17. November 2026
+**Spezifikation, Entwurf 0.7** · Stand: 18. November 2026
 
 ## Inhalt
 
@@ -257,7 +257,7 @@ directive    = "%" identifier S ":" S [ identifier S "=" S ] value
 Eine Direktive ist eine Angabe am Dokumentanfang. Sie beginnt mit `%`, unmittelbar gefolgt vom Namen der Direktive und einem `:`. Danach folgt entweder ein Bezeichner, ein `=` und ein Wert oder nur ein Wert.
 
 ```xtjson
-%version: '0.6', %define: leer = "", [null, 543, leer]
+%version: '0.7', %define: leer = "", [null, 543, leer]
 ```
 
 JSON-Äquivalent:
@@ -283,7 +283,7 @@ Regeln:
 `%define` definiert einen benannten Wert (6.4). Der Bezeichner vor dem `=` ist der benannte Wert; ihm wird der Wert nach dem `=` zugeordnet.
 
 ```xtjson
-%version: '0.6'
+%version: '0.7'
 %version: schema = '2026.05.01b'
 %define: nil = null
 # Hypermedia-Verweis
@@ -319,7 +319,7 @@ Regeln:
 
 `%version` gibt an, für welche Version dieser oder einer anderen Spezifikation das Dokument geschrieben ist.
 
-- **Version dieser Spezifikation.** `%version: '0.6'` gibt die Version dieser Spezifikation an, die ein Parser unterstützen muss, um das Dokument zu lesen. `%version: xtjson = '0.6'` ist gleichbedeutend. Diese Spezifikation nennt ihre Version in der Zeile unter ihrem Titel: Dieses Dokument hat die Version `0.6`.
+- **Version dieser Spezifikation.** `%version: '0.7'` gibt die Version dieser Spezifikation an, die ein Parser unterstützen muss, um das Dokument zu lesen. `%version: xtjson = '0.7'` ist gleichbedeutend. Diese Spezifikation nennt ihre Version in der Zeile unter ihrem Titel: Dieses Dokument hat die Version `0.7`.
 - **Weitere Versionen.** Mit einem anderen Bezeichner vor dem `=` gibt die Direktive die Version von etwas anderem an, etwa eines Schemas: `%version: schema = '2026.05.01b'`. Eine solche Angabe ist eine Information für die Anwendung. Sie definiert keinen benannten Wert.
 - **Wert.** Der Wert MUSS ein String oder eine Zahl sein. Eine Zahl kann ein Suffix tragen (9.5), und ein benannter Wert kann verwendet werden, dessen Wert ein String oder eine Zahl ist: `%version: windows = 2k` gibt die Version `2000` an. `true`, `false`, `null`, ein Objekt, ein Array und ein benannter Wert mit einem solchen Wert sind ein Fehler. EMPFOHLEN wird ein String, weil eine Zahl weder `0.1` von `0.10` noch `2k` von `2000` unterscheidet.
 - **Nur einmal.** Jede Version MUSS höchstens einmal angegeben werden. Zwei `%version` ohne Bezeichner, eines ohne Bezeichner und eines mit `xtjson` sowie zwei mit demselben Bezeichner sind deshalb ein Fehler.
@@ -585,7 +585,8 @@ JSON-Äquivalent:
 ## 9. Zahlen
 
 ```abnf
-number   = [ minus ] ( hex-int / oct-int / bin-int / decimal ) [ suffix ]
+number   = [ minus ] ( ( hex-int / oct-int / bin-int / decimal ) [ suffix ]
+                     / ( hex-int / oct-int / bin-int / int ) int-suffix )
 ```
 
 ### 9.1 Dezimalzahlen
@@ -653,44 +654,43 @@ XTJSON legt wie [RFC8259] und [ECMA-404] keinen Zahlentyp fest; Implementierunge
 ### 9.5 Zahlen-Suffixe
 
 ```abnf
-suffix        = suffix-start *id-continue
-suffix-start  = %x67-6E / %x70-77 / %x79-7A /     ; g-n p-w y z
-                %x47-4E / %x50-57 / %x59-5A /     ; G-N P-W Y Z
-                "$"
+suffix      = %x6B / %x6B.62 / %x6D /     ; k kb m
+              %x6D.62 / %x6D.73 /         ; mb ms
+              %x6D.69.6E / %x73 / %x68 /  ; min s h
+              %x70.63.74                  ; pct
+int-suffix  = %x6E                        ; n
 ```
 
-An eine Zahl darf ein Suffix angehängt werden. Das Suffix steht für eine Umrechnung: Sie wird auf den Wert der Zahl einschließlich des Vorzeichens angewendet und ergibt eine Zahl. Im JSON-Äquivalent steht an der Stelle der Zahl mit Suffix das Ergebnis. Alle Suffixe sind vordefiniert; die Tabelle in diesem Abschnitt führt sie vollständig auf.
+An eine Zahl darf ein Suffix angehängt werden. Das Suffix steht für eine Umrechnung: Sie wird auf den Wert der Zahl einschließlich des Vorzeichens angewendet und ergibt eine Zahl. Im JSON-Äquivalent steht an der Stelle der Zahl mit Suffix das Ergebnis. Alle Suffixe sind vordefiniert; die Regeln `suffix` und `int-suffix` und die Tabelle in diesem Abschnitt führen sie vollständig auf.
 
 **Schreibweise**
 
 - Das Suffix folgt unmittelbar auf die letzte Ziffer. Leerraum, Kommentare und `_` zwischen Zahl und Suffix sind ein Fehler.
-- Ein Suffix besteht aus denselben Zeichen wie ein Bezeichner (7.2): Es beginnt mit einem ASCII-Buchstaben oder `$`; danach sind zusätzlich ASCII-Ziffern und `_` erlaubt. Seine Länge ist nicht begrenzt.
-- Zusätzlich gilt: Kein Suffix beginnt mit `a` bis `f` (Hexadezimalziffern; `e` leitet zudem den Exponenten ein) oder mit `o` oder `x` (Zahlenpräfixe `0o` und `0x`), jeweils in beiden Schreibweisen.
-- Groß- und Kleinschreibung zählen: `k` und `K` sind zwei verschiedene Suffixe, ebenso `mb`, `Mb`, `mB` und `MB`. `L` ist ein Suffix, `l` ist keines.
-- Es gilt die längste Übereinstimmung: Zum Suffix gehören alle Buchstaben, Ziffern, `_` und `$`, die unmittelbar auf sein erstes Zeichen folgen. `10kb` trägt das Suffix `kb`, nicht `k` gefolgt von `b`. `10kbs` trägt das Suffix `kbs` und `10k5` das Suffix `k5`; beide gibt es nicht.
-- Anders als ein Bezeichner beginnt ein Suffix nicht mit `_`. Ein `_` unmittelbar nach einer Ziffer ist deshalb immer Zifferngruppierung (9.3) oder ein Fehler: `1_0` ist die Zahl 10, `10_k` ist ein Fehler.
-- Suffixe sind an allen Zahlformen erlaubt, auch nach einem Exponenten und an hexadezimalen, oktalen und binären Zahlen: `1e3k`, `0x10kb`.
+- Jedes Suffix hat genau eine Schreibweise, in Kleinbuchstaben. Groß- und Kleinschreibung zählen: `10K`, `64MB` und `5Min` sind Fehler.
+- Es gilt die längste Übereinstimmung: `10kb` trägt das Suffix `kb`, nicht `k` gefolgt von `b`; ebenso tragen `10mb`, `10ms` und `10min` die Suffixe `mb`, `ms` und `min`, nicht `m`.
+- Das Suffix beendet die Zahl. Ein Buchstabe, eine Ziffer, `_` oder `$` unmittelbar danach gehört nicht dazu, sondern beginnt ein neues Token, das einen Trenner nach 7.3 braucht. `10kbs`, `10k5` und `10mi` sind deshalb Fehler, ebenso `10_k`, weil ein `_` nach einer Ziffer Zifferngruppierung ist (9.3).
+- `n` ist nur nach einer ganzen Zahl erlaubt, also nach einer Dezimalzahl ohne Nachkommateil und Exponent oder nach einer hexadezimalen, oktalen oder binären Zahl (`10n`, `-3n`, `0xFFn`). `1.5n`, `1.0n` und `1e3n` sind Fehler.
+- Alle anderen Suffixe sind an allen Zahlformen erlaubt, auch nach einem Exponenten und an hexadezimalen, oktalen und binären Zahlen: `1e3k`, `0x10kb`.
 
 **Übersicht der Suffixe**
 
 | Suffix | Umrechnung | Beispiel | Ergebnis |
 |---|---|---|---|
-| `k`, `K` | Zahl mal 1000 | `10k` | `10000` |
-| `kb`, `Kb`, `kB`, `KB` | Zahl mal 1024 | `4kb` | `4096` |
-| `mb`, `Mb`, `mB`, `MB` | Zahl mal 1048576 | `64mb` | `67108864` |
+| `k` | Zahl mal 1000 | `10k` | `10000` |
+| `kb` | Zahl mal 1024 | `4kb` | `4096` |
+| `m` | Zahl mal 1000000 | `2m` | `2000000` |
+| `mb` | Zahl mal 1048576 | `64mb` | `67108864` |
 | `ms` | Zahl geteilt durch 1000 | `100ms` | `0.1` |
 | `s` | keine; der Wert bleibt unverändert | `30s` | `30` |
 | `min` | Zahl mal 60 | `5min` | `300` |
 | `h` | Zahl mal 3600 | `2h` | `7200` |
 | `pct` | Zahl geteilt durch 100 | `50pct` | `0.5` |
-| `px` | keine; der Wert bleibt unverändert | `12px` | `12` |
-| `L` | keine; der Wert bleibt unverändert | `100L` | `100` |
-| `n` | keine; der Wert bleibt unverändert | `10n` | `10` |
+| `n` | keine; der Wert bleibt unverändert; nur nach einer ganzen Zahl | `10n` | `10` |
 
-- Die Tabelle ist abschließend. Ein Suffix, das nicht in ihr steht, ist ein Fehler (`10q`, `10m`, `10MS`).
+- Die Tabelle ist abschließend. Jede andere Schreibweise nach einer Zahl ist ein Fehler (`10q`, `10K`, `12px`).
 - Die Suffixe DÜRFEN NICHT umdefiniert, überschrieben oder entfernt werden. Ein Parser DARF KEINE weiteren Suffixe kennen und keine von der Anwendung annehmen.
-- Das Ergebnis ist das exakte Produkt oder der exakte Quotient. Im JSON-Äquivalent steht dessen Dezimaldarstellung: `1.5k` ergibt `1500`, `0.5kb` ergibt `512`, `0.1kb` ergibt `102.4`, `-2k` ergibt `-2000`, `0x10kb` ergibt `16384`, `1.5h` ergibt `5400`, `1ms` ergibt `0.001`, `12.5pct` ergibt `0.125`.
-- Bei `s`, `px`, `L` und `n` ist das Ergebnis der Wert der Zahl selbst: `12px` und `12` bezeichnen denselben Wert. Das Suffix trägt keine Information zum Wert des Dokuments bei.
+- Das Ergebnis ist das exakte Produkt oder der exakte Quotient. Im JSON-Äquivalent steht dessen Dezimaldarstellung: `1.5k` ergibt `1500`, `0.5kb` ergibt `512`, `0.1kb` ergibt `102.4`, `-2k` ergibt `-2000`, `2.5m` ergibt `2500000`, `0x10kb` ergibt `16384`, `1.5h` ergibt `5400`, `1ms` ergibt `0.001`, `12.5pct` ergibt `0.125`.
+- Bei `s` und `n` ist das Ergebnis der Wert der Zahl selbst: `30s` und `30` bezeichnen denselben Wert. Das Suffix trägt keine Information zum Wert des Dokuments bei.
 - `ms`, `s`, `min` und `h` rechnen eine Zeitangabe in Sekunden um.
 - Das Ergebnis ist immer eine Zahl. Ein Suffix kann keinen String und keinen anderen Datentyp erzeugen.
 
@@ -704,11 +704,11 @@ Beispiel:
   wartezeit: 250ms
   cache: 64mb
   block: 0x10kb
-  halb: 0.5K
+  halb: 0.5k
   quote: 50pct
   aufschlag: 110pct
-  breite: 320px
-  zaehler: 100L
+  budget: 2.5m
+  zaehler: 100n
 }
 ```
 
@@ -725,7 +725,7 @@ JSON-Äquivalent:
   "halb": 500,
   "quote": 0.5,
   "aufschlag": 1.1,
-  "breite": 320,
+  "budget": 2500000,
   "zaehler": 100
 }
 ```
@@ -749,7 +749,7 @@ Ein Beispiel mit Gegenüberstellung steht in [Anhang B.1](#b1-vollständiges-bei
 
 ## 11. Konformität
 
-**Dokument.** Ein Text ist ein konformes XTJSON-Dokument, wenn er nach Abschnitt 4 kodiert ist, der Regel `XTJSON-text` entspricht, jede seiner Direktiven die Regeln aus 6.5 bis 6.8 erfüllt, jeder seiner benannten Werte definiert ist (6.4), jedes seiner Zahlen-Suffixe in der Tabelle in 9.5 steht und es, wenn es `%strict: true` enthält, die Verbote aus Abschnitt 12 einhält. Jedes konforme Dokument ist **portabel**: Sein Wert hängt nur von seinem Text und von dieser Spezifikation ab, und jeder konforme Parser kann es lesen, sofern keine Grenze und keine Einschränkung der Anwendung greift (Abschnitt 11) und der Parser die mit `%version` angegebene Version unterstützt (6.7).
+**Dokument.** Ein Text ist ein konformes XTJSON-Dokument, wenn er nach Abschnitt 4 kodiert ist, der Regel `XTJSON-text` entspricht, jede seiner Direktiven die Regeln aus 6.5 bis 6.8 erfüllt, jeder seiner benannten Werte definiert ist (6.4) und es, wenn es `%strict: true` enthält, die Verbote aus Abschnitt 12 einhält. Jedes konforme Dokument ist **portabel**: Sein Wert hängt nur von seinem Text und von dieser Spezifikation ab, und jeder konforme Parser kann es lesen, sofern keine Grenze und keine Einschränkung der Anwendung greift (Abschnitt 11) und der Parser die mit `%version` angegebene Version unterstützt (6.7).
 
 **Parser.** Ein konformer XTJSON-Parser
 
@@ -866,11 +866,13 @@ codepoint-escape = %x75 "{" *"0" ( 1*5HEXDIG / ( "10" 4HEXDIG ) ) "}"
 SQUOTE         = %x27                        ; '
 
 ; ---------- Zahlen ----------
-number         = [ minus ] ( hex-int / oct-int / bin-int / decimal ) [ suffix ]
-suffix         = suffix-start *id-continue   ; nur die Suffixe aus 9.5
-suffix-start   = %x67-6E / %x70-77 / %x79-7A /       ; g-n p-w y z
-                 %x47-4E / %x50-57 / %x59-5A /       ; G-N P-W Y Z
-                 "$"
+number         = [ minus ] ( ( hex-int / oct-int / bin-int / decimal ) [ suffix ]
+                           / ( hex-int / oct-int / bin-int / int ) int-suffix )
+suffix         = %x6B / %x6B.62 / %x6D /     ; k kb m
+                 %x6D.62 / %x6D.73 /         ; mb ms
+                 %x6D.69.6E / %x73 / %x68 /  ; min s h
+                 %x70.63.74                  ; pct
+int-suffix     = %x6E                        ; n, nur nach einer ganzen Zahl (9.5)
 decimal        = int [ frac ] [ exp ]
 int            = zero / ( digit1-9 *( [ "_" ] DIGIT ) )
 frac           = "." digits
@@ -889,9 +891,9 @@ e              = %x65 / %x45                 ; e E
 
 Hinweise zur Zerlegung in Tokens (informativ):
 
-- Es gilt die längste Übereinstimmung. `0x1e3` ist eine einzige Hexadezimalzahl.
-- Vier Bedingungen gelten zusätzlich zur Grammatik: Auf `null-escape` folgt keine Dezimalziffer, der Wert in `codepoint-escape` liegt nicht im Bereich D800 bis DFFF, jedes `suffix` steht in der Tabelle in 9.5, und jede `directive` erfüllt die Regeln aus 6.5 bis 6.8.
-- Zwei Werte brauchen stets einen Trenner nach 7.3. Zeichenfolgen wie `0755`, `1_`, `0b102`, `123abc` oder `10_k` lassen sich deshalb nie als gültige Folge mehrerer Tokens lesen und sind Fehler.
+- Es gilt die längste Übereinstimmung. `0x1e3` ist eine einzige Hexadezimalzahl, und `10min` ist die Zahl `10` mit dem Suffix `min`.
+- Drei Bedingungen gelten zusätzlich zur Grammatik: Auf `null-escape` folgt keine Dezimalziffer, der Wert in `codepoint-escape` liegt nicht im Bereich D800 bis DFFF, und jede `directive` erfüllt die Regeln aus 6.5 bis 6.8.
+- Zwei Werte brauchen stets einen Trenner nach 7.3. Zeichenfolgen wie `0755`, `1_`, `0b102`, `123abc`, `10_k`, `10kbs` oder `1.5n` lassen sich deshalb nie als gültige Folge mehrerer Tokens lesen und sind Fehler.
 - Ob ein `named-value` definiert ist, entscheidet nicht die Grammatik, sondern die `%define`-Direktiven, die ihm vorausgehen (6.4, 6.6).
 - Das `%` einer Direktive und der folgende Bezeichner bilden ein einziges Token; Leerraum dazwischen ist ein Fehler.
 - Ein Zeilenkommentar reicht stets bis zum nächsten Zeilenumbruch: `eol` verlangt nach ihm ein `newline`, und `non-eol` schließt nur U+000A und U+000D aus. Nur am Dokumentende darf der Zeilenumbruch fehlen.
@@ -908,7 +910,7 @@ XTJSON-Dokument:
 
 ```xtjson
 # Dienstkonfiguration – die Wurzelklammern sind weggelassen
-%version: '0.6'
+%version: '0.7'
 %strict: true
 %define: any_host = "0.0.0.0"
 
@@ -1014,7 +1016,7 @@ In den Tabellen steht `⏎` für einen Zeilenumbruch.
 | `%define: a = 1` | nur Direktiven; das Dokument hat keinen Inhalt |
 | `a: 1` ⏎ `%define: b = 2` | Direktive nach dem ersten Member |
 | `[%define: a = 1]` | Direktive nicht auf oberster Ebene |
-| `%version: '0.6'` ⏎ `%version: xtjson = '0.6'` ⏎ `{}` | Version dieser Spezifikation zweimal angegeben |
+| `%version: '0.7'` ⏎ `%version: xtjson = '0.7'` ⏎ `{}` | Version dieser Spezifikation zweimal angegeben |
 | `%version: s = 1` ⏎ `%version: s = 2` ⏎ `{}` | Version `s` zweimal angegeben |
 | `%version: [0, 6]` und `%version: true` | kein String und keine Zahl |
 | `%define: nil = null` ⏎ `%version: nil` ⏎ `{}` | der Wert des benannten Werts ist kein String und keine Zahl |
@@ -1076,12 +1078,12 @@ In den Tabellen steht `⏎` für einen Zeilenumbruch.
 | `- 1` | Leerraum zwischen Vorzeichen und Ziffern |
 | `+1`, `.5`, `5.` | wie in JSON ungültig |
 | `NaN`, `Infinity` | keine Zahlen; als benannte Werte nicht definiert |
-| `10q`, `10m` und `10MS` | kein Suffix aus der Tabelle in 9.5; Groß- und Kleinschreibung zählen |
+| `10q`, `12px` und `100L` | kein Suffix aus der Tabelle in 9.5 |
+| `10K`, `64MB` und `5Min` | Suffixe werden nur in Kleinbuchstaben geschrieben |
 | `10 k` und `10_k` | Leerraum oder `_` zwischen Zahl und Suffix |
-| `10kbs` und `10k5` | die Suffixe `kbs` und `k5` gibt es nicht |
-| `50%` | `%` ist in einem Suffix nicht erlaubt |
-| `10ab` und `10e` | `a` bis `f` können kein Suffix einleiten; `e` leitet den Exponenten ein |
-| `10x` und `10oz` | `x` und `o` können kein Suffix einleiten |
+| `10kbs`, `10k5` und `10mi` | weitere Zeichen nach dem Suffix ohne Trenner |
+| `1.5n` und `1e3n` | `n` nur nach einer ganzen Zahl ohne Nachkommateil und Exponent |
+| `50%` und `10e` | `%` ist kein Suffix; `e` leitet den Exponenten ein, der Ziffern braucht |
 
 ## Anhang C – Bewusst nicht enthalten
 
@@ -1092,7 +1094,7 @@ Die folgenden, aus anderen JSON-Dialekten bekannten Erweiterungen gehören **nic
 - eine zweite Definition desselben benannten Werts, Vorwärtsbezüge auf später definierte benannte Werte und rekursive Definitionen
 - das Abschalten eines von der Anwendung verlangten Strict-Modus; `%strict: false` ist dann ein Fehler
 - andere Direktiven als `%define`, `%version` und `%strict`, Direktiven des Parsers oder der Anwendung sowie Direktiven innerhalb von Objekten und Arrays oder nach Beginn des Inhalts
-- im Dokument oder von der Anwendung definierte Suffixe; Suffixe mit anderen Zeichen als denen eines Bezeichners (`50%`) oder mit Leerraum vor dem Suffix; Suffixe, die etwas anderes als eine Zahl ergeben
+- im Dokument oder von der Anwendung definierte Suffixe; weitere Suffixe wie `px` oder `L`; Suffixe in Großbuchstaben und andere Schreibweisen eines Suffixes (`10K`, `64MB`); Leerraum vor dem Suffix; `n` nach einer Zahl mit Nachkommateil oder Exponent; Suffixe, die etwas anderes als eine Zahl ergeben
 - Strings mit drei Anführungszeichen als Begrenzer (`"""…"""`, `'''…'''`), Heredocs und Roh-Strings ohne Escape-Sequenzen
 - eine Zeilenfortsetzung mit Leerraum zwischen `\` und Zeilenumbruch
 - `\` vor beliebigen Zeichen (`\a` für `a`) und oktale Escape-Sequenzen (`\1`, `\012`)
@@ -1144,10 +1146,11 @@ Informativ. Festlegungen an Stellen, an denen mehrere Lösungen möglich waren, 
 | Benannte Werte | nur definierte Bezeichner, kein freier Text | Ein Tippfehler wie `ture` wird als Fehler gemeldet, statt als String gelesen zu werden. |
 | Benannte Werte: Ergebnis | jeder JSON-Wert, auch ein Objekt oder ein Array | Teile, die in einem Dokument wiederkehren, etwa eine Anschrift oder ein Verweis, werden einmal geschrieben. Weil der Wert an jede Stelle kopiert wird, bleibt der Wert des Dokuments ein Baum; Verweise gibt es nicht. |
 | `true`, `false`, `null` | fest vordefiniert, nicht änderbar | Sonst könnte ein gültiger JSON-Text seine Bedeutung ändern (K2). |
-| Suffix: erlaubte Zeichen | dieselben wie in einem Bezeichner; am Anfang jedoch nicht `_` und nicht `a`–`f`, `A`–`F`, `o`, `O`, `x`, `X` | Eine einzige Zeichenregel für Namen, benannte Werte und Suffixe. `a`–`f` scheiden als erstes Zeichen aus, weil sie Hexadezimalziffern sind und `e` den Exponenten einleitet; `o` und `x`, weil sie Zahlenpräfixe einleiten. Ein vergessener Ziffernteil (`0x`) bleibt so ohne Sonderregel ein Fehler. |
-| Suffix: `_` am Anfang | nicht erlaubt | Ein `_` nach einer Ziffer gehört so immer zur Zifferngruppierung. `1_0` lässt sich nicht als `1` mit dem Suffix `_0` lesen, und die Regeln aus 9.3 gelten ohne Ausnahme. |
+| Suffixe: Schreibweise | eine feste Liste in der Grammatik; nur Kleinbuchstaben, genau eine Schreibweise je Suffix | Ein Leser erkennt jedes Suffix ohne eine Liste abweichender Schreibweisen, und ein Parser braucht keine Zeichenregeln für Suffixe. Kein Suffix beginnt mit `a`–`f`, `o`, `x` oder `_`, sodass Hexadezimalziffern, Exponent, Zahlenpräfixe und Zifferngruppierung eindeutig bleiben. Jedes andere Zeichen nach einer Zahl braucht einen Trenner und bleibt ein Fehler; spätere Versionen können deshalb Suffixe hinzufügen, ohne den Wert eines gültigen Dokuments zu ändern. |
+| Suffix `m` | Zahl mal 1000000 | Große Zahlen werden ebenso kurz geschrieben wie mit `k`. Die längste Übereinstimmung unterscheidet `m` von `mb`, `ms` und `min`. |
+| Suffix `n` | nur nach einer ganzen Zahl, nicht nach einem Nachkommateil oder Exponenten | Wie in ECMAScript, wo `n` ein ganzzahliges Literal (BigInt) kennzeichnet und `1.5n` und `1e3n` ebenfalls Fehler sind. |
 | Suffixe: Festlegung | ausschließlich durch diese Spezifikation; keine eigenen Suffixe | Eine Zahl mit Suffix hat bei jedem Parser denselben Wert, und ein Parser führt keine Umrechnungsfunktionen der Anwendung aus. |
-| Suffixe ohne Wirkung | `s`, `px`, `L` und `n` lassen den Wert unverändert | Eine Zahl kann mit ihrer Einheit oder in einer aus anderen Sprachen gewohnten Form geschrieben werden, ohne dass sich ihr Wert ändert. |
+| Suffixe ohne Wirkung | `s` und `n` lassen den Wert unverändert | Eine Zeitangabe kann mit ihrer Einheit und eine ganze Zahl in der aus ECMAScript gewohnten Form geschrieben werden, ohne dass sich ihr Wert ändert. |
 | Suffix: Ergebnis | immer eine Zahl | Ein Suffix rechnet um; es erzeugt keinen anderen Datentyp. |
 | Suffix: Genauigkeit | exaktes Ergebnis | `0.1kb` soll `102.4` und `100ms` soll `0.1` ergeben, unabhängig von der Gleitkommaarithmetik des Parsers. |
 | Definitionen | nur im Dokument, mit `%define`; die Anwendung kann keine benannten Werte definieren | Der Wert eines Dokuments hängt nur von seinem Text und dieser Spezifikation ab. Jedes Dokument ist portabel, und zwei Parser können dasselbe Dokument nicht verschieden lesen. Ein Dokument kann keinen Code einschleusen. |
@@ -1183,6 +1186,14 @@ Informativ. Festlegungen an Stellen, an denen mehrere Lösungen möglich waren, 
 - RFC 4648, „The Base16, Base32, and Base64 Data Encodings“.
 
 ## Änderungen
+
+**Entwurf 0.7**
+
+- 9.5: Die Suffixe stehen fest in der Grammatik (Regeln `suffix` und `int-suffix`). Die Regeln zu den Zeichen eines Suffixes entfallen; ein Zeichen direkt nach einem Suffix beginnt ein neues Token.
+- 9.5: Jedes Suffix hat eine einzige Schreibweise, in Kleinbuchstaben. Die Suffixe `K`, `Kb`, `kB`, `KB`, `Mb`, `mB`, `MB`, `px` und `L` entfallen.
+- 9.5: Neues Suffix `m` (mal 1000000).
+- 9.5: `n` ist nur nach einer ganzen Zahl erlaubt, nicht nach einer Zahl mit Nachkommateil oder Exponent.
+- 9, 11 und Anhänge A bis D sind an diese Änderungen angepasst.
 
 **Entwurf 0.6**
 
