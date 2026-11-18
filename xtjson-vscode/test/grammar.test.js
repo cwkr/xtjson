@@ -62,54 +62,30 @@ describe('grammar', () => {
     assert.equal(scopeOf('{nil: nil}', 'nil'), 'support.type.property-name.xtjson');
     assert.deepEqual(tokens('{nil: nil}').filter(([t]) => t === 'nil').map(([, s]) => s), [
       'support.type.property-name.xtjson',
-      'variable.other.constant.xtjson',
+      'constant.language.xtjson',
     ]);
   });
 
-  test('named values', () => {
-    for (const v of ['true', 'false', 'null']) assert.equal(scopeOf(`a: ${v}`, v), 'constant.language.xtjson');
-    assert.equal(scopeOf('a: unknown', 'unknown'), 'variable.other.constant.xtjson');
-    assert.equal(scopeOf('a: True', 'True'), 'variable.other.constant.xtjson');
-  });
-
-  test('directives', () => {
-    const text = "%version: '0.6'\n%version: schema = 1, %define:nil=null\n%define: self = {\n  href: nil\n}\nself: self";
-    assert.deepEqual(tokens(text).filter(([t]) => t.startsWith('%')).map(([, s]) => s), [
-      'keyword.control.directive.xtjson',
-      'keyword.control.directive.xtjson',
-      'keyword.control.directive.xtjson',
-      'keyword.control.directive.xtjson',
-    ]);
-    assert.equal(scopeOf(text, 'schema'), 'support.type.property-name.xtjson');
-    assert.equal(scopeOf(text, '0.6'), 'string.quoted.single.xtjson');
-    assert.deepEqual(tokens(text).filter(([t]) => t === 'nil').map(([, s]) => s), [
-      'entity.name.constant.xtjson',
-      'variable.other.constant.xtjson',
-    ]);
-    assert.deepEqual(tokens(text).filter(([t]) => t === 'self').map(([, s]) => s), [
-      'entity.name.constant.xtjson',
-      'support.type.property-name.xtjson',
-      'variable.other.constant.xtjson',
-    ]);
-    assert.equal(scopeOf(text, '='), 'keyword.operator.assignment.xtjson');
-    // the identifier on a line of its own
-    assert.equal(scopeOf('%define:\n  a\n  = 1\n[a]', '='), 'keyword.operator.assignment.xtjson');
+  test('literals', () => {
+    for (const v of ['true', 'false', 'null', 'nil']) assert.equal(scopeOf(`a: ${v}`, v), 'constant.language.xtjson');
+    assert.equal(scopeOf('a: unknown', 'unknown'), 'variable.other.xtjson');
+    assert.equal(scopeOf('a: True', 'True'), 'variable.other.xtjson');
+    assert.equal(scopeOf('a: nullable', 'nullable'), 'variable.other.xtjson');
+    assert.equal(scopeOf('a = 1', '='), 'invalid.illegal.xtjson');
   });
 
   test('%strict', () => {
-    const text = '%define: yes = true\n%strict: yes\n{}';
+    const text = '%strict: true\n{}';
     assert.equal(scopeOf(text, '%strict'), 'keyword.control.directive.xtjson');
-    assert.deepEqual(tokens(text).filter(([t]) => t === 'yes').map(([, s]) => s), [
-      'entity.name.constant.xtjson',
-      'variable.other.constant.xtjson',
-    ]);
-    assert.equal(scopeOf('%strict: true\n[1]', 'true'), 'constant.language.xtjson');
-    assert.equal(scopeOf('%strict: true\n[1]', ':'), 'punctuation.separator.key-value.xtjson');
+    assert.equal(scopeOf(text, 'true'), 'constant.language.xtjson');
+    assert.equal(scopeOf(text, ':'), 'punctuation.separator.key-value.xtjson');
+    assert.equal(scopeOf('%strict:false,[1]', 'false'), 'constant.language.xtjson');
   });
 
   test('unknown directives and a lone % are marked as invalid', () => {
     assert.equal(scopeOf('%import: x = "a"', '%import'), 'invalid.illegal.unknown-directive.xtjson');
-    assert.equal(scopeOf('%Define: x = 1', '%Define'), 'invalid.illegal.unknown-directive.xtjson');
+    assert.equal(scopeOf('%define: x = 1', '%define'), 'invalid.illegal.unknown-directive.xtjson');
+    assert.equal(scopeOf("%version: '0.7'", '%version'), 'invalid.illegal.unknown-directive.xtjson');
     assert.equal(scopeOf('%defines: x = 1', '%defines'), 'invalid.illegal.unknown-directive.xtjson');
     assert.equal(scopeOf('%Strict: true', '%Strict'), 'invalid.illegal.unknown-directive.xtjson');
     assert.equal(scopeOf('%strictly: true', '%strictly'), 'invalid.illegal.unknown-directive.xtjson');

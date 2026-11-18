@@ -9,7 +9,7 @@
     { "include": "#property-names" },
     { "include": "#strings" },
     { "include": "#numbers" },
-    { "include": "#named-values" },
+    { "include": "#literals" },
     { "include": "#punctuation" }
   ],
   "repository": {
@@ -35,28 +35,9 @@
       ]
     },
     "directives": {
-      "comment": "Directives (6.5 to 6.8): '%' directly followed by the name, then ':', and optionally an identifier and '='. The identifier is recognized only on the line of the directive. Unknown directives and '%' without a name are errors; whether a directive stands at the start of the document is not checked.",
+      "comment": "The directive %strict (6.5): '%strict' as one token, then ':' and true or false. Other directives and '%' without a name are errors; whether the directive stands at the start of the document is not checked.",
       "patterns": [
         {
-          "match": "(%define)(?![A-Za-z0-9_$])(?:[ \\t]*(:)(?:[ \\t]*([A-Za-z_$][A-Za-z0-9_$]*)[ \\t]*(=))?)?",
-          "captures": {
-            "1": { "name": "keyword.control.directive.xtjson" },
-            "2": { "name": "punctuation.separator.key-value.xtjson" },
-            "3": { "name": "entity.name.constant.xtjson" },
-            "4": { "name": "keyword.operator.assignment.xtjson" }
-          }
-        },
-        {
-          "match": "(%version)(?![A-Za-z0-9_$])(?:[ \\t]*(:)(?:[ \\t]*([A-Za-z_$][A-Za-z0-9_$]*)[ \\t]*(=))?)?",
-          "captures": {
-            "1": { "name": "keyword.control.directive.xtjson" },
-            "2": { "name": "punctuation.separator.key-value.xtjson" },
-            "3": { "name": "support.type.property-name.xtjson" },
-            "4": { "name": "keyword.operator.assignment.xtjson" }
-          }
-        },
-        {
-          "comment": "%strict has no identifier; its value is true, false or a named value.",
           "match": "(%strict)(?![A-Za-z0-9_$])(?:[ \\t]*(:))?",
           "captures": {
             "1": { "name": "keyword.control.directive.xtjson" },
@@ -158,15 +139,16 @@
         }
       ]
     },
-    "named-values": {
+    "literals": {
       "patterns": [
         {
+          "comment": "The literals of 6.4; nil is the same value as null.",
           "name": "constant.language.xtjson",
-          "match": "(?<![A-Za-z0-9_$])(?:true|false|null)(?![A-Za-z0-9_$])"
+          "match": "(?<![A-Za-z0-9_$])(?:true|false|null|nil)(?![A-Za-z0-9_$])"
         },
         {
-          "comment": "A named value defined with %define (6.4); whether it is defined is not checked.",
-          "name": "variable.other.constant.xtjson",
+          "comment": "Any other identifier that is not followed by ':' on its line: a name whose ':' follows on a later line, or an error at a value position (6.4). A lexical grammar cannot tell them apart, so it is not marked as invalid.",
+          "name": "variable.other.xtjson",
           "match": "(?<![A-Za-z0-9_$])[A-Za-z_$][A-Za-z0-9_$]*"
         }
       ]
@@ -179,7 +161,7 @@
         { "name": "punctuation.definition.array.end.xtjson", "match": "\\]" },
         { "name": "punctuation.separator.key-value.xtjson", "match": ":" },
         { "name": "punctuation.separator.comma.xtjson", "match": "," },
-        { "comment": "'=' of a directive whose identifier is not on the line of its name.", "name": "keyword.operator.assignment.xtjson", "match": "=" }
+        { "comment": "'=' does not occur in XTJSON outside strings and comments.", "name": "invalid.illegal.xtjson", "match": "=" }
       ]
     }
   }

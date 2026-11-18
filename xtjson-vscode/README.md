@@ -7,10 +7,10 @@ of JSON for files maintained by people, in files with the extension
 - **Syntax highlighting** for comments (`//`, `#`, `/* */`), names with and
   without quotation marks, strings across several lines, escape
   sequences including the line continuation, numbers in all bases with digit grouping, number suffixes,
-  named values, and the directives `%define`, `%version` and `%strict`. Invalid escape
+  the literals `true`, `false`, `null` and `nil`, and the directive `%strict`. Invalid escape
   sequences, unescaped control characters in strings, three quotation marks
-  in a row, malformed numbers (`0755`, `10_k`, `10K`, `1.5n`) and unknown directives
-  are marked as errors.
+  in a row, malformed numbers (`0755`, `10_k`, `10K`, `1.5n`), `=` and unknown
+  directives such as `%define` are marked as errors.
 - **Folding** of objects, arrays, strings across several lines, block comments, runs of
   line comments, and regions between `// #region` and `// #endregion` (or
   `#region` and `#endregion`).
@@ -18,7 +18,7 @@ of JSON for files maintained by people, in files with the extension
   indentation settings. It uses `format` from
   [`@cwkr/xtjson`](https://github.com/cwkr/xtjson/tree/main/xtjson-js#readme): comments and the notation of names
   and values are kept, every member and array item is placed on a line of its
-  own, directives are laid out like members, and at most one blank line
+  own, the directive is laid out like a member, and at most one blank line
   between items is kept.
 - Comment toggling, bracket matching and auto-closing of brackets and quotes.
 
@@ -28,11 +28,11 @@ Implements the XTJSON specification, draft 0.7
 ## Limits
 
 - Highlighting and folding are lexical. They do not check the structure of
-  the document: an identifier at a value position is highlighted as a named
-  value whether or not a `%define` defines it, and a directive is
-  highlighted wherever it stands. The identifier before the `=` of a
-  directive is recognized only on the line of the directive. A name that
-  extends across several lines is highlighted as a string.
+  the document: an identifier at a value position other than a literal is
+  an error, but it is not marked as one, because it could also be a name
+  whose `:` follows on a later line; the directive is highlighted wherever
+  it stands. A name that extends across several lines is highlighted as a
+  string.
 - `format` does not validate the document. A valid document keeps its value;
   an invalid one is formatted as far as possible. Formatting a selection is
   not supported.
