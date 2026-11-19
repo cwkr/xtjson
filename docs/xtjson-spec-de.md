@@ -1,6 +1,6 @@
 # XTJSON
 
-**Spezifikation, Entwurf 0.7** · Stand: 18. November 2026
+**Spezifikation, Entwurf 0.8** · Stand: 19. November 2026
 
 ## Inhalt
 
@@ -45,9 +45,8 @@ Die Erweiterungen gegenüber JSON sind:
 | E9 | Zusätzliche Escape-Sequenzen: `\v`, `\0`, `\xHH`, `\u{…}` | [8.2](#82-escape-sequenzen) |
 | E10 | Zusätzliche Leerraumzeichen: alle Leerraumzeichen von ECMAScript | [5.1](#51-leerraum) |
 | E11 | Strings über mehrere Zeilen, mit Entfernen der Einrückung, und Zeilenfortsetzung mit `\` | [8.3](#83-zeilenumbrüche-in-strings) |
-| E12 | `nil` als andere Schreibweise für `null` | [6.3](#63-werte) |
-| E13 | Zahlen-Suffixe (`10k`, `64mb`, `50pct`) | [9.5](#95-zahlen-suffixe) |
-| E14 | Direktiven am Dokumentanfang: `%strict` und `%extends` | [6.4](#64-direktiven) |
+| E12 | Zahlen-Suffixe (`10k`, `64mb`, `50pct`) | [9.5](#95-zahlen-suffixe) |
+| E13 | Direktiven am Dokumentanfang: `%strict` und `%extends` | [6.4](#64-direktiven) |
 
 Nicht-Ziele: XTJSON führt keine neuen Datentypen, keine Ausdrücke und keine Verweise ein (siehe [Anhang C](#anhang-c--bewusst-nicht-enthalten)). XTJSON ist kein Austauschformat zwischen Maschinen; dafür bleibt JSON bzw. I-JSON das Mittel der Wahl.
 
@@ -69,7 +68,7 @@ Die Grammatik ist in ABNF [RFC5234] notiert. Die Regeln in den Abschnitten 5–9
 | maskiert, unmaskiert | maskiert: als Escape-Sequenz nach 8.2 geschrieben; unmaskiert: als das Zeichen selbst geschrieben |
 | Zeilenfortsetzung | ein `\` unmittelbar vor einem Zeilenumbruch in einem String; sie trägt nichts zum Wert bei (8.2) |
 | Direktive | eine Angabe am Dokumentanfang, die mit `%` beginnt: `%strict` oder `%extends` (6.4) |
-| Basiswert | der JSON-Wert, den ein Dokument mit `%extends` erweitert (6.6) |
+| Basiswert | ein JSON-Wert, den ein Dokument mit `%extends` erweitert (6.6) |
 | Resolver | eine Funktion der Anwendung, die zum String von `%extends` den Basiswert liefert (6.6) |
 | vordefiniert | durch diese Spezifikation festgelegt und nicht änderbar |
 | Strict-Modus | der Modus, in dem ein Parser zusätzlich die Verbote aus Abschnitt 12 durchsetzt |
@@ -83,17 +82,17 @@ Dieser Abschnitt ist normativ. Er legt fest, was „voll kompatibel“ zu [RFC82
 
 **K2 – Bedeutungserhalt.** Ein JSON-Text bezeichnet als XTJSON-Dokument denselben Wert wie als JSON-Text. Keine Erweiterung ändert die Bedeutung eines Textes, der bereits gültiges JSON ist.
 
-**K3 – Unverändertes Datenmodell.** Jedes XTJSON-Dokument besitzt ein JSON-Äquivalent ([Abschnitt 10](#10-abbildung-auf-json)), das seinen Wert festlegt. `nil` und Zahlen-Suffixe sind nur andere Schreibweisen für JSON-Werte. Die Direktive `%strict` trägt nichts zum Wert bei. Der Wert eines Dokuments mit `%extends` ist das Ergebnis seiner Zusammenführung mit seinem Basiswert, der selbst ein JSON-Wert ist (6.6). Ein Wert, der sich in JSON nicht darstellen lässt, lässt sich auch in XTJSON nicht darstellen.
+**K3 – Unverändertes Datenmodell.** Jedes XTJSON-Dokument besitzt ein JSON-Äquivalent ([Abschnitt 10](#10-abbildung-auf-json)), das seinen Wert festlegt. Zahlen-Suffixe sind nur andere Schreibweisen für JSON-Werte. Die Direktive `%strict` trägt nichts zum Wert bei. Der Wert eines Dokuments mit `%extends` ist das Ergebnis seiner Zusammenführung mit seinen Basiswerten, die selbst JSON-Werte sind (6.6). Ein Wert, der sich in JSON nicht darstellen lässt, lässt sich auch in XTJSON nicht darstellen.
 
 **K4 – Übernommene Semantik.** Alles, was diese Spezifikation nicht ausdrücklich erweitert, gilt wie in [RFC8259]: die Bedeutung von `true`, `false` und `null`, die Escape-Sequenzen von JSON, der Umgang mit Zahlenbereich und -genauigkeit, die Bedeutungslosigkeit der Member-Reihenfolge und der String-Vergleich.
 
-**K5 – Abgrenzung.** Ein XTJSON-Dokument, das mindestens eine der Erweiterungen E1–E14 nutzt, ist **kein** JSON-Text. Daraus folgt:
+**K5 – Abgrenzung.** Ein XTJSON-Dokument, das mindestens eine der Erweiterungen E1–E13 nutzt, ist **kein** JSON-Text. Daraus folgt:
 
 - Solche Dokumente DÜRFEN NICHT mit dem Medientyp `application/json` gekennzeichnet oder an Empfänger gesendet werden, die JSON erwarten.
 - Ein XTJSON-Parser ist kein konformer Prozessor im Sinne von [ECMA-404], weil dieser nicht konforme Eingaben nicht akzeptieren soll. Er ist jedoch ein zulässiger Parser im Sinne von [RFC8259] Abschnitt 9, der Parsern Erweiterungen ausdrücklich gestattet.
 - Wer JSON erzeugt, MUSS strikt die JSON-Grammatik einhalten ([RFC8259] Abschnitt 10). Die Brücke bildet die Abbildung in Abschnitt 10.
 
-Informativ – warum K1 und K2 gelten: Jede Erweiterung belegt ausschließlich Schreibweisen, die in JSON ein Syntaxfehler sind. `/`, `#`, `%`, `'` sowie die zusätzlichen Leerraumzeichen (5.1) kommen in JSON außerhalb von Strings nicht vor; die zusätzlichen Escape-Sequenzen sind in JSON ungültige `\`-Folgen; ein unmaskierter Zeilenumbruch oder Tabulator in einem String ist in JSON ungültig; ein Name ohne Anführungszeichen, ein Komma vor einer schließenden Klammer, ein `:` nach dem Wurzelwert, zwei Elemente ohne Komma sowie `0x`, `0o`, `0b` und `_` in Zahlen sind in JSON ungültig; ebenso ein Bezeichner an Wertposition außer `true`, `false` und `null` (also auch `nil`) und ein Suffix direkt nach einer Zahl. Die Werte `true`, `false` und `null` von JSON sind fest vordefiniert und nicht änderbar, und kein Suffix beginnt mit `e` oder `E`, sodass der Exponent einer JSON-Zahl nie als Suffix gelesen wird. Ein String ohne Zeilenumbruch behält seinen JSON-Wert, weil die Regeln aus 8.3 nur Strings verändern, die über mehrere Zeilen reichen. Die Zeilenumbruch-Regel (E5) greift nur dort, wo JSON zwingend ein Komma verlangt; überall sonst bleibt ein Zeilenumbruch bedeutungsloser Leerraum.
+Informativ – warum K1 und K2 gelten: Jede Erweiterung belegt ausschließlich Schreibweisen, die in JSON ein Syntaxfehler sind. `/`, `#`, `%`, `'` sowie die zusätzlichen Leerraumzeichen (5.1) kommen in JSON außerhalb von Strings nicht vor; die zusätzlichen Escape-Sequenzen sind in JSON ungültige `\`-Folgen; ein unmaskierter Zeilenumbruch oder Tabulator in einem String ist in JSON ungültig; ein Name ohne Anführungszeichen, ein Komma vor einer schließenden Klammer, ein `:` nach dem Wurzelwert, zwei Elemente ohne Komma sowie `0x`, `0o`, `0b` und `_` in Zahlen sind in JSON ungültig; ebenso ein Bezeichner an Wertposition außer `true`, `false` und `null` und ein Suffix direkt nach einer Zahl. Die Werte `true`, `false` und `null` von JSON sind fest vordefiniert und nicht änderbar, und kein Suffix beginnt mit `e` oder `E`, sodass der Exponent einer JSON-Zahl nie als Suffix gelesen wird. Ein String ohne Zeilenumbruch behält seinen JSON-Wert, weil die Regeln aus 8.3 nur Strings verändern, die über mehrere Zeilen reichen. Die Zeilenumbruch-Regel (E5) greift nur dort, wo JSON zwingend ein Komma verlangt; überall sonst bleibt ein Zeilenumbruch bedeutungsloser Leerraum.
 
 ## 4. Kodierung
 
@@ -199,23 +198,22 @@ Regeln:
 ```abnf
 value        = object / array / string / number /
                %x74.72.75.65 / %x66.61.6C.73.65 /   ; true false
-               %x6E.75.6C.6C / %x6E.69.6C           ; null nil
+               %x6E.75.6C.6C                        ; null
 ```
 
-Ein Wert ist ein Objekt oder ein Array (Abschnitt 7), ein String (Abschnitt 8), eine Zahl (Abschnitt 9) oder einer der vier Werte `true`, `false`, `null` und `nil`. `true`, `false` und `null` haben die Bedeutung, die sie in JSON haben. `nil` ist eine andere Schreibweise für `null` und bezeichnet denselben Wert.
+Ein Wert ist ein Objekt oder ein Array (Abschnitt 7), ein String (Abschnitt 8), eine Zahl (Abschnitt 9) oder einer der drei Werte `true`, `false` und `null`. Sie haben die Bedeutung, die sie in JSON haben.
 
-- **Fest.** `true`, `false`, `null` und `nil` sind vordefiniert. Sie DÜRFEN NICHT umdefiniert, überschrieben oder entfernt werden, und weitere Werte ohne Anführungszeichen gibt es nicht: Weder das Dokument noch die Anwendung können Werte definieren.
-- **Groß- und Kleinschreibung zählen.** Die vier Werte werden kleingeschrieben: `True`, `NULL` und `Nil` sind Fehler.
-- **Keine anderen Werte ohne Anführungszeichen.** Jeder andere Bezeichner an Wertposition ist ein Fehler (`farbe: rot`, `undefined`, `NaN`). Ein Parser DARF ihn NICHT ersatzweise als String oder auf andere Weise deuten.
-- **Namensposition.** An Namensposition sind `true`, `false`, `null` und `nil` Bezeichner wie alle anderen und ergeben gewöhnliche Namen (7.2): `{nil: nil}` hat den Namen `"nil"` und den Wert `null`.
-- **Abbildung.** Im JSON-Äquivalent wird `nil` durch `null` ersetzt (Abschnitt 10).
+- **Fest.** `true`, `false` und `null` sind vordefiniert. Sie DÜRFEN NICHT umdefiniert, überschrieben oder entfernt werden, und weitere Werte ohne Anführungszeichen gibt es nicht: Weder das Dokument noch die Anwendung können Werte definieren.
+- **Groß- und Kleinschreibung zählen.** Die drei Werte werden kleingeschrieben: `True`, `FALSE` und `NULL` sind Fehler.
+- **Keine anderen Werte ohne Anführungszeichen.** Jeder andere Bezeichner an Wertposition ist ein Fehler (`farbe: rot`, `nil`, `undefined`, `NaN`). Ein Parser DARF ihn NICHT ersatzweise als String oder auf andere Weise deuten.
+- **Namensposition.** An Namensposition sind `true`, `false` und `null` Bezeichner wie alle anderen und ergeben gewöhnliche Namen (7.2): `{null: null}` hat den Namen `"null"` und den Wert `null`.
 
 ```xtjson
 {
-  zweiter_vorname: nil
-  kinder: null
+  zweiter_vorname: null
   verheiratet: false
-  nil: "ein gewöhnlicher Name an Namensposition"
+  bestätigt: true
+  null: "ein gewöhnlicher Name an Namensposition"
 }
 ```
 
@@ -224,17 +222,18 @@ JSON-Äquivalent:
 ```json
 {
   "zweiter_vorname": null,
-  "kinder": null,
   "verheiratet": false,
-  "nil": "ein gewöhnlicher Name an Namensposition"
+  "bestätigt": true,
+  "null": "ein gewöhnlicher Name an Namensposition"
 }
 ```
 
 ### 6.4 Direktiven
 
 ```abnf
-directives   = strict-directive [ item-sep extends-directive ]
-             / extends-directive [ item-sep strict-directive ]
+directives   = extends-list [ item-sep strict-directive [ item-sep extends-list ] ]
+             / strict-directive [ item-sep extends-list ]
+extends-list = extends-directive *( item-sep extends-directive )
 ```
 
 Eine Direktive ist eine Angabe am Dokumentanfang. Es gibt genau zwei Direktiven: `%strict` (6.5) und `%extends` (6.6), zum Beispiel `%strict: true, %extends: './defaults.json'`.
@@ -244,7 +243,7 @@ Regeln:
 - **Schreibweise.** Eine Direktive beginnt mit `%`, unmittelbar gefolgt von ihrem Namen in Kleinbuchstaben; zusammen bilden sie ein einziges Token, und Leerraum und Kommentare nach dem `%` sind ein Fehler (`% strict`). Es folgen ein `:` und der Wert. Vor und nach dem `:` sind Leerraum und Kommentare wie zwischen beliebigen Tokens erlaubt (5.1), auch Zeilenumbrüche.
 - **Position.** Direktiven sind nur auf oberster Ebene erlaubt, vor dem Wurzelwert oder vor dem ersten Member des impliziten Wurzelobjekts. Eine Direktive innerhalb eines Objekts oder Arrays oder nach Beginn des Inhalts ist ein Fehler.
 - **Trenner.** Zwei Direktiven sowie die letzte Direktive und der Inhalt des Dokuments MÜSSEN wie zwei Elemente nach 7.3 getrennt werden: durch ein Komma oder durch Leerraum, der einen Zeilenumbruch enthält. `%strict: true [1]` ist ein Fehler.
-- **Reihenfolge und Anzahl.** `%strict` und `%extends` können in beliebiger Reihenfolge stehen. Jede von ihnen MUSS höchstens einmal vorkommen; ein zweites `%strict` oder `%extends` ist ein Fehler, auch wenn es denselben Wert angibt.
+- **Reihenfolge und Anzahl.** `%strict` MUSS höchstens einmal vorkommen; ein zweites `%strict` ist ein Fehler, auch wenn es denselben Wert angibt. `%extends` kann beliebig oft vorkommen (6.6). `%strict` kann vor, zwischen oder nach den `%extends` stehen.
 - **Keine anderen Direktiven.** Jeder andere Text, der mit `%` beginnt, ist ein Fehler (`%include: "a.xtj"`, `%Strict: true`). Ein Parser DARF KEINE weiteren Direktiven kennen oder von der Anwendung annehmen.
 
 ### 6.5 Die Direktive `%strict`
@@ -271,7 +270,7 @@ JSON-Äquivalent:
 
 Regeln:
 
-- **Wert.** Der Wert MUSS `true` oder `false` sein. Jeder andere Wert ist ein Fehler (`%strict: 1`, `%strict: 'true'`, `%strict: nil`).
+- **Wert.** Der Wert MUSS `true` oder `false` sein. Jeder andere Wert ist ein Fehler (`%strict: 1`, `%strict: 'true'`, `%strict: null`).
 - **`%strict: true`.** Ein Parser MUSS den Inhalt des Dokuments im Strict-Modus lesen, auch wenn die Anwendung ihn nicht verlangt hat.
 - **`%strict: false`.** Das Dokument verlangt den Strict-Modus nicht. Hat die Anwendung den Strict-Modus verlangt, widerspricht ihr das Dokument, und ein Parser MUSS es als Fehler ablehnen.
 - **Ohne `%strict`.** Ein Parser liest das Dokument im Strict-Modus, wenn die Anwendung ihn verlangt.
@@ -283,7 +282,7 @@ Regeln:
 extends-directive = %x25.65.78.74.65.6E.64.73 S ":" S string   ; %extends
 ```
 
-`%extends` nennt eine Basis für das Dokument: Das Dokument erweitert den Wert einer anderen Quelle, seinen **Basiswert**, nach den Regeln von JSON Merge Patch [RFC7396].
+`%extends` nennt eine Basis für das Dokument: Das Dokument erweitert den Wert einer anderen Quelle, seinen **Basiswert**, nach den Regeln von JSON Merge Patch [RFC7396]. Ein Dokument kann mehrere Basen nennen.
 
 Basiswert, etwa aus einer Datei `defaults.json`:
 
@@ -302,7 +301,7 @@ XTJSON-Dokument:
 
 server: {
   port: 8443
-  debug: nil
+  debug: null
 }
 tags: ['c']
 ```
@@ -319,16 +318,53 @@ JSON-Äquivalent:
 
 Regeln:
 
-- **Wert.** Der Wert MUSS ein String sein. Jeder andere Wert ist ein Fehler (`%extends: nil`, `%extends: ['a.json']`). Der String ist ein Verweis auf die Quelle des Basiswerts; er gehört nicht zum Wert des Dokuments.
+- **Wert.** Der Wert MUSS ein String sein. Jeder andere Wert ist ein Fehler (`%extends: null`, `%extends: ['a.json']`). Der String ist ein Verweis auf die Quelle des Basiswerts; er gehört nicht zum Wert des Dokuments.
 - **Verweis.** Diese Spezifikation legt nicht fest, wie der Verweis aufgelöst wird. EMPFOHLEN wird eine URI-Referenz [RFC3986], zum Beispiel ein relativer Pfad wie `'./defaults.json'` oder eine URL wie `'https://example.org/defaults.xtj'`; eine relative Referenz bezieht sich dann auf den Ort des Dokuments.
 - **Resolver.** Ein Parser erhält den Basiswert von einem Resolver der Anwendung: einer Funktion, die den Wert des Strings erhält und den Basiswert als JSON-Wert zurückgibt. Woher der Resolver die Quelle liest und in welchem Format die Quelle geschrieben ist, bleibt der Anwendung überlassen; die Quelle muss kein XTJSON-Dokument sein.
-- **Unterstützung.** Ein Parser DARF `%extends` unterstützen. Unterstützt er es nicht oder hat ihm die Anwendung keinen Resolver gegeben, ist `%extends` abgeschaltet, und der Parser MUSS ein Dokument mit `%extends` als Fehler ablehnen. Er MUSS das Dokument auch ablehnen, wenn der Resolver einen Fehler meldet oder einen Wert zurückgibt, der kein JSON-Wert ist.
-- **Zusammenführung.** Der Wert des Dokuments ist MergePatch(Basiswert, Wert des Inhalts). MergePatch(Ziel, Patch) ist wie in [RFC7396] festgelegt:
+- **Unterstützung.** Ein Parser DARF `%extends` unterstützen. Unterstützt er es nicht oder hat ihm die Anwendung keinen Resolver gegeben, ist `%extends` abgeschaltet, und der Parser MUSS ein Dokument mit `%extends` als Fehler ablehnen. Er MUSS das Dokument auch ablehnen, wenn der Resolver zu einem der Strings einen Fehler meldet oder einen Wert zurückgibt, der kein JSON-Wert ist.
+- **Zusammenführung.** Mit einem `%extends` ist der Wert des Dokuments MergePatch(Basiswert, Wert des Inhalts). MergePatch(Ziel, Patch) ist wie in [RFC7396] festgelegt:
   1. Ist Patch kein Objekt, ist das Ergebnis Patch; Ziel wird nicht verwendet.
   2. Andernfalls ist das Ergebnis ein Objekt: eine Kopie von Ziel, wenn Ziel ein Objekt ist, sonst ein leeres Objekt. Für jedes Member von Patch gilt: Ist sein Wert `null`, wird ein Member mit demselben Namen aus dem Ergebnis entfernt; andernfalls erhält das Member mit diesem Namen im Ergebnis den Wert MergePatch(seinen bisherigen Wert oder nichts, Wert des Members von Patch).
-- **Folgen.** Member des Basiswerts, die das Dokument nicht nennt, bleiben erhalten, und Objekte werden Member für Member in beliebiger Tiefe zusammengeführt. Arrays, Strings, Zahlen, `true` und `false` ersetzen einen Wert des Basiswerts als Ganzes; Arrays werden nicht zusammengeführt. Ein Member mit dem Wert `null` oder `nil` entfernt das Member mit demselben Namen; ein Member mit dem Wert `null` lässt sich in einem Dokument mit `%extends` daher nicht setzen. Doppelte Namen im Inhalt werden vor der Zusammenführung aufgelöst (7.2).
-- **Strict-Modus.** Im Strict-Modus gelten die Verbote zu Namen, String-Werten und zum Wurzelwert auch für das Ergebnis (Abschnitt 12).
+- **Mehrere Basen.** Enthält das Dokument mehrere `%extends`, wird der Resolver für jeden ihrer Strings in der Reihenfolge des Dokuments aufgerufen. Die Basiswerte werden in dieser Reihenfolge zusammengeführt: Jeder Basiswert wird als Merge Patch auf das Ergebnis der Basiswerte vor ihm angewendet, und der Wert des Inhalts wird zuletzt angewendet. Mit zwei Basen ist der Wert des Dokuments MergePatch(MergePatch(Basiswert 1, Basiswert 2), Wert des Inhalts). Derselbe String kann mehrmals vorkommen.
+- **Folgen.** Member des Basiswerts, die das Dokument nicht nennt, bleiben erhalten, und Objekte werden Member für Member in beliebiger Tiefe zusammengeführt. Arrays, Strings, Zahlen, `true` und `false` ersetzen einen Wert des Basiswerts als Ganzes; Arrays werden nicht zusammengeführt. Ein Member mit dem Wert `null` entfernt das Member mit demselben Namen; ein Member mit dem Wert `null` lässt sich in einem Dokument mit `%extends` daher nicht setzen. Dasselbe gilt für einen späteren Basiswert: Er hat Vorrang vor den früheren, und seine Member mit dem Wert `null` entfernen Member der früheren. Doppelte Namen im Inhalt werden vor der Zusammenführung aufgelöst (7.2).
+- **Strict-Modus.** Im Strict-Modus gelten die Verbote zu Namen, String-Werten und zum Wurzelwert auch für das Ergebnis, nachdem alle Basiswerte und der Inhalt zusammengeführt sind (Abschnitt 12).
 - **Verschachtelte Basen.** Der Basiswert kann selbst der Wert eines Dokuments mit `%extends` sein; ihn aufzulösen ist Aufgabe des Resolvers (Abschnitt 13).
+
+Basiswerte, etwa aus den Dateien `defaults.json` und `production.json`:
+
+```json
+{
+  "name": "demo",
+  "server": { "host": "0.0.0.0", "port": 8080, "debug": true },
+  "log": { "level": "debug" }
+}
+```
+
+```json
+{
+  "server": { "port": 443, "debug": null },
+  "log": { "level": "warn" }
+}
+```
+
+XTJSON-Dokument:
+
+```xtjson
+%extends: './defaults.json'
+%extends: './production.json'
+
+log: { file: '/var/log/demo.log' }
+```
+
+JSON-Äquivalent:
+
+```json
+{
+  "name": "demo",
+  "server": { "host": "0.0.0.0", "port": 443 },
+  "log": { "level": "warn", "file": "/var/log/demo.log" }
+}
+```
 
 ## 7. Objekte, Arrays und Trenner
 
@@ -355,8 +391,8 @@ name-start   = ALPHA / "_" / "$" / %xB5 /                 ; Buchstaben aus
 - Ein Bezeichner beginnt mit einem ASCII-Buchstaben, `_`, `$` oder einem Buchstaben aus dem Block Latin-1 Supplement: U+00B5 (Mikrozeichen), U+00C0 bis U+00D6, U+00D8 bis U+00F6 und U+00F8 bis U+00FF. Danach sind zusätzlich ASCII-Ziffern erlaubt. Auch ECMAScript lässt diese Buchstaben in Bezeichnern zu [ECMA-262]; die Ordinalzeichen U+00AA und U+00BA und der Mittelpunkt U+00B7, die ECMAScript ebenfalls zulässt, sind nicht erlaubt.
 - Als Name steht ein Bezeichner für exakt die geschriebene Zeichenfolge; Escape-Sequenzen gibt es in Bezeichnern nicht, und Namen werden nicht normalisiert: `é` als U+00E9 und als `e` gefolgt von U+0301 sind verschiedene Namen, und der zweite lässt sich nur in Anführungszeichen schreiben.
 - Jeder andere Name MUSS in Anführungszeichen stehen: Namen mit Leerzeichen, Bindestrichen, Punkten oder anderen Zeichen (zum Beispiel `€`, `×`, `π` oder kombinierenden Zeichen), Namen, die mit einer Ziffer beginnen, und der leere Name.
-- `true`, `false`, `null` und `nil` (6.3) sind als Bezeichner an Namensposition zulässig und ergeben dort gewöhnliche Namen (`"true"`, `"nil"`). An Namensposition steht nie ein Wert, daher ist das eindeutig.
-- An Wertposition sind ohne Anführungszeichen nur `true`, `false`, `null` und `nil` erlaubt (6.3). Frei wählbare Werte ohne Anführungszeichen gibt es nicht: `farbe: rot` ist ein Fehler.
+- `true`, `false` und `null` (6.3) sind als Bezeichner an Namensposition zulässig und ergeben dort gewöhnliche Namen (`"true"`, `"null"`). An Namensposition steht nie ein Wert, daher ist das eindeutig.
+- An Wertposition sind ohne Anführungszeichen nur `true`, `false` und `null` erlaubt (6.3). Frei wählbare Werte ohne Anführungszeichen gibt es nicht: `farbe: rot` ist ein Fehler.
 - Die Schreibweise ist für die Identität eines Namens unerheblich: `a`, `"a"`, `'a'` und `"\u0061"` bezeichnen denselben Namen.
 
 ```xtjson
@@ -723,34 +759,33 @@ Das **JSON-Äquivalent** eines XTJSON-Dokuments entsteht durch folgende Schritte
 4. **Namen:** Ein Bezeichner an Namensposition wird zum JSON-String mit derselben Zeichenfolge.
 5. **Strings:** Ein `'`-String wird zum `"`-String mit demselben Inhalt; unmaskierte `"` werden zu `\"`. Escape-Sequenzen, die JSON nicht kennt, werden in beiden String-Formen ersetzt: `\'` durch `'`, `\v` durch `\u000B`, `\0` durch `\u0000`, `\xHH` durch `\u00HH`, `\u{…}` durch die `\uXXXX`-Sequenz desselben Codepunkts, oberhalb von U+FFFF durch das entsprechende Surrogatpaar. Ein String mit Zeilenumbruch wird zum `"`-String, der seinen Wert nach 8.3 darstellt; Zeilenfortsetzungen entfallen dabei, und Zeichen, die in einem JSON-String nicht unmaskiert stehen dürfen (`"`, `\` und Steuerzeichen wie Zeilenumbruch und Tabulator), werden maskiert.
 6. **Zahlen:** Aus Dezimalzahlen werden alle `_` entfernt; die Schreibweise bleibt sonst unverändert. Hexadezimale, oktale und binäre Zahlen werden zur dezimalen Ganzzahl desselben Werts, bei vorangestelltem `-` mit führendem Minuszeichen. Eine Zahl mit Suffix wird durch das Ergebnis der Umrechnung ersetzt, geschrieben als JSON-Zahl (9.5).
-7. **`true`, `false`, `null` und `nil`:** Die ersten drei bleiben unverändert; `nil` wird durch `null` ersetzt (6.3).
-8. **Direktiven** werden entfernt, jeweils zusammen mit dem Trenner, der auf sie folgt (6.4).
-9. **Basiswert:** Enthält das Dokument `%extends`, wird der bis hierher erhaltene JSON-Text als Merge Patch auf den Basiswert angewendet (6.6); das JSON-Äquivalent ist der JSON-Text des Ergebnisses.
+7. **Direktiven** werden entfernt, jeweils zusammen mit dem Trenner, der auf sie folgt (6.4).
+8. **Basiswerte:** Enthält das Dokument `%extends`, werden seine Basiswerte in der Reihenfolge des Dokuments zusammengeführt, und der bis hierher erhaltene JSON-Text wird als Merge Patch auf sie angewendet (6.6); das JSON-Äquivalent ist der JSON-Text des Ergebnisses.
 
-Das JSON-Äquivalent ist bis auf Leerraum und die Wahl gleichwertiger Escape-Sequenzen eindeutig; für ein Dokument mit `%extends` gilt das bei gegebenem Basiswert. Enthält es ein Objekt mit doppelten Namen, gilt für dessen Wert die Regel aus 7.2: Das letzte Member gilt. Zwei XTJSON-Dokumente sind **gleichbedeutend**, wenn ihre JSON-Äquivalente denselben Wert bezeichnen. Ein Dokument, das bereits ein JSON-Text ist, ist sein eigenes JSON-Äquivalent (bis auf Leerraum).
+Das JSON-Äquivalent ist bis auf Leerraum und die Wahl gleichwertiger Escape-Sequenzen eindeutig; für ein Dokument mit `%extends` gilt das bei gegebenen Basiswerten. Enthält es ein Objekt mit doppelten Namen, gilt für dessen Wert die Regel aus 7.2: Das letzte Member gilt. Zwei XTJSON-Dokumente sind **gleichbedeutend**, wenn ihre JSON-Äquivalente denselben Wert bezeichnen. Ein Dokument, das bereits ein JSON-Text ist, ist sein eigenes JSON-Äquivalent (bis auf Leerraum).
 
 Ein Beispiel mit Gegenüberstellung steht in [Anhang B.1](#b1-vollständiges-beispiel).
 
 ## 11. Konformität
 
-**Dokument.** Ein Text ist ein konformes XTJSON-Dokument, wenn er nach Abschnitt 4 kodiert ist, der Regel `XTJSON-text` entspricht und es, wenn es `%strict: true` enthält, die Verbote aus Abschnitt 12 einhält. Ein konformes Dokument ohne `%extends` ist **portabel**: Sein Wert hängt nur von seinem Text und von dieser Spezifikation ab, und jeder konforme Parser kann es lesen, sofern keine Grenze und keine Einschränkung der Anwendung greift (Abschnitt 11). Der Wert eines Dokuments mit `%extends` hängt zusätzlich von seinem Basiswert ab, und nur ein Parser mit Resolver kann es lesen (6.6).
+**Dokument.** Ein Text ist ein konformes XTJSON-Dokument, wenn er nach Abschnitt 4 kodiert ist, der Regel `XTJSON-text` entspricht und es, wenn es `%strict: true` enthält, die Verbote aus Abschnitt 12 einhält. Ein konformes Dokument ohne `%extends` ist **portabel**: Sein Wert hängt nur von seinem Text und von dieser Spezifikation ab, und jeder konforme Parser kann es lesen, sofern keine Grenze und keine Einschränkung der Anwendung greift (Abschnitt 11). Der Wert eines Dokuments mit `%extends` hängt zusätzlich von seinen Basiswerten ab, und nur ein Parser mit Resolver kann es lesen (6.6).
 
 **Parser.** Ein konformer XTJSON-Parser
 
 - MUSS jedes konforme XTJSON-Dokument akzeptieren und den Wert seines JSON-Äquivalents liefern – damit auch jeden JSON-Text und jede I-JSON-Nachricht –, soweit nicht eine Grenze oder Einschränkung nach dem vierten Punkt greift oder das Dokument `%extends` enthält und `%extends` abgeschaltet ist (6.6);
-- MUSS jeden Text, der kein konformes XTJSON-Dokument ist, als Fehler ablehnen, insbesondere einen mit einem anderen Bezeichner als `true`, `false`, `null` und `nil` an Wertposition oder einer unbekannten Direktive, und DARF KEINE weiteren Syntaxerweiterungen stillschweigend akzeptieren;
-- MUSS die Werte `true`, `false`, `null` und `nil` (6.3), die Direktiven aus 6.4 und alle Suffixe aus 9.5 kennen. Er DARF NICHT zulassen, dass sie umdefiniert werden, und DARF KEINE Werte, Direktiven oder Suffixe von der Anwendung annehmen;
+- MUSS jeden Text, der kein konformes XTJSON-Dokument ist, als Fehler ablehnen, insbesondere einen mit einem anderen Bezeichner als `true`, `false` und `null` an Wertposition oder einer unbekannten Direktive, und DARF KEINE weiteren Syntaxerweiterungen stillschweigend akzeptieren;
+- MUSS die Werte `true`, `false` und `null` (6.3), die Direktiven aus 6.4 und alle Suffixe aus 9.5 kennen. Er DARF NICHT zulassen, dass sie umdefiniert werden, und DARF KEINE Werte, Direktiven oder Suffixe von der Anwendung annehmen;
 - DARF Grenzen für Dokumentgröße, Verschachtelungstiefe, Zahlenbereich und -genauigkeit sowie Stringlänge setzen und semantische Einschränkungen durchsetzen (etwa den Strict-Modus nach Abschnitt 12);
 - MUSS der Anwendung den Strict-Modus nach Abschnitt 12 anbieten und MUSS ein Dokument mit `%strict: true` im Strict-Modus lesen (6.5);
 - DARF `%extends` mit einem Resolver der Anwendung unterstützen (6.6).
 
 **Erzeuger.** Ein XTJSON-Erzeuger MUSS konforme XTJSON-Dokumente ausgeben. Jeder JSON-Erzeuger, der in UTF-8 ausgibt, ist damit auch ein XTJSON-Erzeuger. Ist der Empfänger ein Programm, SOLLTE JSON ausgegeben werden.
 
-**Konverter.** Ein Konverter von XTJSON nach JSON MUSS das JSON-Äquivalent nach Abschnitt 10 erzeugen; für ein Dokument mit `%extends` braucht er den Basiswert (6.6). Seine Ausgabe MUSS strikt der Grammatik von [RFC8259] entsprechen.
+**Konverter.** Ein Konverter von XTJSON nach JSON MUSS das JSON-Äquivalent nach Abschnitt 10 erzeugen; für ein Dokument mit `%extends` braucht er die Basiswerte (6.6). Seine Ausgabe MUSS strikt der Grammatik von [RFC8259] entsprechen.
 
 ## 12. Strict-Modus
 
-Im **Strict-Modus** setzt ein Parser über Abschnitt 4–9 hinaus die folgenden Verbote durch. Der Strict-Modus gilt, wenn die Anwendung ihn verlangt oder das Dokument `%strict: true` enthält (6.5). Die Verbote gelten für den Inhalt des Dokuments, den Teil nach den Direktiven. Für ein Dokument mit `%extends` gelten die Verbote zu Namen, String-Werten und zum Wurzelwert auch für das Ergebnis seiner Zusammenführung mit seinem Basiswert (6.6).
+Im **Strict-Modus** setzt ein Parser über Abschnitt 4–9 hinaus die folgenden Verbote durch. Der Strict-Modus gilt, wenn die Anwendung ihn verlangt oder das Dokument `%strict: true` enthält (6.5). Die Verbote gelten für den Inhalt des Dokuments, den Teil nach den Direktiven. Für ein Dokument mit `%extends` gelten die Verbote zu Namen, String-Werten und zum Wurzelwert auch für das Ergebnis seiner Zusammenführung mit seinen Basiswerten (6.6).
 
 - Namen und String-Werte DÜRFEN KEINE Surrogate und keine Unicode-Noncharacters enthalten, weder direkt noch als Escape-Sequenz. Ein einzelnes `"\uDEAD"` ist ungültig; ein korrektes Surrogatpaar ist zulässig.
 - Ein Objekt DARF KEINE doppelten Namen enthalten. Verglichen wird nach Auflösung aller Escape-Sequenzen und unabhängig von der Schreibweise des Namens (Bezeichner oder String in einer der Formen aus Abschnitt 8).
@@ -770,7 +805,7 @@ Die Empfehlungen aus [I-JSON] für Protokolle gelten unverändert auch für XTJS
 - **Ressourcengrenzen.** Tief verschachtelte Strukturen, sehr lange Strings oder Zahlen sowie nicht abgeschlossene Blockkommentare und Strings können Parser überlasten. Parser SOLLTEN Grenzen setzen (Abschnitt 11).
 - **Abweichende Interpretation.** Verarbeiten zwei Komponenten dasselbe Dokument unterschiedlich, kann das Prüfungen aushebeln. Das betrifft vor allem doppelte Namen, die andere JSON-Werkzeuge anders behandeln können als in 7.2 festgelegt, Zahlen außerhalb des exakten Bereichs und Dokumente mit `%extends`, deren Wert vom Resolver abhängt. Wo ein Dokument sicherheitsrelevante Entscheidungen steuert, wird der Strict-Modus (Abschnitt 12) EMPFOHLEN.
 - **Keine Definitionen.** Die Werte ohne Anführungszeichen, die Direktiven und die Umrechnungen der Suffixe legt allein diese Spezifikation fest; weder das Dokument noch die Anwendung können Werte definieren. Die Bedeutung eines Dokuments ohne `%extends` hängt deshalb nicht von der Konfiguration des Parsers ab, und ein Dokument kann keinen Code mitbringen.
-- **`%extends`.** Ein Dokument mit `%extends` lässt den Parser den Resolver der Anwendung mit einem String aus dem Dokument aufrufen. Ein Dokument aus einer nicht vertrauenswürdigen Quelle kann so das Lesen lokaler Dateien oder Anfragen über das Netz auslösen, etwa mit `'/etc/passwd'`, `'file:///…'` oder der Adresse eines Dienstes in einem internen Netz, und deren Inhalt wird Teil des Werts. Resolver SOLLTEN nur Quellen auflösen, die die Anwendung zulässt, SOLLTEN Zyklen erkennen, wenn ein Basiswert selbst aus einem Dokument mit `%extends` stammt, und SOLLTEN Anzahl und Größe der Quellen begrenzen. Wo Dokumente aus nicht vertrauenswürdigen Quellen stammen, SOLLTE `%extends` abgeschaltet oder der Resolver entsprechend eingeschränkt sein.
+- **`%extends`.** Ein Dokument mit `%extends` lässt den Parser den Resolver der Anwendung mit einem String aus dem Dokument aufrufen, einmal für jedes `%extends`. Ein Dokument aus einer nicht vertrauenswürdigen Quelle kann so das Lesen lokaler Dateien oder Anfragen über das Netz auslösen, etwa mit `'/etc/passwd'`, `'file:///…'` oder der Adresse eines Dienstes in einem internen Netz, und deren Inhalt wird Teil des Werts. Resolver SOLLTEN nur Quellen auflösen, die die Anwendung zulässt, SOLLTEN Zyklen erkennen, wenn ein Basiswert selbst aus einem Dokument mit `%extends` stammt, und SOLLTEN Anzahl und Größe der Quellen begrenzen. Wo Dokumente aus nicht vertrauenswürdigen Quellen stammen, SOLLTE `%extends` abgeschaltet oder der Resolver entsprechend eingeschränkt sein.
 - **Ähnliche Zeichen in Namen.** Bezeichner dürfen Buchstaben aus dem Block Latin-1 Supplement enthalten. Manche davon ähneln anderen Zeichen, etwa U+00B5 (Mikrozeichen) und U+03BC (griechisches kleines My), und Namen werden Codepunkt für Codepunkt ohne Normalisierung verglichen (7.2). Werkzeuge SOLLTEN auf Namen hinweisen, die sich nur in solchen Zeichen unterscheiden.
 - **Verwechslung mit JSON.** Ein XTJSON-Dokument, das als JSON ausgegeben wird, führt bei strikten Empfängern zu Fehlern und bei nachlässigen zu uneinheitlichem Verhalten. Deshalb die Abgrenzung in K5.
 - **Kommentare.** Kommentare gehen bei der Abbildung auf JSON verloren und werden von Programmen nicht gesehen. Unsichtbare Zeichen und Zeichen zur Steuerung der Schreibrichtung in Kommentaren und Strings können den angezeigten Text vom verarbeiteten abweichen lassen; Werkzeuge SOLLTEN darauf hinweisen.
@@ -790,8 +825,9 @@ XTJSON-text    = S [ directives item-sep ] ( value / member-list ) S [ line-comm
                                              ; member-list: implizites Wurzelobjekt
 
 ; ---------- Direktiven ----------
-directives     = strict-directive [ item-sep extends-directive ]
-               / extends-directive [ item-sep strict-directive ]
+directives     = extends-list [ item-sep strict-directive [ item-sep extends-list ] ]
+               / strict-directive [ item-sep extends-list ]
+extends-list   = extends-directive *( item-sep extends-directive )
 strict-directive  = %x25.73.74.72.69.63.74 S ":" S
                     ( %x74.72.75.65 / %x66.61.6C.73.65 )   ; %strict: true / false
 extends-directive = %x25.65.78.74.65.6E.64.73 S ":" S string   ; %extends
@@ -799,7 +835,7 @@ extends-directive = %x25.65.78.74.65.6E.64.73 S ":" S string   ; %extends
 ; ---------- Werte ----------
 value          = object / array / string / number /
                  %x74.72.75.65 / %x66.61.6C.73.65 /  ; true false
-                 %x6E.75.6C.6C / %x6E.69.6C          ; null nil (derselbe Wert)
+                 %x6E.75.6C.6C                       ; null
 
 ; ---------- Objekte ----------
 object         = "{" S [ member-list S ] "}"
@@ -877,7 +913,7 @@ Hinweise zur Zerlegung in Tokens (informativ):
 - Es gilt die längste Übereinstimmung. `0x1e3` ist eine einzige Hexadezimalzahl, und `10min` ist die Zahl `10` mit dem Suffix `min`.
 - Zwei Bedingungen gelten zusätzlich zur Grammatik: Auf die Escape-Sequenz `\0` folgt keine Dezimalziffer, und der Wert von `\u{…}` liegt nicht im Bereich D800 bis DFFF.
 - Zwei Werte brauchen stets einen Trenner nach 7.3. Zeichenfolgen wie `0755`, `1_`, `0b102`, `123abc`, `10_k`, `10kbs` oder `1.5n` lassen sich deshalb nie als gültige Folge mehrerer Tokens lesen und sind Fehler.
-- Ein Bezeichner wird mit der längsten Übereinstimmung gelesen. An Wertposition muss er `true`, `false`, `null` oder `nil` sein: `nullable` und `nil2` sind Fehler, nicht einer dieser Werte mit weiteren Zeichen danach.
+- Ein Bezeichner wird mit der längsten Übereinstimmung gelesen. An Wertposition muss er `true`, `false` oder `null` sein: `nullable` und `true2` sind Fehler, nicht einer dieser Werte mit weiteren Zeichen danach.
 - `%strict` und `%extends` sind jeweils ein einziges Token; Leerraum nach dem `%` ist ein Fehler.
 - Ein Zeilenkommentar reicht stets bis zum nächsten Zeilenumbruch: `eol` verlangt nach ihm ein `newline`, und `non-eol` schließt nur U+000A und U+000D aus. Nur am Dokumentende darf der Zeilenumbruch fehlen.
 - Die Folge CR LF ist immer ein einziger `newline`, nie zwei.
@@ -902,7 +938,7 @@ $schema: "https://example.org/schema/service.json"
 listen: {
   host: "0.0.0.0"
   port: 8080            // der Zeilenumbruch ersetzt das Komma
-  proxy: nil            // nil ist dasselbe wie null
+  proxy: null           // kein Proxy
   tls: false,           // Kommas bleiben erlaubt
 }
 
@@ -980,8 +1016,8 @@ In den Tabellen steht `⏎` für einen Zeilenumbruch.
 | `[,]` und `{,}` | Komma ohne vorangehendes Element |
 | `{a: 1} b: 2` | Text nach dem Wurzelwert |
 | `a: 1 }` | implizites Wurzelobjekt wird nicht mit `}` geschlossen |
-| `[abc]` | `abc` ist nicht `true`, `false`, `null` oder `nil`; andere Werte ohne Anführungszeichen gibt es nicht |
-| `[True]` und `[Nil]` | Groß- und Kleinschreibung zählen |
+| `[abc]` und `[nil]` | `abc` und `nil` sind nicht `true`, `false` oder `null`; andere Werte ohne Anführungszeichen gibt es nicht |
+| `[True]` und `[NULL]` | Groß- und Kleinschreibung zählen |
 
 **Direktiven**
 
@@ -993,10 +1029,9 @@ In den Tabellen steht `⏎` für einen Zeilenumbruch.
 | `%strict: true` | nur eine Direktive; das Dokument hat keinen Inhalt |
 | `a: 1` ⏎ `%strict: true` | Direktive nach dem ersten Member |
 | `[%strict: true]` | Direktive nicht auf oberster Ebene |
-| `%strict: 1` ⏎ `{}`, `%strict: 'true'` ⏎ `{}` und `%strict: nil` ⏎ `{}` | nicht `true` oder `false` |
+| `%strict: 1` ⏎ `{}`, `%strict: 'true'` ⏎ `{}` und `%strict: null` ⏎ `{}` | nicht `true` oder `false` |
 | `%strict: true` ⏎ `%strict: true` ⏎ `{}` | `%strict` zweimal |
-| `%extends: nil` ⏎ `{}` und `%extends: ['a.json']` ⏎ `{}` | der Wert von `%extends` ist kein String |
-| `%extends: 'a.json'` ⏎ `%extends: 'b.json'` ⏎ `{}` | `%extends` zweimal |
+| `%extends: null` ⏎ `{}` und `%extends: ['a.json']` ⏎ `{}` | der Wert von `%extends` ist kein String |
 | `%extends: 'a.json'` ⏎ `{}`, wenn `%extends` abgeschaltet ist | der Parser hat keinen Resolver |
 | `%strict: true` ⏎ `"x"` | Strict-Modus: der Wurzelwert ist kein Objekt und kein Array |
 | `%strict: true` ⏎ `{a: 1, a: 2}` | Strict-Modus: doppelter Name |
@@ -1064,12 +1099,12 @@ In den Tabellen steht `⏎` für einen Zeilenumbruch.
 
 Die folgenden, aus anderen JSON-Dialekten bekannten Erweiterungen gehören **nicht** zu XTJSON. Ein konformer Parser lehnt sie ab.
 
-- frei wählbare Werte ohne Anführungszeichen (`farbe: rot`); an Wertposition sind nur `true`, `false`, `null` und `nil` erlaubt
+- frei wählbare Werte ohne Anführungszeichen (`farbe: rot`); an Wertposition sind nur `true`, `false` und `null` erlaubt
 - im Dokument oder von der Anwendung definierte Werte, etwa Aliase, Konstanten oder Variablen
-- andere Schreibweisen von `true`, `false`, `null` und `nil` (`True`, `NULL`, `Nil`) und weitere Werte ohne Anführungszeichen wie `undefined`
+- andere Schreibweisen von `true`, `false` und `null` (`True`, `NULL`, `nil`) und weitere Werte ohne Anführungszeichen wie `undefined`
 - das Abschalten eines von der Anwendung verlangten Strict-Modus; `%strict: false` ist dann ein Fehler
-- andere Direktiven als `%strict` und `%extends`, Direktiven des Parsers oder der Anwendung, Direktiven innerhalb von Objekten und Arrays oder nach Beginn des Inhalts sowie ein zweites `%strict` oder `%extends`; Versionsangaben im Dokument
-- mehrere Basen in einem Dokument und andere Regeln für die Zusammenführung als JSON Merge Patch, etwa das Anhängen an Arrays
+- andere Direktiven als `%strict` und `%extends`, Direktiven des Parsers oder der Anwendung, Direktiven innerhalb von Objekten und Arrays oder nach Beginn des Inhalts sowie ein zweites `%strict`; Versionsangaben im Dokument
+- andere Regeln für die Zusammenführung als JSON Merge Patch, etwa das Anhängen an Arrays
 - im Dokument oder von der Anwendung definierte Suffixe; weitere Suffixe wie `px` oder `L`; Suffixe in Großbuchstaben und andere Schreibweisen eines Suffixes (`10K`, `64MB`); Leerraum vor dem Suffix; `n` nach einer Zahl mit Nachkommateil oder Exponent; Suffixe, die etwas anderes als eine Zahl ergeben
 - Strings mit drei Anführungszeichen als Begrenzer (`"""…"""`, `'''…'''`), Heredocs und Roh-Strings ohne Escape-Sequenzen
 - eine Zeilenfortsetzung mit Leerraum zwischen `\` und Zeilenumbruch
@@ -1093,7 +1128,7 @@ Informativ. Festlegungen an Stellen, an denen mehrere Lösungen möglich waren, 
 | Leeres Dokument | Fehler, nicht `{}` | Eine leere oder abgeschnittene Datei soll auffallen; JSON verhält sich ebenso. |
 | Doppelte Namen | das letzte Member gilt; im Strict-Modus verboten | Ein festes Verhalten verhindert, dass zwei Parser dasselbe Dokument verschieden lesen. Ein generelles Verbot würde gültige JSON-Texte ausschließen und K1 verletzen. |
 | Zeichen in Bezeichnern | ASCII-Buchstaben, Ziffern, `_`, `$`, `µ` und die Buchstaben U+00C0 bis U+00FF ohne `×` und `÷` | Namen in vielen westeuropäischen Sprachen, etwa `größe` oder `café`, lassen sich ohne Anführungszeichen schreiben, wie in ECMAScript. `ª`, `º` und `·`, die ECMAScript ebenfalls zulässt, bleiben weg: Sie sind keine Buchstaben eines Worts, werden in Namen selten gebraucht und sind leicht mit hochgestellten Zeichen, dem Gradzeichen oder anderen Punkten zu verwechseln. Eine feste Liste aus einem einzigen Unicode-Block braucht keine Unicode-Tabellen und ändert sich nicht mit neuen Unicode-Versionen. Andere Zeichen, auch kombinierende Zeichen, brauchen Anführungszeichen, und Namen werden nicht normalisiert. Namen wie `max-age` stehen in Anführungszeichen. |
-| `true`, `false`, `null`, `nil` als Name | erlaubt | An Namensposition eindeutig; vermeidet eine Sonderregel. |
+| `true`, `false`, `null` als Name | erlaubt | An Namensposition eindeutig; vermeidet eine Sonderregel. |
 | Zeilenumbruch | LF, CR oder CR LF; CR LF zählt als einer | Eine einzige, überall gleiche Definition für Trenner, Zeilenkommentare und Strings, unabhängig von den Zeilenenden der Datei. |
 | Zusätzlicher Leerraum | alle Leerraum- und Zeilenendezeichen von ECMAScript 2026; Trenner ist nur der Zeilenumbruch nach 5.2 | So hängt die Struktur eines Dokuments nicht von Zeichen ab, die Editoren uneinheitlich oder gar nicht darstellen. Anders als in ECMAScript sind U+2028 und U+2029 deshalb keine Zeilenenden. |
 | Kategorie Zs | als feste Liste aufgeführt | Parser brauchen keine Unicode-Tabellen, und die Grammatik ändert sich nicht mit neuen Unicode-Versionen. ECMAScript verweist dagegen auf die jeweils aktuelle Kategorie. |
@@ -1119,10 +1154,10 @@ Informativ. Festlegungen an Stellen, an denen mehrere Lösungen möglich waren, 
 | Präfixe `0x`/`0o`/`0b` | Groß- und Kleinschreibung gleichwertig | Einheitlich mit `e`/`E` im Exponenten. Kleinschreibung wird empfohlen. |
 | Vorzeichen bei nicht dezimalen Zahlen | `-` erlaubt, `+` nicht | Einheitlich mit der JSON-Regel `[ minus ]`. |
 | `_` in Zahlen | einzeln, nur zwischen zwei Ziffern | Einfache, leicht prüfbare Regel. |
-| Werte ohne Anführungszeichen | nur `true`, `false`, `null` und `nil` | Ein Tippfehler wie `ture` wird als Fehler gemeldet, statt als String gelesen zu werden. |
+| Werte ohne Anführungszeichen | nur `true`, `false` und `null` | Ein Tippfehler wie `ture` wird als Fehler gemeldet, statt als String gelesen zu werden. |
 | `true`, `false`, `null` | fest vordefiniert, nicht änderbar | Sonst könnte ein gültiger JSON-Text seine Bedeutung ändern (K2). |
-| `nil` | eine andere Schreibweise für `null`, fest in der Grammatik | Viele Programmiersprachen schreiben den Nullwert als `nil`. `nil` ist in JSON ein Syntaxfehler, deshalb ändert kein JSON-Text seine Bedeutung (K1, K2). |
-| Keine Definitionen | weder das Dokument noch die Anwendung können Werte definieren | Der Wert eines Dokuments lässt sich aus seinem Text ablesen, ohne Definitionen aufzulösen, und zwei Parser können dasselbe Dokument nicht verschieden lesen. Der einzige Teil eines Werts, der nicht aus dem Text stammt, ist der Basiswert von `%extends` (6.6), und er wird als Ganzes übernommen. |
+| Andere Schreibweisen für `null` | keine; `nil` ist ein Fehler | Jeder Wert hat genau eine Schreibweise, wie jedes Suffix. Eine zweite Schreibweise müsste jeder Leser und jedes Werkzeug kennen, und sie trägt keine Information bei. |
+| Keine Definitionen | weder das Dokument noch die Anwendung können Werte definieren | Der Wert eines Dokuments lässt sich aus seinem Text ablesen, ohne Definitionen aufzulösen, und zwei Parser können dasselbe Dokument nicht verschieden lesen. Die einzigen Teile eines Werts, die nicht aus dem Text stammen, sind die Basiswerte von `%extends` (6.6), und sie werden als Ganzes übernommen. |
 | Suffixe: Schreibweise | eine feste Liste in der Grammatik; nur Kleinbuchstaben, genau eine Schreibweise je Suffix | Ein Leser erkennt jedes Suffix ohne eine Liste abweichender Schreibweisen, und ein Parser braucht keine Zeichenregeln für Suffixe. Kein Suffix beginnt mit `a`–`f`, `o`, `x` oder `_`, sodass Hexadezimalziffern, Exponent, Zahlenpräfixe und Zifferngruppierung eindeutig bleiben. Jedes andere Zeichen nach einer Zahl braucht einen Trenner und bleibt ein Fehler; spätere Versionen können deshalb Suffixe hinzufügen, ohne den Wert eines gültigen Dokuments zu ändern. |
 | Suffix `m` | Zahl mal 1000000 | Große Zahlen werden ebenso kurz geschrieben wie mit `k`. Die längste Übereinstimmung unterscheidet `m` von `mb`, `ms` und `min`. |
 | Suffix `n` | nur nach einer ganzen Zahl, nicht nach einem Nachkommateil oder Exponenten | Wie in ECMAScript, wo `n` ein ganzzahliges Literal (BigInt) kennzeichnet und `1.5n` und `1e3n` ebenfalls Fehler sind. |
@@ -1131,14 +1166,15 @@ Informativ. Festlegungen an Stellen, an denen mehrere Lösungen möglich waren, 
 | Suffix: Ergebnis | immer eine Zahl | Ein Suffix rechnet um; es erzeugt keinen anderen Datentyp. |
 | Suffix: Genauigkeit | exaktes Ergebnis | `0.1kb` soll `102.4` und `100ms` soll `0.1` ergeben, unabhängig von der Gleitkommaarithmetik des Parsers. |
 | Direktiven: Schreibweise | `%strict` und `%extends`, jeweils mit `:` und ihrem Wert, fest in der Grammatik | `%` kommt in JSON außerhalb von Strings nicht vor, deshalb ändert kein JSON-Text seine Bedeutung (K1, K2). Der `:` entspricht der Schreibweise eines Members. Jeder andere Text nach einem `%` ist ein Fehler; spätere Versionen können deshalb Direktiven hinzufügen, ohne den Wert eines gültigen Dokuments zu ändern. |
-| Direktiven: Position | nur auf oberster Ebene, vor dem Inhalt; in beliebiger Reihenfolge | Leser und Parser wissen, ob der Strict-Modus gilt und welche Basis das Dokument erweitert, bevor der Inhalt beginnt. Die Reihenfolge der beiden Direktiven ändert den Wert nicht. |
+| Direktiven: Position | nur auf oberster Ebene, vor dem Inhalt; `%strict` vor, zwischen oder nach den `%extends` | Leser und Parser wissen, ob der Strict-Modus gilt und welche Basen das Dokument erweitert, bevor der Inhalt beginnt. Die Stellung von `%strict` ändert den Wert nicht; die Reihenfolge der `%extends` ändert ihn (6.6). |
 | Direktiven: welche es gibt | nur `%strict` und `%extends`; Parser und Anwendung können keine hinzufügen | Jedes Dokument wird von jedem Parser, der die Direktiven unterstützt, gleich gelesen. |
 | `%extends`: Zweck | ein Dokument erweitert einen Basiswert nach JSON Merge Patch [RFC7396] | Konfigurationsdateien unterscheiden sich oft nur in wenigen Werten von einer gemeinsamen Basis. JSON Merge Patch ist ein veröffentlichter, einfacher Standard; er arbeitet auf dem JSON-Datenmodell, sodass die Basis aus JSON, XTJSON oder einem anderen Format stammen kann und das Ergebnis wieder ein JSON-Wert ist. |
 | `%extends`: Auflösung | einem Resolver der Anwendung überlassen; Unterstützung optional | Wie aus einem Verweis ein Wert wird, hängt von der Umgebung ab (Dateien, Netz, Pakete) und von Sicherheitsregeln, die nur die Anwendung kennt. Die Spezifikation legt nur die Zusammenführung fest, sodass das Ergebnis bei gleichem Basiswert mit jedem Parser gleich ist. Ein Parser ohne Resolver meldet einen Fehler, statt die Basis zu übergehen. |
 | `%extends`: Wert | ein String; empfohlen wird eine URI-Referenz | Eine URI deckt lokale Dateien ebenso ab wie URLs. Ein String kann jedes Zeichen enthalten. |
-| `%extends`: `null` | entfernt ein Member, wie in RFC 7396; das gilt auch für `nil` | `nil` und `null` bezeichnen überall denselben Wert. Eine Abweichung würde das Ergebnis von anderen Umsetzungen von JSON Merge Patch unterscheiden. Ein Member mit dem Wert `null` lässt sich in einem Dokument mit `%extends` daher nicht setzen. |
-| `%extends`: Anzahl | höchstens einmal | Mehrere Basen bräuchten Regeln für ihre Reihenfolge und für Konflikte. Ein Basiswert kann selbst aus einem Dokument mit `%extends` stammen. |
-| Strict-Modus und `%extends` | die Verbote zu Namen, String-Werten und zum Wurzelwert gelten auch für das Ergebnis | Das JSON-Äquivalent eines Dokuments, das im Strict-Modus gültig ist, bleibt eine I-JSON-Nachricht, gleich was der Basiswert enthält. |
+| `%extends`: `null` | entfernt ein Member, wie in RFC 7396; das gilt auch für `null` in einem späteren Basiswert | Eine Abweichung würde das Ergebnis von anderen Umsetzungen von JSON Merge Patch unterscheiden. Ein Member mit dem Wert `null` lässt sich in einem Dokument mit `%extends` daher nicht setzen. |
+| `%extends`: Anzahl | beliebig; die Basiswerte werden in der Reihenfolge des Dokuments zusammengeführt, jeder spätere als Merge Patch auf die früheren | Eine Konfiguration lässt sich aus mehreren Schichten aufbauen, etwa gemeinsamen Vorgaben, einer Umgebung und einem einzelnen Host. Basen und Inhalt werden mit demselben Algorithmus (RFC 7396) zusammengeführt, und die Reihenfolge im Dokument ist die Rangfolge: Wie bei doppelten Namen gilt, was später kommt. Ein Basiswert kann außerdem selbst aus einem Dokument mit `%extends` stammen. |
+| `%extends`: derselbe String mehrmals | erlaubt | Zwei verschiedene Strings können dieselbe Quelle bezeichnen, ein Verbot ließe sich also nicht zuverlässig prüfen. Ein erneut zusammengeführter Basiswert ändert das Ergebnis nur durch seine Member mit dem Wert `null`. |
+| Strict-Modus und `%extends` | die Verbote zu Namen, String-Werten und zum Wurzelwert gelten auch für das Ergebnis aller Zusammenführungen | Das JSON-Äquivalent eines Dokuments, das im Strict-Modus gültig ist, bleibt eine I-JSON-Nachricht, gleich was die Basiswerte enthalten. |
 | Strict-Modus: Wurzelwert | ein Objekt oder ein Array | [I-JSON] empfiehlt das nur. Ein einzelner String oder eine einzelne Zahl als Wurzelwert lässt sich später nicht um weitere Member erweitern; im Strict-Modus wird die Empfehlung zu einer Regel, die ein Parser prüfen kann. |
 | Strict-Modus: Unterstützung | jeder Parser muss ihn anbieten | Sonst nähme ein Parser ein Dokument mit `%strict: true` an, das ein anderer ablehnt; jedes Dokument bleibt portabel. |
 | `%strict`: Wert | `true` oder `false`; höchstens einmal | Ein Schalter hat zwei Zustände. Ein zweites `%strict` könnte das erste nur wiederholen oder ihm widersprechen. |
@@ -1165,6 +1201,13 @@ Informativ. Festlegungen an Stellen, an denen mehrere Lösungen möglich waren, 
 - RFC 4648, „The Base16, Base32, and Base64 Data Encodings“.
 
 ## Änderungen
+
+**Entwurf 0.8**
+
+- 6.3: `nil` entfällt. Werte ohne Anführungszeichen sind nur `true`, `false` und `null`; `nil` an Wertposition ist ein Fehler. Die Erweiterung E12 entfällt; E13 und E14 werden zu E12 und E13.
+- 6.4, 6.6: Ein Dokument kann `%extends` mehrmals enthalten. Der Resolver wird für jedes `%extends` in der Reihenfolge des Dokuments aufgerufen; die Basiswerte werden in dieser Reihenfolge nach JSON Merge Patch zusammengeführt, jeder spätere als Merge Patch auf die früheren, und der Inhalt wird zuletzt angewendet. `%strict` kommt höchstens einmal vor und kann vor, zwischen oder nach den `%extends` stehen.
+- 10: Der Schritt, der `nil` durch `null` ersetzte, entfällt. Mit mehreren `%extends` wird der Inhalt auf die zusammengeführten Basiswerte angewendet.
+- 1, 2, 3, 7.2, 11, 12, 13 und Anhänge A bis D sind an diese Änderungen angepasst.
 
 **Entwurf 0.7**
 

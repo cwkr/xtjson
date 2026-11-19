@@ -38,14 +38,14 @@ VALID = [
     ('/* k */ %strict: true\n[1]', [1]),
     # Inhalt nach der Direktive: Wert oder implizites Wurzelobjekt
     ('%strict: true\n"x": 1', {'x': 1}),
-    ("%strict: true\n'x': 1, y: nil", {'x': 1, 'y': None}),
+    ("%strict: true\n'x': 1, y: null", {'x': 1, 'y': None}),
     ('%strict: true\nstrict: true', {'strict': True}),
     ('%strict: true\n{"a": 1}', {'a': 1}),
     ('%strict: false\n"s"', 's'),
     ('%strict: false\n-1', -1),
     ('%strict: false, 1', 1),
-    ('%strict: false\nnil', None),
-    ('%strict: true\n[nil]', [None]),
+    ('%strict: false\nnull', None),
+    ('%strict: true\n[null]', [None]),
     ('%strict: true\na: 1', {'a': 1}),
     # Namen und Strings, die wie Direktiven aussehen
     ('{define: 1, version: 2, strict: 3}', {'define': 1, 'version': 2, 'strict': 3}),
@@ -55,7 +55,7 @@ VALID = [
     # Strict-Modus mit %strict: true
     ('%strict: true\n{"\\uD83D\\uDE00": "\\u{1F600}"}', {'\U0001F600': '\U0001F600'}),
     ('%strict: true\n[{a: 1}, {a: 2}, {b: {a: 3}}]', [{'a': 1}, {'a': 2}, {'b': {'a': 3}}]),
-    ('%strict: true\n{a: nil, b: null}', {'a': None, 'b': None}),
+    ('%strict: true\n{a: null, b: null}', {'a': None, 'b': None}),
     # ohne Strict-Modus gelten seine Verbote nicht
     ('%strict: false\n["\\uDEAD"]', ['\udead']),
     ('%strict: false\n{a: 1, a: 2}', {'a': 2}),
@@ -91,7 +91,7 @@ INVALID = [
     '%strict: true\n"x"', '%strict: true\n1', '%strict: true\nnull', '%strict: true\nnil', '%strict: true\ntrue',
     '%strict: true\n10k',
     '%strict: true\n{a: 1, a: 2}', "%strict: true\na: 1\n'a': 2", '%strict: true\n{a: {"\\u0061": 1, a: 2}}',
-    '%strict: true\n[{a: 1, "a": 2}]', '%strict: true\n{nil: 1, "nil": 2}',
+    '%strict: true\n[{a: 1, "a": 2}]', '%strict: true\n{nil: 1, "nil": 2}', '%strict: true\n[nil]',
     '%strict: true\n["\\uDEAD"]', '%strict: true\n["\\uD83D"]', '%strict: true\n["\\uDE00\\uD83D"]',
     '%strict: true\n["\\uFFFF"]', '%strict: true\n["\\uFFFE"]', '%strict: true\n["\\u{FDD0}"]', '%strict: true\n["\\uFDEF"]',
     '%strict: true\n["\\u{10FFFE}"]', '%strict: true\n["\\u{1FFFF}"]', '%strict: true\n{"\\uD800": 1}', "%strict: true\n'\\uFFFF': 1",
@@ -106,7 +106,7 @@ EXTENDS_VALID = [
     ("%extends: 'b'\n{a: 'c'}", {'b': {'a': 'b'}}, {'a': 'c'}),
     ("%extends: 'b'\n{b: 'c'}", {'b': {'a': 'b'}}, {'a': 'b', 'b': 'c'}),
     ("%extends: 'b'\n{a: null}", {'b': {'a': 'b'}}, {}),
-    ("%extends: 'b'\n{a: nil}", {'b': {'a': 'b', 'b': 'c'}}, {'b': 'c'}),
+    ("%extends: 'b'\n{a: null}", {'b': {'a': 'b', 'b': 'c'}}, {'b': 'c'}),
     ("%extends: 'b'\n{a: 'c'}", {'b': {'a': ['b']}}, {'a': 'c'}),
     ("%extends: 'b'\n{a: ['b']}", {'b': {'a': 'c'}}, {'a': ['b']}),
     ("%extends: 'b'\n{a: {b: 'd', c: null}}", {'b': {'a': {'b': 'c'}}}, {'a': {'b': 'd'}}),
@@ -131,23 +131,55 @@ EXTENDS_VALID = [
     ("%extends: 'b'\n{a: 1, a: null}", {'b': {'a': 0}}, {}),
     ("%extends: 'b'\n{a: null, a: 1}", {'b': {'a': 0}}, {'a': 1}),
     # null bleibt in Arrays erhalten; Objekte werden in jeder Tiefe zusammengefuehrt
-    ("%extends: 'b'\n[nil]", {'b': {}}, [None]),
+    ("%extends: 'b'\n[null]", {'b': {}}, [None]),
     ("%extends: 'b'\n{a: [{b: null}]}", {'b': {}}, {'a': [{'b': None}]}),
     ("%extends: 'b'\n{a: {}}", {'b': {'a': {'x': 1}}}, {'a': {'x': 1}}),
     ("%extends: 'b'\n{a: {}}", {'b': {'a': 5}}, {'a': {}}),
     ("%extends: 'b'\n{a: {b: {c: 2}}}", {'b': {'a': {'b': {'c': 1, 'd': 1}, 'e': 1}}}, {'a': {'b': {'c': 2, 'd': 1}, 'e': 1}}),
     ("%extends: 'b'\n{}", {'b': 'text'}, {}),
     ("%extends: 'b'\n1", {'b': {'a': 1}}, 1),
-    ("%extends: 'b'\n{x: 10k, größe: nil}", {'b': {'größe': 1}}, {'x': 10000}),
+    ("%extends: 'b'\n{x: 10k, größe: null}", {'b': {'größe': 1}}, {'x': 10000}),
     # der Basiswert kann Werte enthalten, die der Inhalt nicht schreiben kann
     ("%extends: 'b'\n{}", {'b': {'a': None, 'é': [None, True, 1.5]}}, {'a': None, 'é': [None, True, 1.5]}),
+    # mehrere %extends (6.6): Basiswerte in der Reihenfolge des Dokuments, der Inhalt zuletzt
+    ("%extends: 'a'\n%extends: 'b'\n{}", {'a': {'x': 1, 'y': 1}, 'b': {'y': 2, 'z': 2}}, {'x': 1, 'y': 2, 'z': 2}),
+    ("%extends: 'b'\n%extends: 'a'\n{}", {'a': {'x': 1, 'y': 1}, 'b': {'y': 2, 'z': 2}}, {'x': 1, 'y': 1, 'z': 2}),
+    ("%extends: 'a'\n%extends: 'b'\n{y: 3}", {'a': {'x': 1, 'y': 1}, 'b': {'y': 2}}, {'x': 1, 'y': 3}),
+    ("%extends: 'a', %extends: 'b', %extends: 'c', {d: 4}",
+     {'a': {'a': 1, 'v': 'a'}, 'b': {'b': 2, 'v': 'b'}, 'c': {'c': 3, 'v': 'c'}},
+     {'a': 1, 'b': 2, 'c': 3, 'v': 'c', 'd': 4}),
+    ("%extends: 'a'\n%extends: 'b'\nx: {q: 3}", {'a': {'x': {'p': 1, 'q': 1}}, 'b': {'x': {'q': 2, 'r': 2}}},
+     {'x': {'p': 1, 'q': 3, 'r': 2}}),
+    # null in einem spaeteren Basiswert entfernt ein Member; im ersten bleibt es erhalten
+    ("%extends: 'a'\n%extends: 'b'\n{}", {'a': {'x': 1, 'y': None}, 'b': {'x': None}}, {'y': None}),
+    ("%extends: 'a'\n%extends: 'b'\n{}", {'a': {'x': {'p': 1, 'q': 1}}, 'b': {'x': {'p': None}}}, {'x': {'q': 1}}),
+    ("%extends: 'a'\n%extends: 'b'\n{}", {'a': {'x': 1}, 'b': {'y': None}}, {'x': 1}),
+    # Arrays und andere Werte als Objekte ersetzen; ein spaeteres Objekt ersetzt einen Nicht-Objekt-Wert
+    ("%extends: 'a'\n%extends: 'b'\n{}", {'a': {'x': [1, 2]}, 'b': {'x': [3]}}, {'x': [3]}),
+    ("%extends: 'a'\n%extends: 'b'\n{c: 1}", {'a': {'x': 1}, 'b': [1, 2]}, {'c': 1}),
+    ("%extends: 'a'\n%extends: 'b'\n[0]", {'a': {'x': 1}, 'b': {'y': 2}}, [0]),
+    ("%extends: 'a'\n%extends: 'b'\n{}", {'a': [1], 'b': {'x': None, 'y': 2}}, {'y': 2}),
+    ("%extends: 'a'\n%extends: 'b'\n{}", {'a': {'x': 1}, 'b': 'text'}, {}),
+    ("%extends: 'a'\n%extends: 'b'\n1", {'a': {'x': 1}, 'b': None}, 1),
+    # derselbe String mehrmals
+    ("%extends: 'a'\n%extends: 'a'\n{}", {'a': {'x': 1}}, {'x': 1}),
+    ("%extends: 'a'\n%extends: 'a'\n{}", {'a': {'x': 1, 'n': None}}, {'x': 1}),
+    ("%extends: 'b'\n%extends: 'b'\n{}", {'b': {}}, {}),
+    # %strict vor, zwischen und nach den %extends; Trenner wie zwischen Elementen
+    ("%strict: true\n%extends: 'a'\n%extends: 'b'\n{z: 3}", {'a': {'x': 1}, 'b': {'y': 2}}, {'x': 1, 'y': 2, 'z': 3}),
+    ("%extends: 'a'\n%strict: true\n%extends: 'b'\n{z: 3}", {'a': {'x': 1}, 'b': {'y': 2}}, {'x': 1, 'y': 2, 'z': 3}),
+    ("%extends: 'a'\n%extends: 'b'\n%strict: false\n{z: 3}", {'a': {'x': 1}, 'b': {'y': 2}}, {'x': 1, 'y': 2, 'z': 3}),
+    ("%extends: 'b', %strict: true, %extends: 'b', {}", {'b': {'x': 1}}, {'x': 1}),
+    ("%extends:'a',%extends:\"b\",z: 3", {'a': {'x': 1}, 'b': {'y': 2}}, {'x': 1, 'y': 2, 'z': 3}),
+    ("%extends: 'a' // k\n\n# k\n%extends: /* k */ 'b'\nz: 3", {'a': {'x': 1}, 'b': {'y': 2}}, {'x': 1, 'y': 2, 'z': 3}),
+    # Strict-Modus prueft nur das Endergebnis: ein spaeterer Basiswert entfernt einen Noncharacter
+    ("%strict: true\n%extends: 'a'\n%extends: 'b'\n{}", {'a': {'s': chr(0xFFFF)}, 'b': {'s': None}}, {}),
 ]
 
 # mit Resolver ungueltig: (Text, Basiswerte)
 EXTENDS_INVALID = [
-    ("%extends: 'b'\n%extends: 'b'\n{}", {'b': {}}),
-    ("%extends: 'b'\n%strict: true\n%extends: 'b'\n{}", {'b': {}}),
     ('%extends: nil\n{}', {'b': {}}),
+    ('%extends: null\n{}', {'b': {}}),
     ('%extends: b\n{}', {'b': {}}),
     ('%extends: 1\n{}', {'1': {}}),
     ("%extends: ['b']\n{}", {'b': {}}),
@@ -170,6 +202,23 @@ EXTENDS_INVALID = [
     ("%strict: true\n%extends: 'b'\n'x'", {'b': {}}),
     ("%extends: 'b'\n%strict: true\nnull", {'b': {'a': 1}}),
     ("%strict: true\n%extends: 'b'\n{a: 1, a: 2}", {'b': {}}),
+    # mehrere %extends: %strict hoechstens einmal, Trenner, Position
+    ("%strict: true\n%extends: 'a'\n%strict: true\n{}", {'a': {}}),
+    ("%extends: 'a'\n%strict: true\n%extends: 'b'\n%strict: false\n{}", {'a': {}, 'b': {}}),
+    ("%extends: 'a' %extends: 'b'\n{}", {'a': {}, 'b': {}}),
+    ("%extends: 'a',, %extends: 'b'\n{}", {'a': {}, 'b': {}}),
+    ("%extends: 'a'\n%extends: 'b'", {'a': {}, 'b': {}}),
+    ("%extends: 'a'\n{}\n%extends: 'b'", {'a': {}, 'b': {}}),
+    ("%extends: 'a'\nx: 1\n%extends: 'b'", {'a': {}, 'b': {}}),
+    ("%extends: 'a'\n%extends: nil\n{}", {'a': {}}),
+    ("%extends: 'a'\n%extends: ['b']\n{}", {'a': {}, 'b': {}}),
+    # der Resolver meldet einen Fehler fuer den zweiten oder dritten Verweis
+    ("%extends: 'a'\n%extends: 'x'\n{}", {'a': {}}),
+    ("%extends: 'a', %extends: 'a', %extends: 'x', {}", {'a': {}}),
+    # Strict-Modus: Verstoss aus dem zweiten Basiswert, auch mit %strict zwischen den %extends
+    ("%strict: true\n%extends: 'a'\n%extends: 'b'\n{}", {'a': {}, 'b': {'s': chr(0xFFFF)}}),
+    ("%extends: 'a'\n%strict: true\n%extends: 'b'\n{}", {'a': {'x': 1}, 'b': {chr(0xDC00): 1}}),
+    ("%extends: 'a'\n%extends: 'b'\n%strict: true\n{}", {'a': {}, 'b': {'l': ['ok', chr(0xFDD0)]}}),
 ]
 
 # Strict-Modus der Anwendung (12): (Text, erwarteter Wert)
@@ -180,12 +229,12 @@ STRICT_VALID = [
     ('[1, "\\uD83D\\uDE00", "\\u{10FFFD}", "\\uFFFD"]', [1, '\U0001F600', '\U0010FFFD', '�']),
     ('{"a": 1, "b": {"a": 2}}', {'a': 1, 'b': {'a': 2}}),
     ('%strict: true\n[1]', [1]),
-    ('{a: nil, nil: null}', {'a': None, 'nil': None}),
+    ('{a: null, nil: null}', {'a': None, 'nil': None}),
 ]
 
 # Texte, die gueltig sind, die der Strict-Modus der Anwendung aber ablehnt
 STRICT_INVALID = [
-    '1', '"x"', 'null', 'nil', 'true', '-0',
+    '1', '"x"', 'null', 'true', '-0',
     '{a: 1, a: 2}', '{"a": 1, "\\u0061": 2}', 'a: 1\na: 2', "a: 1\n'a': 2", '[{b: {c: 1, c: 1}}]',
     '["\\uDEAD"]', '["\\uFFFF"]', '["\\uFDEF"]', '{"\\uFFFE": 1}', '["\\u{2FFFF}"]',
     # %strict: false widerspricht der Anwendung (6.5)
@@ -265,12 +314,30 @@ def main():
             print('FEHLER: Resolver-Wert ohne JSON-Wert angenommen: %r' % (bad,))
         except XTJSONError:
             pass
-    # der Basiswert des Resolvers wird nicht veraendert
+    # ... auch nicht beim zweiten von mehreren %extends
+    for bad in (float('nan'), {1: 2}, object()):
+        try:
+            parse("%extends: 'a'\n%extends: 'b'\n{}", resolver=lambda ref, bad=bad: {} if ref == 'a' else bad)
+            fails += 1
+            print('FEHLER: Resolver-Wert ohne JSON-Wert beim zweiten %%extends angenommen: %r' % (bad,))
+        except XTJSONError:
+            pass
+    # der Basiswert des Resolvers wird nicht veraendert, auch nicht bei mehreren %extends
     base = {'a': {'b': 1}}
     parse("%extends: 'b'\n{a: {b: 2, c: 3}}", resolver=lambda ref: base)
-    if base != {'a': {'b': 1}}:
+    parse("%extends: 'b'\n%extends: 'b'\n{a: {b: 2, c: 3}}", resolver=lambda ref: base)
+    base2 = {'a': {'b': None, 'd': 4}}
+    parse("%extends: 'b'\n%extends: 'c'\n{}", resolver=lambda ref: base if ref == 'b' else base2)
+    if base != {'a': {'b': 1}} or base2 != {'a': {'b': None, 'd': 4}}:
         fails += 1
-        print('FEHLER: der Basiswert des Resolvers wurde veraendert: %r' % base)
+        print('FEHLER: der Basiswert des Resolvers wurde veraendert: %r, %r' % (base, base2))
+    # der Resolver wird fuer jedes %extends einmal aufgerufen, in der Reihenfolge des Dokuments
+    calls = []
+    parse("%extends: 'c'\n%strict: false\n%extends: 'a', %extends: 'c'\n{}",
+          resolver=lambda ref: calls.append(ref) or {})
+    if calls != ['c', 'a', 'c']:
+        fails += 1
+        print('FEHLER: Aufrufe des Resolvers: %r, erwartet %r' % (calls, ['c', 'a', 'c']))
     print('Tests D: %d gueltig, %d ungueltig, Strict-Modus %d gueltig und %d ungueltig, '
           '%%extends %d gueltig und %d ungueltig geprueft: %s'
           % (len(VALID), len(INVALID), len(STRICT_VALID), len(STRICT_INVALID),

@@ -1,8 +1,8 @@
 """Zusatztests: Werte ohne Anfuehrungszeichen (6.3), Bezeichner (7.2) und Zahlen-Suffixe (9.5).
 
 Der Dateiname stammt aus einer Zeit, in der Dokumente benannte Werte
-definieren konnten; heute gibt es ohne Anfuehrungszeichen nur true, false,
-null und nil.
+definieren konnten; heute gibt es ohne Anfuehrungszeichen nur true, false
+und null.
 """
 import os
 import sys
@@ -12,20 +12,23 @@ from xtjson_ref import parse, XTJSONError  # noqa: E402
 
 # (Text, erwarteter Wert)
 VALID = [
-    # Literale; nil ist derselbe Wert wie null
-    ('nil', None), ('null', None), ('true', True), ('false', False),
-    ('[nil, null, true, false]', [None, None, True, False]),
-    ('[nil\nnull\ntrue]', [None, None, True]),
+    # die drei Werte ohne Anfuehrungszeichen
+    ('null', None), ('true', True), ('false', False),
+    ('[null, true, false]', [None, True, False]),
+    ('[null\nnull\ntrue]', [None, None, True]),
     ('[true\nfalse\nnull]', [True, False, None]),
-    ('{nil: nil}', {'nil': None}), ('{"nil": nil}', {'nil': None}),
-    ('nil: null\nnull: nil', {'nil': None, 'null': None}),
-    ('a: nil, b: true', {'a': None, 'b': True}),
+    ('{null: null}', {'null': None}), ('{"null": null}', {'null': None}),
+    ('a: null, b: true', {'a': None, 'b': True}),
     ('true: false', {'true': False}),
-    ('{true: true, false: false, null: null, nil: nil}', {'true': True, 'false': False, 'null': None, 'nil': None}),
-    ('[nil,nil]', [None, None]), ('a: nil // Kommentar', {'a': None}), ('[nil/* k */]', [None]),
-    ('[[nil], {a: [nil]}]', [[None], {'a': [None]}]), ('a: nil\n', {'a': None}),
+    ('{true: true, false: false, null: null}', {'true': True, 'false': False, 'null': None}),
+    ('[null,null]', [None, None]), ('a: null // Kommentar', {'a': None}), ('[null/* k */]', [None]),
+    ('[[null], {a: [null]}]', [[None], {'a': [None]}]), ('a: null\n', {'a': None}),
+    # nil ist an Namensposition ein gewoehnlicher Name
+    ('{nil: 1}', {'nil': 1}), ('{"nil": null}', {'nil': None}),
+    ('nil: null\nnull: 1', {'nil': None, 'null': 1}),
+    ('{nil: "nil", Nil: [true]}', {'nil': 'nil', 'Nil': [True]}),
     # Bezeichner an Namensposition sind gewoehnliche Namen
-    ('{$a: 1, _b: nil, Nil: 2, NaN: 3, px: 4, ms: 5, k: 6}',
+    ('{$a: 1, _b: null, Nil: 2, NaN: 3, px: 4, ms: 5, k: 6}',
      {'$a': 1, '_b': None, 'Nil': 2, 'NaN': 3, 'px': 4, 'ms': 5, 'k': 6}),
     # Bezeichner mit U+00B5 und den Buchstaben U+00C0 bis U+00FF aus Latin-1 Supplement
     ('{größe: 1}', {'größe': 1}),
@@ -36,7 +39,7 @@ VALID = [
     ('{"größe": 1, größe: 2}', {'größe': 2}),
     ('{é: 1, "\\u00e9": 2}', {'é': 2}),
     ('{"e\\u0301": 1, é: 2}', {'e\N{COMBINING ACUTE ACCENT}': 1, 'é': 2}),
-    ('{ÿ: [1], nil: nil}', {'ÿ': [1], 'nil': None}),
+    ('{ÿ: [1], nil: null}', {'ÿ': [1], 'nil': None}),
     # Suffixe: Faktor 1000, 1024, 1000000, 1048576
     ('10k', 10000), ('1kb', 1024), ('2m', 2000000), ('1mb', 1048576),
     ('1.5k', 1500), ('0.5kb', 512), ('0.1kb', 102.4), ('-2k', -2000),
@@ -72,19 +75,20 @@ VALID = [
     # ein '_' nach einer Ziffer ist immer Zifferngruppierung
     ('1_0', 10), ('1_0k', 10000), ('1_0s', 10), ('0x1_0n', 16), ('1_0m', 10000000),
     # Literale und Suffixe zusammen
-    ('[50pct, 10k, nil]', [0.5, 10000, None]),
+    ('[50pct, 10k, null]', [0.5, 10000, None]),
     ('{t: 30s, g: 64mb, n: null}', {'t': 30, 'g': 67108864, 'n': None}),
 ]
 
 # Texte, die abgelehnt werden muessen
 INVALID = [
-    # nur die vier Literale, nur in Kleinbuchstaben
+    # nur die drei Werte, nur in Kleinbuchstaben; nil gibt es nicht
+    'nil', '[nil]', 'a: nil', '{nil: nil}', '{"a": nil}', '[null, nil]', 'nil: nil',
     '[abc]', 'True', 'NULL', 'False', 'Nil', 'NIL', 'nIl', '[None]', '[none]',
     'NaN', 'Infinity', 'undefined', '[ture]', '[nul]', '[yes]', '[on]', 'a: red',
     # laengste Uebereinstimmung: weitere Zeichen gehoeren zum Bezeichner
     'nill', 'nil2', 'nil_', 'nil$', '_nil', '$nil', 'nullable', 'trueish', 'falsey',
     # Leerraum und fehlende Trenner
-    '[nil nil]', 'nil null', '[n il]', '[ni l]', 'a: nil nil', 'tr ue',
+    '[null null]', 'null true', '[n ull]', '[nu ll]', 'a: null null', 'tr ue',
     # andere Zeichen als Buchstaben aus ASCII und Latin-1 Supplement; auch nicht ª, º und ·
     '{ª: 1}', '{º: 1}', '{Nº: 1}', '{aª: 1}', '{·a: 1}', '{·: 1}', '{a·b: 1}', '{a·: 1}', '{×: 1}', '{a×b: 1}', '{÷: 1}', '{a÷: 1}', '{π: 1}', '{€: 1}',
     '{a€: 1}', '{©: 1}', '{«a»: 1}', '{¿a: 1}', '{a¹: 1}', '{²: 1}', '{\xad: 1}', '{a\xadb: 1}',

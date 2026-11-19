@@ -1,4 +1,4 @@
-"""Referenz-Parser fuer XTJSON (Entwurf 0.7) + Pruefung der Beispiele der Spezifikation."""
+"""Referenz-Parser fuer XTJSON (Entwurf 0.8) + Pruefung der Beispiele der Spezifikation."""
 import copy
 import json
 import re
@@ -28,8 +28,8 @@ ESC = {'"': '"', "'": "'", '\\': '\\', '/': '/', 'b': '\b', 'f': '\f',
 # Suffixe nach 9.5, fest in der Grammatik; laengste Uebereinstimmung zuerst.
 SUF = re.compile(r'min|ms|mb|m|kb|k|s|h|pct')
 INT_SUF = 'n'                                     # nur nach einer ganzen Zahl
-# Werte ohne Anfuehrungszeichen nach 6.3; nil ist derselbe Wert wie null.
-LITERALS = {'true': True, 'false': False, 'null': None, 'nil': None}
+# Werte ohne Anfuehrungszeichen nach 6.3.
+LITERALS = {'true': True, 'false': False, 'null': None}
 # Suffixe nach 9.5: Suffix -> (Faktor, Teiler). Die Tabelle ist abschliessend.
 SUFFIXES = {}
 for _names, _factor, _divisor in (
@@ -278,13 +278,26 @@ def check_result(v, violation):
             check_result(x, violation)
 
 
-def example_resolver(prev):
-    """Resolver fuer die Beispiele der Spezifikation: Ein json-Block direkt vor einem
-    xtjson-Block ist der Basiswert seines %extends (6.6). prev: (Sprache, Text) oder None."""
-    if prev is None or prev[0] != 'json':
+def example_resolver(blocks, idx):
+    """Resolver fuer die Beispiele der Spezifikation (6.6): Die json-Bloecke direkt vor
+    dem xtjson-Block blocks[idx] sind die Basiswerte seiner %extends, die letzten in
+    der Reihenfolge der %extends. blocks: Liste von (Sprache, Text)."""
+    bases = []
+    i = idx - 1
+    while i >= 0 and blocks[i][0] == 'json':
+        bases.insert(0, json.loads(blocks[i][1]))
+        i -= 1
+    if not bases:
         return None
-    base = json.loads(prev[1])
-    return lambda ref: copy.deepcopy(base)
+    refs = []                                          # erster Durchlauf: Anzahl der %extends
+    try:
+        parse(blocks[idx][1], resolver=lambda ref: refs.append(ref) or {})
+    except XTJSONError:
+        pass
+    if len(refs) > len(bases):
+        return None
+    calls = iter(bases[len(bases) - len(refs):])
+    return lambda ref: copy.deepcopy(next(calls))
 
 
 class Parser:
@@ -294,7 +307,7 @@ class Parser:
         self.strict = strict                           # von der Anwendung verlangt (12)
         self.resolver = resolver                       # fuer %extends (6.6); None: abgeschaltet
         self.doc_strict = None                         # Wert von %strict (6.5)
-        self.extends = None                            # String von %extends (6.6)
+        self.extends = []                              # Strings der %extends (6.6)
         self.check = False                             # gilt der Strict-Modus?
 
     def violation(self, msg):
@@ -334,12 +347,16 @@ class Parser:
             v = self.value()
         if self.peek()[0] != 'eof':
             raise XTJSONError('Text nach dem Wurzelwert')
-        if self.extends is not None:                   # Basiswert und Zusammenfuehrung (6.6)
-            try:
-                base = self.resolver(self.extends)
-            except Exception as ex:                    # jeder Fehler des Resolvers
-                raise XTJSONError('Resolver meldet fuer %r einen Fehler: %s' % (self.extends, ex))
-            v = merge_patch(json_value(base), v)
+        if self.extends:                               # Basiswerte und Zusammenfuehrung (6.6)
+            base = None
+            for i, ref in enumerate(self.extends):    # in der Reihenfolge des Dokuments
+                try:
+                    b = self.resolver(ref)
+                except Exception as ex:                # jeder Fehler des Resolvers
+                    raise XTJSONError('Resolver meldet fuer %r einen Fehler: %s' % (ref, ex))
+                b = json_value(b)
+                base = b if i == 0 else merge_patch(base, b)
+            v = merge_patch(base, v)
             if self.check:                             # Strict-Modus auch fuer das Ergebnis (12)
                 check_result(v, self.violation)
         if not isinstance(v, (dict, list)):
@@ -347,11 +364,11 @@ class Parser:
         return v
 
     def directive(self, seen):
-        """Die Direktiven %strict (6.5) und %extends (6.6), jede hoechstens einmal (6.4)."""
+        """Die Direktiven %strict (6.5, hoechstens einmal) und %extends (6.6, beliebig oft)."""
         _, name, _ = self.next()
         if name not in ('strict', 'extends'):
             raise XTJSONError('unbekannte Direktive %%%s' % name)
-        if name in seen:
+        if name == 'strict' and name in seen:
             raise XTJSONError('%%%s ist bereits angegeben' % name)
         seen.add(name)
         if self.next()[0] != ':':
@@ -366,7 +383,7 @@ class Parser:
                 raise XTJSONError('%extends erwartet einen String')
             if self.resolver is None:
                 raise XTJSONError('%extends ist abgeschaltet: kein Resolver')
-            self.extends = v
+            self.extends.append(v)
 
     def value(self):
         k, v, _ = self.next()
@@ -387,7 +404,7 @@ class Parser:
         if k == 'id':
             if v in LITERALS:
                 return LITERALS[v]
-            raise XTJSONError('%r ist kein Literal (6.4)' % (v,))
+            raise XTJSONError('%r ist kein Wert ohne Anfuehrungszeichen (6.3)' % (v,))
         raise XTJSONError('Wert erwartet, gefunden %r' % (v,))
 
     def separator(self, closer):
@@ -435,8 +452,9 @@ def parse(text, strict=False, resolver=None):
 
     strict: die Anwendung verlangt den Strict-Modus (12); ohne ihn gilt er nur mit
     %strict: true im Dokument (6.5).
-    resolver: Funktion, die zum String von %extends den Basiswert liefert (6.6);
-    ohne sie ist %extends abgeschaltet und ein Fehler.
+    resolver: Funktion, die zum String eines %extends den Basiswert liefert (6.6); sie
+    wird fuer jedes %extends in der Reihenfolge des Dokuments aufgerufen. Ohne sie ist
+    %extends abgeschaltet und ein Fehler.
     """
     return Parser(text, strict, resolver).document()
 
@@ -455,7 +473,7 @@ def main(spec_path):
             continue
         n_l += 1
         try:
-            v = parse(body, resolver=example_resolver(blocks[idx - 1] if idx else None))
+            v = parse(body, resolver=example_resolver(blocks, idx))
         except XTJSONError as ex:
             fails += 1
             print('FEHLER xtjson-Block %d: %s\n%s' % (n_l, ex, body))
@@ -486,13 +504,13 @@ def main(spec_path):
         '"a\x0cb"', '"a\\\u2028b"', '"abc', "'a\nb", '"\n\ta\n  b\n "',
         # Direktiven (6.4 bis 6.6) und Werte ohne Anfuehrungszeichen (6.3);
         # %extends ist ohne Resolver abgeschaltet
-        "%extends: 'a.json'\n{}", '%extends: nil\n{}', "%extends: ['a.json']\n{}",
+        "%extends: 'a.json'\n{}", '%extends: null\n{}', '%extends: nil\n{}', "%extends: ['a.json']\n{}",
         "%extends: 'a.json'\n%extends: 'b.json'\n{}",
         '% strict: true\n{}', '%include: "a.xtj"\n{}', '%Strict: true\n{}', '%strict: true [1]',
         '%strict: true', 'a: 1\n%strict: true', '[%strict: true]',
-        '%strict: 1\n{}', "%strict: 'true'\n{}", '%strict: nil\n{}', '%strict: true\n%strict: true\n{}',
+        '%strict: 1\n{}', "%strict: 'true'\n{}", '%strict: null\n{}', '%strict: nil\n{}', '%strict: true\n%strict: true\n{}',
         '%strict: true\n"x"', '%strict: true\n{a: 1, a: 2}', '%strict: true\n["\\uFFFF"]',
-        '[Nil]', '[NULL]', '%define: a = 1\n[a]', "%version: '0.7'\n{}",
+        '[nil]', 'nil', '{a: nil}', '[Nil]', '[NULL]', '%define: a = 1\n[a]', "%version: '0.7'\n{}",
     ]
     for t in invalid:
         try:
@@ -514,7 +532,7 @@ def main(spec_path):
         ('true: false\nnull: null', {'true': False, 'null': None}),
         ('true', True), ('"x"', 'x'), ("'x'", 'x'), ('{}', {}), ('[]', []),
         ('{größe: 1, µm: 2, ÿ$_9: 3}', {'größe': 1, 'µm': 2, 'ÿ$_9': 3}),
-        ('größe: nil', {'größe': None}),
+        ('größe: null', {'größe': None}),
         ('a\n:\n1\nb: 2', {'a': 1, 'b': 2}),
         ('{a: 1 /* x\n */\n b: 2}', {'a': 1, 'b': 2}), ('\u00a0[1]\u2028', [1]),
         ('[1,\u2028\xa0\u20292]', [1, 2]), ('a: 1 // k\u2028b: 2', {'a': 1}), ('[1, /* \n */ 2]', [1, 2]),
@@ -539,8 +557,8 @@ def main(spec_path):
         ('"a\nb"', 'a\nb'), ("'a\nb'", 'a\nb'), ('"a\\\nb"', 'ab'), ('"a\\\r\nb"', 'ab'),
         ('"a\\\rb"', 'ab'), ("'a\\\n  b'", 'a  b'), ('a: "x\\\ny"\nb: 2', {'a': 'xy', 'b': 2}),
         ('"a\tb"', 'a\tb'), ('"a\\\\\nb"', 'a\\\nb'),
-        ('%strict: true\n[1]', [1]), ('%strict: false, [null, 543, nil]', [None, 543, None]),
-        ('[nil, null, true, false]', [None, None, True, False]), ('{nil: nil}', {'nil': None}),
+        ('%strict: true\n[1]', [1]), ('%strict: false, [null, 543, true]', [None, 543, True]),
+        ('[null, true, false]', [None, True, False]), ('{nil: null}', {'nil': None}),
     ]
     for t, exp in valid:
         try:

@@ -1,6 +1,6 @@
 # XTJSON
 
-**Specification, draft 0.7** · Date: 18 November 2026
+**Specification, draft 0.8** · Date: 19 November 2026
 
 ## Contents
 
@@ -45,9 +45,8 @@ The extensions over JSON are:
 | E9 | Additional escape sequences: `\v`, `\0`, `\xHH`, `\u{…}` | [8.2](#82-escape-sequences) |
 | E10 | Additional white space characters: all white space characters of ECMAScript | [5.1](#51-white-space) |
 | E11 | Strings across several lines, with indentation removed, and line continuation with `\` | [8.3](#83-line-breaks-in-strings) |
-| E12 | `nil` as another notation for `null` | [6.3](#63-values) |
-| E13 | Number suffixes (`10k`, `64mb`, `50pct`) | [9.5](#95-number-suffixes) |
-| E14 | Directives at the start of the document: `%strict` and `%extends` | [6.4](#64-directives) |
+| E12 | Number suffixes (`10k`, `64mb`, `50pct`) | [9.5](#95-number-suffixes) |
+| E13 | Directives at the start of the document: `%strict` and `%extends` | [6.4](#64-directives) |
 
 Non-goals: XTJSON introduces no new data types, no expressions and no references (see [Appendix C](#appendix-c--deliberately-not-included)). XTJSON is not an interchange format between machines; for that purpose JSON or I-JSON remains the format of choice.
 
@@ -69,7 +68,7 @@ The grammar is written in ABNF [RFC5234]. The rules in sections 5–9 are excerp
 | escaped, unescaped | escaped: written as an escape sequence according to 8.2; unescaped: written as the character itself |
 | line continuation | a `\` immediately before a line break in a string; it contributes nothing to the value (8.2) |
 | directive | a statement at the start of the document that begins with `%`: `%strict` or `%extends` (6.4) |
-| base value | the JSON value that a document with `%extends` extends (6.6) |
+| base value | a JSON value that a document with `%extends` extends (6.6) |
 | resolver | a function of the application that provides the base value for the string of `%extends` (6.6) |
 | predefined | fixed by this specification and not changeable |
 | strict mode | the mode in which a parser additionally enforces the prohibitions of section 12 |
@@ -83,17 +82,17 @@ This section is normative. It states what "fully compatible" with [RFC8259] (STD
 
 **K2 – Preservation of meaning.** As an XTJSON document, a JSON text denotes the same value as it does as a JSON text. No extension changes the meaning of a text that is already valid JSON.
 
-**K3 – Unchanged data model.** Every XTJSON document has a JSON equivalent ([section 10](#10-mapping-to-json)) that determines its value. `nil` and number suffixes are only other notations for JSON values. The directive `%strict` contributes nothing to the value. The value of a document with `%extends` is the result of merging it with its base value, which is itself a JSON value (6.6). A value that cannot be represented in JSON cannot be represented in XTJSON either.
+**K3 – Unchanged data model.** Every XTJSON document has a JSON equivalent ([section 10](#10-mapping-to-json)) that determines its value. Number suffixes are only other notations for JSON values. The directive `%strict` contributes nothing to the value. The value of a document with `%extends` is the result of merging it with its base values, which are themselves JSON values (6.6). A value that cannot be represented in JSON cannot be represented in XTJSON either.
 
 **K4 – Inherited semantics.** Everything that this specification does not explicitly extend applies as in [RFC8259]: the meaning of `true`, `false` and `null`, the escape sequences of JSON, the treatment of number range and precision, the insignificance of member order, and string comparison.
 
-**K5 – Delimitation.** An XTJSON document that uses at least one of the extensions E1–E14 is **not** a JSON text. It follows that:
+**K5 – Delimitation.** An XTJSON document that uses at least one of the extensions E1–E13 is **not** a JSON text. It follows that:
 
 - Such documents MUST NOT be labelled with the media type `application/json` or sent to recipients that expect JSON.
 - An XTJSON parser is not a conforming processor in the sense of [ECMA-404], because such a processor is not to accept non-conforming input. It is, however, a permitted parser in the sense of [RFC8259] section 9, which explicitly allows parsers to accept extensions.
 - Whoever generates JSON MUST adhere strictly to the JSON grammar ([RFC8259] section 10). The mapping in section 10 is the bridge.
 
-Informative – why K1 and K2 hold: every extension occupies only notations that are a syntax error in JSON. `/`, `#`, `%`, `'` and the additional white space characters (5.1) do not occur in JSON outside strings; the additional escape sequences are invalid `\` sequences in JSON; an unescaped line break or tab in a string is invalid in JSON; a name without quotation marks, a comma before a closing bracket, a `:` after the root value, two items without a comma, and `0x`, `0o`, `0b` and `_` in numbers are invalid in JSON; so are an identifier at a value position other than `true`, `false` and `null` (and thus also `nil`), and a suffix directly after a number. The values `true`, `false` and `null` of JSON are predefined and cannot be changed, and no suffix begins with `e` or `E`, so the exponent of a JSON number is never read as a suffix. A string without a line break keeps its JSON value, because the rules of 8.3 change only strings that extend across several lines. The line break rule (E5) applies only where JSON requires a comma; everywhere else a line break remains insignificant white space.
+Informative – why K1 and K2 hold: every extension occupies only notations that are a syntax error in JSON. `/`, `#`, `%`, `'` and the additional white space characters (5.1) do not occur in JSON outside strings; the additional escape sequences are invalid `\` sequences in JSON; an unescaped line break or tab in a string is invalid in JSON; a name without quotation marks, a comma before a closing bracket, a `:` after the root value, two items without a comma, and `0x`, `0o`, `0b` and `_` in numbers are invalid in JSON; so are an identifier at a value position other than `true`, `false` and `null`, and a suffix directly after a number. The values `true`, `false` and `null` of JSON are predefined and cannot be changed, and no suffix begins with `e` or `E`, so the exponent of a JSON number is never read as a suffix. A string without a line break keeps its JSON value, because the rules of 8.3 change only strings that extend across several lines. The line break rule (E5) applies only where JSON requires a comma; everywhere else a line break remains insignificant white space.
 
 ## 4. Encoding
 
@@ -199,23 +198,22 @@ Rules:
 ```abnf
 value        = object / array / string / number /
                %x74.72.75.65 / %x66.61.6C.73.65 /   ; true false
-               %x6E.75.6C.6C / %x6E.69.6C           ; null nil
+               %x6E.75.6C.6C                        ; null
 ```
 
-A value is an object or an array (section 7), a string (section 8), a number (section 9) or one of the four values `true`, `false`, `null` and `nil`. `true`, `false` and `null` have the meaning they have in JSON. `nil` is another notation for `null` and denotes the same value.
+A value is an object or an array (section 7), a string (section 8), a number (section 9) or one of the three values `true`, `false` and `null`. They have the meaning they have in JSON.
 
-- **Fixed.** `true`, `false`, `null` and `nil` are predefined. They MUST NOT be redefined, overridden or removed, and there are no further values without quotation marks: neither the document nor the application can define values.
-- **Case is significant.** The four values are written in lower case: `True`, `NULL` and `Nil` are errors.
-- **No other values without quotation marks.** Every other identifier at a value position is an error (`colour: red`, `undefined`, `NaN`). A parser MUST NOT interpret it as a string or in any other way instead.
-- **Name position.** At a name position `true`, `false`, `null` and `nil` are identifiers like any other and yield ordinary names (7.2): `{nil: nil}` has the name `"nil"` and the value `null`.
-- **Mapping.** In the JSON equivalent, `nil` is replaced by `null` (section 10).
+- **Fixed.** `true`, `false` and `null` are predefined. They MUST NOT be redefined, overridden or removed, and there are no further values without quotation marks: neither the document nor the application can define values.
+- **Case is significant.** The three values are written in lower case: `True`, `FALSE` and `NULL` are errors.
+- **No other values without quotation marks.** Every other identifier at a value position is an error (`colour: red`, `nil`, `undefined`, `NaN`). A parser MUST NOT interpret it as a string or in any other way instead.
+- **Name position.** At a name position `true`, `false` and `null` are identifiers like any other and yield ordinary names (7.2): `{null: null}` has the name `"null"` and the value `null`.
 
 ```xtjson
 {
-  middle_name: nil
-  children: null
+  middle_name: null
   married: false
-  nil: "an ordinary name at a name position"
+  verified: true
+  null: "an ordinary name at a name position"
 }
 ```
 
@@ -224,17 +222,18 @@ JSON equivalent:
 ```json
 {
   "middle_name": null,
-  "children": null,
   "married": false,
-  "nil": "an ordinary name at a name position"
+  "verified": true,
+  "null": "an ordinary name at a name position"
 }
 ```
 
 ### 6.4 Directives
 
 ```abnf
-directives   = strict-directive [ item-sep extends-directive ]
-             / extends-directive [ item-sep strict-directive ]
+directives   = extends-list [ item-sep strict-directive [ item-sep extends-list ] ]
+             / strict-directive [ item-sep extends-list ]
+extends-list = extends-directive *( item-sep extends-directive )
 ```
 
 A directive is a statement at the start of the document. There are exactly two directives: `%strict` (6.5) and `%extends` (6.6), for example `%strict: true, %extends: './defaults.json'`.
@@ -244,7 +243,7 @@ Rules:
 - **Notation.** A directive begins with `%`, directly followed by its name in lower case; together they form a single token, and white space and comments after the `%` are an error (`% strict`). A `:` and the value follow. Before and after the `:`, white space and comments are permitted as between any tokens (5.1), line breaks included.
 - **Position.** Directives are permitted only at the top level, before the root value or before the first member of the implicit root object. A directive inside an object or an array, or after the content has begun, is an error.
 - **Separators.** Two directives, and the last directive and the content of the document, MUST be separated like two items according to 7.3: by a comma or by white space that contains a line break. `%strict: true [1]` is an error.
-- **Order and number.** `%strict` and `%extends` can be written in either order. Each of them MUST occur at most once; a second `%strict` or `%extends` is an error, even if it states the same value.
+- **Order and number.** `%strict` MUST occur at most once; a second `%strict` is an error, even if it states the same value. `%extends` can occur any number of times (6.6). `%strict` can stand before, between or after the `%extends`.
 - **No other directives.** Any other text that begins with `%` is an error (`%include: "a.xtj"`, `%Strict: true`). A parser MUST NOT know further directives or accept any from the application.
 
 ### 6.5 The directive `%strict`
@@ -271,7 +270,7 @@ JSON equivalent:
 
 Rules:
 
-- **Value.** The value MUST be `true` or `false`. Any other value is an error (`%strict: 1`, `%strict: 'true'`, `%strict: nil`).
+- **Value.** The value MUST be `true` or `false`. Any other value is an error (`%strict: 1`, `%strict: 'true'`, `%strict: null`).
 - **`%strict: true`.** A parser MUST read the content of the document in strict mode, even if the application has not requested it.
 - **`%strict: false`.** The document does not require strict mode. If the application has requested strict mode, the document contradicts it, and a parser MUST reject it as an error.
 - **Without `%strict`.** A parser reads the document in strict mode if the application requests it.
@@ -283,7 +282,7 @@ Rules:
 extends-directive = %x25.65.78.74.65.6E.64.73 S ":" S string   ; %extends
 ```
 
-`%extends` names a base for the document: the document extends the value of another source, its **base value**, according to the rules of JSON Merge Patch [RFC7396].
+`%extends` names a base for the document: the document extends the value of another source, its **base value**, according to the rules of JSON Merge Patch [RFC7396]. A document can name several bases.
 
 Base value, for example from a file `defaults.json`:
 
@@ -302,7 +301,7 @@ XTJSON document:
 
 server: {
   port: 8443
-  debug: nil
+  debug: null
 }
 tags: ['c']
 ```
@@ -319,16 +318,53 @@ JSON equivalent:
 
 Rules:
 
-- **Value.** The value MUST be a string. Any other value is an error (`%extends: nil`, `%extends: ['a.json']`). The string is a reference to the source of the base value; it is not part of the value of the document.
+- **Value.** The value MUST be a string. Any other value is an error (`%extends: null`, `%extends: ['a.json']`). The string is a reference to the source of the base value; it is not part of the value of the document.
 - **Reference.** This specification does not determine how the reference is resolved. A URI reference [RFC3986] is RECOMMENDED, for example a relative path such as `'./defaults.json'` or a URL such as `'https://example.org/defaults.xtj'`; a relative reference then refers to the location of the document.
 - **Resolver.** A parser obtains the base value from a resolver of the application: a function that receives the value of the string and returns the base value as a JSON value. Where the resolver reads the source and in which format the source is written is left to the application; the source need not be an XTJSON document.
-- **Support.** A parser MAY support `%extends`. If it does not support it, or if the application has not given it a resolver, `%extends` is disabled, and the parser MUST reject a document with `%extends` as an error. It MUST also reject the document if the resolver reports an error or returns a value that is not a JSON value.
-- **Merging.** The value of the document is MergePatch(base value, value of the content). MergePatch(target, patch) is defined as in [RFC7396]:
+- **Support.** A parser MAY support `%extends`. If it does not support it, or if the application has not given it a resolver, `%extends` is disabled, and the parser MUST reject a document with `%extends` as an error. It MUST also reject the document if the resolver reports an error for one of the strings or returns a value that is not a JSON value.
+- **Merging.** With one `%extends`, the value of the document is MergePatch(base value, value of the content). MergePatch(target, patch) is defined as in [RFC7396]:
   1. If patch is not an object, the result is patch; target is not used.
   2. Otherwise the result is an object: a copy of target if target is an object, and an empty object otherwise. For each member of patch: if its value is `null`, a member with the same name is removed from the result; otherwise the member with this name in the result gets the value MergePatch(its previous value, or nothing, value of the member of patch).
-- **Consequences.** Members of the base value that the document does not name are kept, and objects are merged member by member at any depth. Arrays, strings, numbers, `true` and `false` replace a value of the base value as a whole; arrays are not merged. A member whose value is `null` or `nil` removes the member with the same name, so a member with the value `null` cannot be set in a document with `%extends`. Duplicate names in the content are resolved before merging (7.2).
-- **Strict mode.** In strict mode the prohibitions on names, string values and the root value also apply to the result (section 12).
+- **Several bases.** If the document contains several `%extends`, the resolver is called for each of their strings in the order of the document. The base values are merged in this order: each base value is applied as a merge patch to the result of the base values before it, and the value of the content is applied last. With two bases the value of the document is MergePatch(MergePatch(base value 1, base value 2), value of the content). The same string can occur more than once.
+- **Consequences.** Members of the base value that the document does not name are kept, and objects are merged member by member at any depth. Arrays, strings, numbers, `true` and `false` replace a value of the base value as a whole; arrays are not merged. A member whose value is `null` removes the member with the same name, so a member with the value `null` cannot be set in a document with `%extends`. The same holds for a later base value: it takes precedence over the earlier ones, and its members with the value `null` remove members of the earlier ones. Duplicate names in the content are resolved before merging (7.2).
+- **Strict mode.** In strict mode the prohibitions on names, string values and the root value also apply to the result, after all base values and the content have been merged (section 12).
 - **Nested bases.** The base value can itself be the value of a document with `%extends`; resolving it is the task of the resolver (section 13).
+
+Base values, for example from the files `defaults.json` and `production.json`:
+
+```json
+{
+  "name": "demo",
+  "server": { "host": "0.0.0.0", "port": 8080, "debug": true },
+  "log": { "level": "debug" }
+}
+```
+
+```json
+{
+  "server": { "port": 443, "debug": null },
+  "log": { "level": "warn" }
+}
+```
+
+XTJSON document:
+
+```xtjson
+%extends: './defaults.json'
+%extends: './production.json'
+
+log: { file: '/var/log/demo.log' }
+```
+
+JSON equivalent:
+
+```json
+{
+  "name": "demo",
+  "server": { "host": "0.0.0.0", "port": 443 },
+  "log": { "level": "warn", "file": "/var/log/demo.log" }
+}
+```
 
 ## 7. Objects, arrays and separators
 
@@ -355,8 +391,8 @@ name-start   = ALPHA / "_" / "$" / %xB5 /                 ; letters of
 - An identifier begins with an ASCII letter, `_`, `$` or a letter of the block Latin-1 Supplement: U+00B5 (micro sign), U+00C0 to U+00D6, U+00D8 to U+00F6 and U+00F8 to U+00FF. After that, ASCII digits are permitted as well. ECMAScript also permits these letters in identifiers [ECMA-262]; the ordinal indicators U+00AA and U+00BA and the middle dot U+00B7, which ECMAScript permits as well, are not permitted.
 - As a name an identifier stands for exactly the character sequence as written; there are no escape sequences in identifiers, and names are not normalized: `é` written as U+00E9 and as `e` followed by U+0301 are different names, and the second can only be written in quotation marks.
 - Every other name MUST be in quotation marks: names with spaces, hyphens, dots or other characters (for example `€`, `×`, `π` or combining characters), names that begin with a digit, and the empty name.
-- `true`, `false`, `null` and `nil` (6.3) are permitted as identifiers at a name position and yield ordinary names there (`"true"`, `"nil"`). A value never appears at a name position, so this is unambiguous.
-- At a value position only `true`, `false`, `null` and `nil` are permitted without quotation marks (6.3). There are no freely chosen values without quotation marks: `colour: red` is an error.
+- `true`, `false` and `null` (6.3) are permitted as identifiers at a name position and yield ordinary names there (`"true"`, `"null"`). A value never appears at a name position, so this is unambiguous.
+- At a value position only `true`, `false` and `null` are permitted without quotation marks (6.3). There are no freely chosen values without quotation marks: `colour: red` is an error.
 - The notation is irrelevant to the identity of a name: `a`, `"a"`, `'a'` and `"\u0061"` denote the same name.
 
 ```xtjson
@@ -723,34 +759,33 @@ The **JSON equivalent** of an XTJSON document is obtained by the following steps
 4. **Names:** an identifier at a name position becomes the JSON string with the same character sequence.
 5. **Strings:** a `'` string becomes the `"` string with the same content; unescaped `"` become `\"`. Escape sequences that JSON does not have are replaced in both string forms: `\'` by `'`, `\v` by `\u000B`, `\0` by `\u0000`, `\xHH` by `\u00HH`, `\u{…}` by the `\uXXXX` sequence of the same code point, above U+FFFF by the corresponding surrogate pair. A string with a line break becomes the `"` string that represents its value according to 8.3; line continuations are thereby dropped, and characters that may not appear unescaped in a JSON string (`"`, `\` and control characters such as line break and tab) are escaped.
 6. **Numbers:** all `_` are removed from decimal numbers; otherwise the notation remains unchanged. Hexadecimal, octal and binary numbers become the decimal integer of the same value, with a leading minus sign if preceded by `-`. A number with a suffix is replaced by the result of the conversion, written as a JSON number (9.5).
-7. **`true`, `false`, `null` and `nil`:** the first three remain unchanged; `nil` is replaced by `null` (6.3).
-8. **Directives** are removed, each together with the separator that follows it (6.4).
-9. **Base value:** if the document contains `%extends`, the JSON text obtained so far is applied as a merge patch to the base value (6.6); the JSON equivalent is the JSON text of the result.
+7. **Directives** are removed, each together with the separator that follows it (6.4).
+8. **Base values:** if the document contains `%extends`, its base values are merged in the order of the document, and the JSON text obtained so far is applied to them as a merge patch (6.6); the JSON equivalent is the JSON text of the result.
 
-The JSON equivalent is unique up to white space and the choice of equivalent escape sequences; for a document with `%extends` this holds for a given base value. If it contains an object with duplicate names, the rule from 7.2 applies to its value: the last member applies. Two XTJSON documents are **equivalent** if their JSON equivalents denote the same value. A document that is already a JSON text is its own JSON equivalent (up to white space).
+The JSON equivalent is unique up to white space and the choice of equivalent escape sequences; for a document with `%extends` this holds for given base values. If it contains an object with duplicate names, the rule from 7.2 applies to its value: the last member applies. Two XTJSON documents are **equivalent** if their JSON equivalents denote the same value. A document that is already a JSON text is its own JSON equivalent (up to white space).
 
 An example with a side-by-side comparison is given in [Appendix B.1](#b1-complete-example).
 
 ## 11. Conformance
 
-**Document.** A text is a conforming XTJSON document if it is encoded according to section 4, conforms to the rule `XTJSON-text` and, if it contains `%strict: true`, it satisfies the prohibitions of section 12. A conforming document without `%extends` is **portable**: its value depends only on its text and on this specification, and every conforming parser can read it, unless a limit or a restriction of the application applies (section 11). The value of a document with `%extends` also depends on its base value, and only a parser with a resolver can read it (6.6).
+**Document.** A text is a conforming XTJSON document if it is encoded according to section 4, conforms to the rule `XTJSON-text` and, if it contains `%strict: true`, it satisfies the prohibitions of section 12. A conforming document without `%extends` is **portable**: its value depends only on its text and on this specification, and every conforming parser can read it, unless a limit or a restriction of the application applies (section 11). The value of a document with `%extends` also depends on its base values, and only a parser with a resolver can read it (6.6).
 
 **Parser.** A conforming XTJSON parser
 
 - MUST accept every conforming XTJSON document and deliver the value of its JSON equivalent – and thus also every JSON text and every I-JSON message – unless a limit or restriction according to the fourth item applies or the document contains `%extends` and `%extends` is disabled (6.6);
-- MUST reject as an error every text that is not a conforming XTJSON document, in particular one with an identifier other than `true`, `false`, `null` and `nil` at a value position or an unknown directive, and MUST NOT silently accept any further syntax extensions;
-- MUST know the values `true`, `false`, `null` and `nil` (6.3), the directives from 6.4 and all suffixes from 9.5. It MUST NOT allow them to be redefined, and MUST NOT accept values, directives or suffixes from the application;
+- MUST reject as an error every text that is not a conforming XTJSON document, in particular one with an identifier other than `true`, `false` and `null` at a value position or an unknown directive, and MUST NOT silently accept any further syntax extensions;
+- MUST know the values `true`, `false` and `null` (6.3), the directives from 6.4 and all suffixes from 9.5. It MUST NOT allow them to be redefined, and MUST NOT accept values, directives or suffixes from the application;
 - MAY set limits on document size, nesting depth, number range and precision, and string length, and enforce semantic restrictions (for example strict mode according to section 12);
 - MUST offer strict mode according to section 12 to the application, and MUST read a document with `%strict: true` in strict mode (6.5);
 - MAY support `%extends` with a resolver of the application (6.6).
 
 **Generator.** An XTJSON generator MUST output conforming XTJSON documents. Every JSON generator that outputs UTF-8 is therefore also an XTJSON generator. If the recipient is a program, JSON SHOULD be output.
 
-**Converter.** A converter from XTJSON to JSON MUST produce the JSON equivalent according to section 10; for a document with `%extends` it needs the base value (6.6). Its output MUST conform strictly to the grammar of [RFC8259].
+**Converter.** A converter from XTJSON to JSON MUST produce the JSON equivalent according to section 10; for a document with `%extends` it needs the base values (6.6). Its output MUST conform strictly to the grammar of [RFC8259].
 
 ## 12. Strict mode
 
-In **strict mode** a parser enforces the following prohibitions beyond sections 4–9. Strict mode applies if the application requests it or if the document contains `%strict: true` (6.5). The prohibitions apply to the content of the document, the part after the directives. For a document with `%extends` the prohibitions on names, string values and the root value also apply to the result of merging it with its base value (6.6).
+In **strict mode** a parser enforces the following prohibitions beyond sections 4–9. Strict mode applies if the application requests it or if the document contains `%strict: true` (6.5). The prohibitions apply to the content of the document, the part after the directives. For a document with `%extends` the prohibitions on names, string values and the root value also apply to the result of merging it with its base values (6.6).
 
 - Names and string values MUST NOT contain surrogates or Unicode noncharacters, neither directly nor as an escape sequence. A single `"\uDEAD"` is invalid; a correct surrogate pair is permitted.
 - An object MUST NOT contain duplicate names. The comparison is made after all escape sequences have been resolved and independently of the notation of the name (identifier or string in one of the forms from section 8).
@@ -770,7 +805,7 @@ The recommendations of [I-JSON] for protocols also apply unchanged to XTJSON doc
 - **Resource limits.** Deeply nested structures, very long strings or numbers, and unterminated block comments and strings can overload parsers. Parsers SHOULD set limits (section 11).
 - **Divergent interpretation.** If two components process the same document differently, checks can be bypassed. This concerns above all duplicate names, which other JSON tools may treat differently from what 7.2 specifies, numbers outside the exact range, and documents with `%extends`, whose value depends on the resolver. Where a document controls security-relevant decisions, strict mode (section 12) is RECOMMENDED.
 - **No definitions.** The values without quotation marks, the directives and the conversions of the suffixes are fixed by this specification alone; neither the document nor the application can define values. The meaning of a document without `%extends` therefore does not depend on the configuration of the parser, and a document can bring along no code.
-- **`%extends`.** A document with `%extends` makes the parser call the resolver of the application with a string from the document. A document from an untrusted source can thereby cause local files to be read or network requests to be made, for example with `'/etc/passwd'`, `'file:///…'` or the address of a service in an internal network, and their content becomes part of the value. Resolvers SHOULD resolve only sources that the application permits, SHOULD detect cycles when a base value itself comes from a document with `%extends`, and SHOULD limit the number and the size of the sources. Where documents come from untrusted sources, `%extends` SHOULD be disabled or the resolver restricted accordingly.
+- **`%extends`.** A document with `%extends` makes the parser call the resolver of the application with a string from the document, once for every `%extends`. A document from an untrusted source can thereby cause local files to be read or network requests to be made, for example with `'/etc/passwd'`, `'file:///…'` or the address of a service in an internal network, and their content becomes part of the value. Resolvers SHOULD resolve only sources that the application permits, SHOULD detect cycles when a base value itself comes from a document with `%extends`, and SHOULD limit the number and the size of the sources. Where documents come from untrusted sources, `%extends` SHOULD be disabled or the resolver restricted accordingly.
 - **Similar characters in names.** Identifiers may contain letters of the block Latin-1 Supplement. Some of them resemble other characters, for example U+00B5 (micro sign) and U+03BC (Greek small letter mu), and names are compared code point by code point without normalization (7.2). Tools SHOULD point out names that differ only in such characters.
 - **Confusion with JSON.** An XTJSON document that is passed off as JSON leads to errors with strict recipients and to inconsistent behaviour with lenient ones. Hence the delimitation in K5.
 - **Comments.** Comments are lost in the mapping to JSON and are not seen by programs. Invisible characters and characters that control text direction in comments and strings can make the displayed text differ from the processed text; tools SHOULD point this out.
@@ -790,8 +825,9 @@ XTJSON-text    = S [ directives item-sep ] ( value / member-list ) S [ line-comm
                                              ; member-list: implicit root object
 
 ; ---------- Directives ----------
-directives     = strict-directive [ item-sep extends-directive ]
-               / extends-directive [ item-sep strict-directive ]
+directives     = extends-list [ item-sep strict-directive [ item-sep extends-list ] ]
+               / strict-directive [ item-sep extends-list ]
+extends-list   = extends-directive *( item-sep extends-directive )
 strict-directive  = %x25.73.74.72.69.63.74 S ":" S
                     ( %x74.72.75.65 / %x66.61.6C.73.65 )   ; %strict: true / false
 extends-directive = %x25.65.78.74.65.6E.64.73 S ":" S string   ; %extends
@@ -799,7 +835,7 @@ extends-directive = %x25.65.78.74.65.6E.64.73 S ":" S string   ; %extends
 ; ---------- Values ----------
 value          = object / array / string / number /
                  %x74.72.75.65 / %x66.61.6C.73.65 /  ; true false
-                 %x6E.75.6C.6C / %x6E.69.6C          ; null nil (the same value)
+                 %x6E.75.6C.6C                       ; null
 
 ; ---------- Objects ----------
 object         = "{" S [ member-list S ] "}"
@@ -877,7 +913,7 @@ Notes on tokenization (informative):
 - The longest match applies. `0x1e3` is a single hexadecimal number, and `10min` is the number `10` with the suffix `min`.
 - Two conditions apply in addition to the grammar: no decimal digit follows the escape sequence `\0`, and the value of `\u{…}` is not in the range D800 to DFFF.
 - Two values always need a separator according to 7.3. Character sequences such as `0755`, `1_`, `0b102`, `123abc`, `10_k`, `10kbs` or `1.5n` can therefore never be read as a valid sequence of several tokens and are errors.
-- An identifier is read with the longest match. At a value position it must be `true`, `false`, `null` or `nil`: `nullable` and `nil2` are errors, not one of these values followed by further characters.
+- An identifier is read with the longest match. At a value position it must be `true`, `false` or `null`: `nullable` and `true2` are errors, not one of these values followed by further characters.
 - `%strict` and `%extends` are single tokens; white space after the `%` is an error.
 - A line comment always extends to the next line break: `eol` requires a `newline` after it, and `non-eol` excludes only U+000A and U+000D. Only at the end of the document may the line break be missing.
 - The sequence CR LF is always a single `newline`, never two.
@@ -902,7 +938,7 @@ $schema: "https://example.org/schema/service.json"
 listen: {
   host: "0.0.0.0"
   port: 8080            // the line break replaces the comma
-  proxy: nil            // nil is the same as null
+  proxy: null           // no proxy
   tls: false,           // commas remain permitted
 }
 
@@ -980,8 +1016,8 @@ In the tables `⏎` stands for a line break.
 | `[,]` and `{,}` | comma without a preceding item |
 | `{a: 1} b: 2` | text after the root value |
 | `a: 1 }` | the implicit root object is not closed with `}` |
-| `[abc]` | `abc` is not `true`, `false`, `null` or `nil`; there are no other values without quotation marks |
-| `[True]` and `[Nil]` | case is significant |
+| `[abc]` and `[nil]` | `abc` and `nil` are not `true`, `false` or `null`; there are no other values without quotation marks |
+| `[True]` and `[NULL]` | case is significant |
 
 **Directives**
 
@@ -993,10 +1029,9 @@ In the tables `⏎` stands for a line break.
 | `%strict: true` | only a directive; the document has no content |
 | `a: 1` ⏎ `%strict: true` | directive after the first member |
 | `[%strict: true]` | directive not at the top level |
-| `%strict: 1` ⏎ `{}`, `%strict: 'true'` ⏎ `{}` and `%strict: nil` ⏎ `{}` | not `true` or `false` |
+| `%strict: 1` ⏎ `{}`, `%strict: 'true'` ⏎ `{}` and `%strict: null` ⏎ `{}` | not `true` or `false` |
 | `%strict: true` ⏎ `%strict: true` ⏎ `{}` | `%strict` twice |
-| `%extends: nil` ⏎ `{}` and `%extends: ['a.json']` ⏎ `{}` | the value of `%extends` is not a string |
-| `%extends: 'a.json'` ⏎ `%extends: 'b.json'` ⏎ `{}` | `%extends` twice |
+| `%extends: null` ⏎ `{}` and `%extends: ['a.json']` ⏎ `{}` | the value of `%extends` is not a string |
 | `%extends: 'a.json'` ⏎ `{}`, if `%extends` is disabled | the parser has no resolver |
 | `%strict: true` ⏎ `"x"` | strict mode: the root value is not an object and not an array |
 | `%strict: true` ⏎ `{a: 1, a: 2}` | strict mode: duplicate name |
@@ -1064,12 +1099,12 @@ In the tables `⏎` stands for a line break.
 
 The following extensions, known from other JSON dialects, are **not** part of XTJSON. A conforming parser rejects them.
 
-- freely chosen values without quotation marks (`colour: red`); at a value position only `true`, `false`, `null` and `nil` are permitted
+- freely chosen values without quotation marks (`colour: red`); at a value position only `true`, `false` and `null` are permitted
 - values defined in the document or by the application, such as aliases, constants or variables
-- other notations of `true`, `false`, `null` and `nil` (`True`, `NULL`, `Nil`) and further values without quotation marks such as `undefined`
+- other notations of `true`, `false` and `null` (`True`, `NULL`, `nil`) and further values without quotation marks such as `undefined`
 - switching off strict mode that the application has requested; `%strict: false` is then an error
-- directives other than `%strict` and `%extends`, directives of the parser or of the application, directives inside objects and arrays or after the start of the content, and a second `%strict` or `%extends`; version statements in the document
-- several bases in one document, and rules for merging other than JSON Merge Patch, for example appending to arrays
+- directives other than `%strict` and `%extends`, directives of the parser or of the application, directives inside objects and arrays or after the start of the content, and a second `%strict`; version statements in the document
+- rules for merging other than JSON Merge Patch, for example appending to arrays
 - suffixes defined in the document or by the application; further suffixes such as `px` or `L`; suffixes in upper case and other spellings of a suffix (`10K`, `64MB`); white space before the suffix; `n` after a number with a fraction part or an exponent; suffixes that yield anything other than a number
 - strings delimited by three quotation marks (`"""…"""`, `'''…'''`), heredocs and raw strings without escape sequences
 - a line continuation with white space between `\` and the line break
@@ -1093,7 +1128,7 @@ Informative. Decisions at points where several solutions were possible, with the
 | Empty document | an error, not `{}` | An empty or truncated file should be noticed; JSON behaves the same way. |
 | Duplicate names | the last member applies; forbidden in strict mode | A fixed behaviour prevents two parsers from reading the same document differently. A general prohibition would exclude valid JSON texts and violate K1. |
 | Characters in identifiers | ASCII letters, digits, `_`, `$`, `µ` and the letters U+00C0 to U+00FF without `×` and `÷` | Names in many Western European languages, such as `größe` or `café`, can be written without quotation marks, as in ECMAScript. `ª`, `º` and `·`, which ECMAScript also permits, are left out: they are not letters of a word, are rarely needed in names and are easily confused with superscripts, the degree sign or other dots. A fixed list from one Unicode block needs no Unicode tables and does not change with new Unicode versions. Other characters, including combining characters, need quotation marks, and names are not normalized. Names such as `max-age` are written in quotation marks. |
-| `true`, `false`, `null`, `nil` as a name | permitted | Unambiguous at a name position; avoids a special rule. |
+| `true`, `false`, `null` as a name | permitted | Unambiguous at a name position; avoids a special rule. |
 | Line break | LF, CR or CR LF; CR LF counts as one | A single definition that is the same everywhere for separators, line comments and strings, independent of the line endings of the file. |
 | Additional white space | all white space and line terminator characters of ECMAScript 2026; only the line break according to 5.2 is a separator | In this way the structure of a document does not depend on characters that editors display inconsistently or not at all. Unlike in ECMAScript, U+2028 and U+2029 are therefore not line terminators. |
 | Category Zs | given as a fixed list | Parsers need no Unicode tables, and the grammar does not change with new Unicode versions. ECMAScript, by contrast, refers to the current category in each case. |
@@ -1119,10 +1154,10 @@ Informative. Decisions at points where several solutions were possible, with the
 | Prefixes `0x`/`0o`/`0b` | upper and lower case equivalent | Consistent with `e`/`E` in the exponent. Lower case is recommended. |
 | Sign on non-decimal numbers | `-` permitted, `+` not | Consistent with the JSON rule `[ minus ]`. |
 | `_` in numbers | single, only between two digits | A simple rule that is easy to check. |
-| Values without quotation marks | only `true`, `false`, `null` and `nil` | A typo such as `ture` is reported as an error instead of being read as a string. |
+| Values without quotation marks | only `true`, `false` and `null` | A typo such as `ture` is reported as an error instead of being read as a string. |
 | `true`, `false`, `null` | predefined, not changeable | Otherwise a valid JSON text could change its meaning (K2). |
-| `nil` | another notation for `null`, fixed in the grammar | Many programming languages write the null value as `nil`. `nil` is a syntax error in JSON, so no JSON text changes its meaning (K1, K2). |
-| No definitions | neither the document nor the application can define values | The value of a document can be read from its text without resolving definitions, and two parsers cannot read the same document differently. The only part of a value from outside the text is the base value of `%extends` (6.6), and it is taken over as a whole. |
+| Other notations for `null` | none; `nil` is an error | Every value has exactly one notation, as every suffix has. A second notation would have to be known by every reader and every tool and adds no information. |
+| No definitions | neither the document nor the application can define values | The value of a document can be read from its text without resolving definitions, and two parsers cannot read the same document differently. The only parts of a value from outside the text are the base values of `%extends` (6.6), and they are taken over as a whole. |
 | Suffixes: notation | a fixed list in the grammar; only lower case, exactly one notation per suffix | A reader recognizes every suffix without a list of alternative spellings, and a parser needs no character rules for suffixes. No suffix begins with `a`–`f`, `o`, `x` or `_`, so hexadecimal digits, the exponent, number prefixes and digit grouping remain unambiguous. Every other character after a number needs a separator and remains an error; later versions can therefore add suffixes without changing the value of a valid document. |
 | Suffix `m` | number times 1000000 | Large numbers are written as briefly as with `k`. The longest match distinguishes `m` from `mb`, `ms` and `min`. |
 | Suffix `n` | only after an integer, not after a fraction part or an exponent | As in ECMAScript, where `n` marks an integer literal (BigInt) and `1.5n` and `1e3n` are errors as well. |
@@ -1131,14 +1166,15 @@ Informative. Decisions at points where several solutions were possible, with the
 | Suffix: result | always a number | A suffix converts; it does not create another data type. |
 | Suffix: precision | exact result | `0.1kb` should yield `102.4` and `100ms` should yield `0.1`, independent of the floating-point arithmetic of the parser. |
 | Directives: notation | `%strict` and `%extends`, each with `:` and its value, fixed in the grammar | `%` does not occur in JSON outside strings, so no JSON text changes its meaning (K1, K2). The `:` corresponds to the notation of a member. Every other text after a `%` is an error; later versions can therefore add directives without changing the value of a valid document. |
-| Directives: position | only at the top level, before the content; in either order | Readers and parsers know whether strict mode applies and which base the document extends before the content begins. The order of the two directives does not change the value. |
+| Directives: position | only at the top level, before the content; `%strict` before, between or after the `%extends` | Readers and parsers know whether strict mode applies and which bases the document extends before the content begins. The position of `%strict` does not change the value; the order of the `%extends` does (6.6). |
 | Directives: which exist | only `%strict` and `%extends`; the parser and the application cannot add any | Every document is read in the same way by every parser that supports the directives. |
 | `%extends`: purpose | a document extends a base value according to JSON Merge Patch [RFC7396] | Configuration files often differ from a common base only in a few values. JSON Merge Patch is a published and simple standard; it works on the JSON data model, so the base can come from JSON, XTJSON or another format, and the result is again a JSON value. |
 | `%extends`: resolution | left to a resolver of the application; support is optional | How a reference becomes a value depends on the environment (files, network, packages) and on security rules that only the application knows. The specification fixes only the merging, so the result is the same with every parser for the same base value. A parser without a resolver reports an error instead of ignoring the base. |
 | `%extends`: value | a string; a URI reference is recommended | A URI covers local files as well as URLs. A string can contain every character. |
-| `%extends`: `null` | removes a member, as in RFC 7396; this also holds for `nil` | `nil` and `null` denote the same value everywhere. A deviation would make the result differ from other implementations of JSON Merge Patch. A member with the value `null` therefore cannot be set in a document with `%extends`. |
-| `%extends`: number | at most once | Several bases would need rules for their order and for conflicts. A base value can itself come from a document with `%extends`. |
-| Strict mode and `%extends` | the prohibitions on names, string values and the root value also apply to the result | The JSON equivalent of a document that is valid in strict mode remains an I-JSON message, whatever the base value contains. |
+| `%extends`: `null` | removes a member, as in RFC 7396; this also holds for `null` in a later base value | A deviation would make the result differ from other implementations of JSON Merge Patch. A member with the value `null` therefore cannot be set in a document with `%extends`. |
+| `%extends`: number | any number; the base values are merged in the order of the document, each later one as a merge patch on the earlier ones | A configuration can be built from several layers, such as common defaults, an environment and a single host. Bases and content are merged with the same algorithm (RFC 7396), and the order in the document is the order of precedence: as with duplicate names, what comes later applies. A base value can also itself come from a document with `%extends`. |
+| `%extends`: the same string more than once | permitted | Two different strings can name the same source, so a prohibition could not be checked reliably. Merging a base value again changes the result only through its members with the value `null`. |
+| Strict mode and `%extends` | the prohibitions on names, string values and the root value also apply to the result of all merges | The JSON equivalent of a document that is valid in strict mode remains an I-JSON message, whatever the base values contain. |
 | Strict mode: root value | an object or an array | [I-JSON] only recommends this. A single string or number as the root value cannot be extended later by further members; in strict mode the recommendation becomes a rule that a parser can check. |
 | Strict mode: support | every parser must offer it | Otherwise one parser would accept a document with `%strict: true` that another rejects; every document remains portable. |
 | `%strict`: value | `true` or `false`; at most once | A switch has two states. A second `%strict` could only repeat or contradict the first one. |
@@ -1165,6 +1201,13 @@ Informative. Decisions at points where several solutions were possible, with the
 - RFC 4648, "The Base16, Base32, and Base64 Data Encodings".
 
 ## Changes
+
+**Draft 0.8**
+
+- 6.3: `nil` is dropped. The only values without quotation marks are `true`, `false` and `null`; `nil` at a value position is an error. Extension E12 is dropped; E13 and E14 become E12 and E13.
+- 6.4, 6.6: a document can contain `%extends` several times. The resolver is called for each `%extends` in the order of the document; the base values are merged in this order according to JSON Merge Patch, each later one as a merge patch on the earlier ones, and the content is applied last. `%strict` occurs at most once and can stand before, between or after the `%extends`.
+- 10: the step that replaced `nil` by `null` is dropped. With several `%extends`, the content is applied to the merged base values.
+- 1, 2, 3, 7.2, 11, 12, 13 and Appendices A to D are adapted to these changes.
 
 **Draft 0.7**
 

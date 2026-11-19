@@ -137,8 +137,8 @@ def main(de_path, en_path):
         print('BEISPIELE: unterschiedliche Folge von Bloecken')
     n = 0
     for i, ((l1, b1), (l2, b2)) in enumerate(zip(xd, xe)):
-        v1 = parse(b1, resolver=example_resolver(xd[i - 1] if i else None))
-        v2 = parse(b2, resolver=example_resolver(xe[i - 1] if i else None))
+        v1 = parse(b1, resolver=example_resolver(xd, i))
+        v2 = parse(b2, resolver=example_resolver(xe, i))
         n += 1
         if shape(v1) != shape(v2):
             problems += 1

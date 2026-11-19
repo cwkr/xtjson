@@ -137,7 +137,7 @@
    }
   ],
   [
-   "gr\u00f6\u00dfe: nil",
+   "gr\u00f6\u00dfe: null",
    {
     "gr\u00f6\u00dfe": null
    }
@@ -489,24 +489,23 @@
    ]
   ],
   [
-   "%strict: false, [null, 543, nil]",
+   "%strict: false, [null, 543, true]",
    [
     null,
     543,
-    null
+    true
    ]
   ],
   [
-   "[nil, null, true, false]",
+   "[null, true, false]",
    [
-    null,
     null,
     true,
     false
    ]
   ],
   [
-   "{nil: nil}",
+   "{nil: null}",
    {
     "nil": null
    }
@@ -639,6 +638,7 @@
   "'a\nb",
   "\"\n\ta\n  b\n \"",
   "%extends: 'a.json'\n{}",
+  "%extends: null\n{}",
   "%extends: nil\n{}",
   "%extends: ['a.json']\n{}",
   "%extends: 'a.json'\n%extends: 'b.json'\n{}",
@@ -651,11 +651,15 @@
   "[%strict: true]",
   "%strict: 1\n{}",
   "%strict: 'true'\n{}",
+  "%strict: null\n{}",
   "%strict: nil\n{}",
   "%strict: true\n%strict: true\n{}",
   "%strict: true\n\"x\"",
   "%strict: true\n{a: 1, a: 2}",
   "%strict: true\n[\"\\uFFFF\"]",
+  "[nil]",
+  "nil",
+  "{a: nil}",
   "[Nil]",
   "[NULL]",
   "%define: a = 1\n[a]",
@@ -1131,10 +1135,6 @@
  ],
  "c_valid": [
   [
-   "nil",
-   null
-  ],
-  [
    "null",
    null
   ],
@@ -1147,16 +1147,15 @@
    false
   ],
   [
-   "[nil, null, true, false]",
+   "[null, true, false]",
    [
-    null,
     null,
     true,
     false
    ]
   ],
   [
-   "[nil\nnull\ntrue]",
+   "[null\nnull\ntrue]",
    [
     null,
     null,
@@ -1172,26 +1171,19 @@
    ]
   ],
   [
-   "{nil: nil}",
+   "{null: null}",
    {
-    "nil": null
-   }
-  ],
-  [
-   "{\"nil\": nil}",
-   {
-    "nil": null
-   }
-  ],
-  [
-   "nil: null\nnull: nil",
-   {
-    "nil": null,
     "null": null
    }
   ],
   [
-   "a: nil, b: true",
+   "{\"null\": null}",
+   {
+    "null": null
+   }
+  ],
+  [
+   "a: null, b: true",
    {
     "a": null,
     "b": true
@@ -1204,35 +1196,34 @@
    }
   ],
   [
-   "{true: true, false: false, null: null, nil: nil}",
+   "{true: true, false: false, null: null}",
    {
     "true": true,
     "false": false,
-    "null": null,
-    "nil": null
+    "null": null
    }
   ],
   [
-   "[nil,nil]",
+   "[null,null]",
    [
     null,
     null
    ]
   ],
   [
-   "a: nil // Kommentar",
+   "a: null // Kommentar",
    {
     "a": null
    }
   ],
   [
-   "[nil/* k */]",
+   "[null/* k */]",
    [
     null
    ]
   ],
   [
-   "[[nil], {a: [nil]}]",
+   "[[null], {a: [null]}]",
    [
     [
      null
@@ -1245,13 +1236,41 @@
    ]
   ],
   [
-   "a: nil\n",
+   "a: null\n",
    {
     "a": null
    }
   ],
   [
-   "{$a: 1, _b: nil, Nil: 2, NaN: 3, px: 4, ms: 5, k: 6}",
+   "{nil: 1}",
+   {
+    "nil": 1
+   }
+  ],
+  [
+   "{\"nil\": null}",
+   {
+    "nil": null
+   }
+  ],
+  [
+   "nil: null\nnull: 1",
+   {
+    "nil": null,
+    "null": 1
+   }
+  ],
+  [
+   "{nil: \"nil\", Nil: [true]}",
+   {
+    "nil": "nil",
+    "Nil": [
+     true
+    ]
+   }
+  ],
+  [
+   "{$a: 1, _b: null, Nil: 2, NaN: 3, px: 4, ms: 5, k: 6}",
    {
     "$a": 1,
     "_b": null,
@@ -1317,7 +1336,7 @@
    }
   ],
   [
-   "{\u00ff: [1], nil: nil}",
+   "{\u00ff: [1], nil: null}",
    {
     "\u00ff": [
      1
@@ -1726,7 +1745,7 @@
    10000000
   ],
   [
-   "[50pct, 10k, nil]",
+   "[50pct, 10k, null]",
    [
     0.5,
     10000,
@@ -1743,6 +1762,13 @@
   ]
  ],
  "c_invalid": [
+  "nil",
+  "[nil]",
+  "a: nil",
+  "{nil: nil}",
+  "{\"a\": nil}",
+  "[null, nil]",
+  "nil: nil",
   "[abc]",
   "True",
   "NULL",
@@ -1769,11 +1795,11 @@
   "nullable",
   "trueish",
   "falsey",
-  "[nil nil]",
-  "nil null",
-  "[n il]",
-  "[ni l]",
-  "a: nil nil",
+  "[null null]",
+  "null true",
+  "[n ull]",
+  "[nu ll]",
+  "a: null null",
   "tr ue",
   "{\u00aa: 1}",
   "{\u00ba: 1}",
@@ -2080,7 +2106,7 @@
    }
   ],
   [
-   "%strict: true\n'x': 1, y: nil",
+   "%strict: true\n'x': 1, y: null",
    {
     "x": 1,
     "y": null
@@ -2111,11 +2137,11 @@
    1
   ],
   [
-   "%strict: false\nnil",
+   "%strict: false\nnull",
    null
   ],
   [
-   "%strict: true\n[nil]",
+   "%strict: true\n[null]",
    [
     null
    ]
@@ -2175,7 +2201,7 @@
    ]
   ],
   [
-   "%strict: true\n{a: nil, b: null}",
+   "%strict: true\n{a: null, b: null}",
    {
     "a": null,
     "b": null
@@ -2283,6 +2309,7 @@
   "%strict: true\n{a: {\"\\u0061\": 1, a: 2}}",
   "%strict: true\n[{a: 1, \"a\": 2}]",
   "%strict: true\n{nil: 1, \"nil\": 2}",
+  "%strict: true\n[nil]",
   "%strict: true\n[\"\\uDEAD\"]",
   "%strict: true\n[\"\\uD83D\"]",
   "%strict: true\n[\"\\uDE00\\uD83D\"]",
@@ -2342,7 +2369,7 @@
    ]
   ],
   [
-   "{a: nil, nil: null}",
+   "{a: null, nil: null}",
    {
     "a": null,
     "nil": null
@@ -2353,7 +2380,6 @@
   "1",
   "\"x\"",
   "null",
-  "nil",
   "true",
   "-0",
   "{a: 1, a: 2}",
@@ -2403,7 +2429,7 @@
    {}
   ],
   [
-   "%extends: 'b'\n{a: nil}",
+   "%extends: 'b'\n{a: null}",
    {
     "b": {
      "a": "b",
@@ -2660,7 +2686,7 @@
    }
   ],
   [
-   "%extends: 'b'\n[nil]",
+   "%extends: 'b'\n[null]",
    {
     "b": {}
    },
@@ -2747,7 +2773,7 @@
    1
   ],
   [
-   "%extends: 'b'\n{x: 10k, gr\u00f6\u00dfe: nil}",
+   "%extends: 'b'\n{x: 10k, gr\u00f6\u00dfe: null}",
    {
     "b": {
      "gr\u00f6\u00dfe": 1
@@ -2777,23 +2803,385 @@
      1.5
     ]
    }
-  ]
- ],
- "d_extends_invalid": [
+  ],
+  [
+   "%extends: 'a'\n%extends: 'b'\n{}",
+   {
+    "a": {
+     "x": 1,
+     "y": 1
+    },
+    "b": {
+     "y": 2,
+     "z": 2
+    }
+   },
+   {
+    "x": 1,
+    "y": 2,
+    "z": 2
+   }
+  ],
+  [
+   "%extends: 'b'\n%extends: 'a'\n{}",
+   {
+    "a": {
+     "x": 1,
+     "y": 1
+    },
+    "b": {
+     "y": 2,
+     "z": 2
+    }
+   },
+   {
+    "x": 1,
+    "y": 1,
+    "z": 2
+   }
+  ],
+  [
+   "%extends: 'a'\n%extends: 'b'\n{y: 3}",
+   {
+    "a": {
+     "x": 1,
+     "y": 1
+    },
+    "b": {
+     "y": 2
+    }
+   },
+   {
+    "x": 1,
+    "y": 3
+   }
+  ],
+  [
+   "%extends: 'a', %extends: 'b', %extends: 'c', {d: 4}",
+   {
+    "a": {
+     "a": 1,
+     "v": "a"
+    },
+    "b": {
+     "b": 2,
+     "v": "b"
+    },
+    "c": {
+     "c": 3,
+     "v": "c"
+    }
+   },
+   {
+    "a": 1,
+    "b": 2,
+    "c": 3,
+    "v": "c",
+    "d": 4
+   }
+  ],
+  [
+   "%extends: 'a'\n%extends: 'b'\nx: {q: 3}",
+   {
+    "a": {
+     "x": {
+      "p": 1,
+      "q": 1
+     }
+    },
+    "b": {
+     "x": {
+      "q": 2,
+      "r": 2
+     }
+    }
+   },
+   {
+    "x": {
+     "p": 1,
+     "q": 3,
+     "r": 2
+    }
+   }
+  ],
+  [
+   "%extends: 'a'\n%extends: 'b'\n{}",
+   {
+    "a": {
+     "x": 1,
+     "y": null
+    },
+    "b": {
+     "x": null
+    }
+   },
+   {
+    "y": null
+   }
+  ],
+  [
+   "%extends: 'a'\n%extends: 'b'\n{}",
+   {
+    "a": {
+     "x": {
+      "p": 1,
+      "q": 1
+     }
+    },
+    "b": {
+     "x": {
+      "p": null
+     }
+    }
+   },
+   {
+    "x": {
+     "q": 1
+    }
+   }
+  ],
+  [
+   "%extends: 'a'\n%extends: 'b'\n{}",
+   {
+    "a": {
+     "x": 1
+    },
+    "b": {
+     "y": null
+    }
+   },
+   {
+    "x": 1
+   }
+  ],
+  [
+   "%extends: 'a'\n%extends: 'b'\n{}",
+   {
+    "a": {
+     "x": [
+      1,
+      2
+     ]
+    },
+    "b": {
+     "x": [
+      3
+     ]
+    }
+   },
+   {
+    "x": [
+     3
+    ]
+   }
+  ],
+  [
+   "%extends: 'a'\n%extends: 'b'\n{c: 1}",
+   {
+    "a": {
+     "x": 1
+    },
+    "b": [
+     1,
+     2
+    ]
+   },
+   {
+    "c": 1
+   }
+  ],
+  [
+   "%extends: 'a'\n%extends: 'b'\n[0]",
+   {
+    "a": {
+     "x": 1
+    },
+    "b": {
+     "y": 2
+    }
+   },
+   [
+    0
+   ]
+  ],
+  [
+   "%extends: 'a'\n%extends: 'b'\n{}",
+   {
+    "a": [
+     1
+    ],
+    "b": {
+     "x": null,
+     "y": 2
+    }
+   },
+   {
+    "y": 2
+   }
+  ],
+  [
+   "%extends: 'a'\n%extends: 'b'\n{}",
+   {
+    "a": {
+     "x": 1
+    },
+    "b": "text"
+   },
+   {}
+  ],
+  [
+   "%extends: 'a'\n%extends: 'b'\n1",
+   {
+    "a": {
+     "x": 1
+    },
+    "b": null
+   },
+   1
+  ],
+  [
+   "%extends: 'a'\n%extends: 'a'\n{}",
+   {
+    "a": {
+     "x": 1
+    }
+   },
+   {
+    "x": 1
+   }
+  ],
+  [
+   "%extends: 'a'\n%extends: 'a'\n{}",
+   {
+    "a": {
+     "x": 1,
+     "n": null
+    }
+   },
+   {
+    "x": 1
+   }
+  ],
   [
    "%extends: 'b'\n%extends: 'b'\n{}",
    {
     "b": {}
+   },
+   {}
+  ],
+  [
+   "%strict: true\n%extends: 'a'\n%extends: 'b'\n{z: 3}",
+   {
+    "a": {
+     "x": 1
+    },
+    "b": {
+     "y": 2
+    }
+   },
+   {
+    "x": 1,
+    "y": 2,
+    "z": 3
    }
   ],
   [
-   "%extends: 'b'\n%strict: true\n%extends: 'b'\n{}",
+   "%extends: 'a'\n%strict: true\n%extends: 'b'\n{z: 3}",
+   {
+    "a": {
+     "x": 1
+    },
+    "b": {
+     "y": 2
+    }
+   },
+   {
+    "x": 1,
+    "y": 2,
+    "z": 3
+   }
+  ],
+  [
+   "%extends: 'a'\n%extends: 'b'\n%strict: false\n{z: 3}",
+   {
+    "a": {
+     "x": 1
+    },
+    "b": {
+     "y": 2
+    }
+   },
+   {
+    "x": 1,
+    "y": 2,
+    "z": 3
+   }
+  ],
+  [
+   "%extends: 'b', %strict: true, %extends: 'b', {}",
+   {
+    "b": {
+     "x": 1
+    }
+   },
+   {
+    "x": 1
+   }
+  ],
+  [
+   "%extends:'a',%extends:\"b\",z: 3",
+   {
+    "a": {
+     "x": 1
+    },
+    "b": {
+     "y": 2
+    }
+   },
+   {
+    "x": 1,
+    "y": 2,
+    "z": 3
+   }
+  ],
+  [
+   "%extends: 'a' // k\n\n# k\n%extends: /* k */ 'b'\nz: 3",
+   {
+    "a": {
+     "x": 1
+    },
+    "b": {
+     "y": 2
+    }
+   },
+   {
+    "x": 1,
+    "y": 2,
+    "z": 3
+   }
+  ],
+  [
+   "%strict: true\n%extends: 'a'\n%extends: 'b'\n{}",
+   {
+    "a": {
+     "s": "\uffff"
+    },
+    "b": {
+     "s": null
+    }
+   },
+   {}
+  ]
+ ],
+ "d_extends_invalid": [
+  [
+   "%extends: nil\n{}",
    {
     "b": {}
    }
   ],
   [
-   "%extends: nil\n{}",
+   "%extends: null\n{}",
    {
     "b": {}
    }
@@ -2926,6 +3314,111 @@
    "%strict: true\n%extends: 'b'\n{a: 1, a: 2}",
    {
     "b": {}
+   }
+  ],
+  [
+   "%strict: true\n%extends: 'a'\n%strict: true\n{}",
+   {
+    "a": {}
+   }
+  ],
+  [
+   "%extends: 'a'\n%strict: true\n%extends: 'b'\n%strict: false\n{}",
+   {
+    "a": {},
+    "b": {}
+   }
+  ],
+  [
+   "%extends: 'a' %extends: 'b'\n{}",
+   {
+    "a": {},
+    "b": {}
+   }
+  ],
+  [
+   "%extends: 'a',, %extends: 'b'\n{}",
+   {
+    "a": {},
+    "b": {}
+   }
+  ],
+  [
+   "%extends: 'a'\n%extends: 'b'",
+   {
+    "a": {},
+    "b": {}
+   }
+  ],
+  [
+   "%extends: 'a'\n{}\n%extends: 'b'",
+   {
+    "a": {},
+    "b": {}
+   }
+  ],
+  [
+   "%extends: 'a'\nx: 1\n%extends: 'b'",
+   {
+    "a": {},
+    "b": {}
+   }
+  ],
+  [
+   "%extends: 'a'\n%extends: nil\n{}",
+   {
+    "a": {}
+   }
+  ],
+  [
+   "%extends: 'a'\n%extends: ['b']\n{}",
+   {
+    "a": {},
+    "b": {}
+   }
+  ],
+  [
+   "%extends: 'a'\n%extends: 'x'\n{}",
+   {
+    "a": {}
+   }
+  ],
+  [
+   "%extends: 'a', %extends: 'a', %extends: 'x', {}",
+   {
+    "a": {}
+   }
+  ],
+  [
+   "%strict: true\n%extends: 'a'\n%extends: 'b'\n{}",
+   {
+    "a": {},
+    "b": {
+     "s": "\uffff"
+    }
+   }
+  ],
+  [
+   "%extends: 'a'\n%strict: true\n%extends: 'b'\n{}",
+   {
+    "a": {
+     "x": 1
+    },
+    "b": {
+     "\udc00": 1
+    }
+   }
+  ],
+  [
+   "%extends: 'a'\n%extends: 'b'\n%strict: true\n{}",
+   {
+    "a": {},
+    "b": {
+     "l": [
+      "ok",
+      "\ufdd0"
+     ]
+    }
    }
   ]
  ]

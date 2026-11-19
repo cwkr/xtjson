@@ -15,7 +15,7 @@
     <h1>Introducing XTJSON</h1>
     <p class="tagline">A syntactic superset of JSON for files that are written and maintained by people.</p>
     <p class="meta">
-      Specification draft 0.7 · 18 November 2026 ·
+      Specification draft 0.8 · 19 November 2026 ·
       <a href="https://github.com/cwkr/xtjson/blob/main/docs/xtjson-spec-en.md">Specification (English)</a> ·
       <a href="https://github.com/cwkr/xtjson/blob/main/docs/xtjson-spec-de.md">Spezifikation (Deutsch)</a> ·
       <a href="https://github.com/cwkr/xtjson">GitHub</a>
@@ -46,8 +46,7 @@
     <li><strong>Hexadecimal, octal and binary integers:</strong> <code>0xFF</code>, <code>0o755</code>, <code>0b1010</code>.</li>
     <li><strong>Digit grouping</strong> with <code>_</code>: <code>1_000_000</code>.</li>
     <li><strong>Number suffixes:</strong> <code>10k</code>, <code>64mb</code>, <code>250ms</code>.</li>
-    <li><strong><code>nil</code></strong> as another notation for <code>null</code>.</li>
-    <li><strong>Directives</strong> at the start of the document: <code>%strict</code> for strict mode and <code>%extends</code> to extend a base value.</li>
+    <li><strong>Directives</strong> at the start of the document: <code>%strict</code> for strict mode and <code>%extends</code> to extend one or more base values.</li>
     <li><strong>More white space characters:</strong> all white space characters of ECMAScript.</li>
   </ul>
 </section>
@@ -68,7 +67,7 @@ $schema: &quot;https://example.org/schema/service.json&quot;
 listen: {
   host: &quot;0.0.0.0&quot;
   port: 8080            // the line break replaces the comma
-  proxy: nil            // nil is the same as null
+  proxy: null           // no proxy
   tls: false,           // commas remain permitted
 }
 
@@ -130,14 +129,14 @@ tags: [
   <section class="form" id="document">
     <h3>document</h3>
     <p>A <dfn>document</dfn> begins with optional <a href="#directive">directives</a>. They are followed either by a single <a href="#value">value</a>, as in JSON, or by a sequence of <a href="#members">members</a> without enclosing braces. The second form denotes the object that contains exactly these members and needs at least one member. It exists only at the top level; an empty object is written as <code>{}</code>.</p>
-    <div class="diagram"><svg class="rr" viewBox="0 0 424 92" width="424" height="92" role="img" aria-label="Railroad diagram: document">
+    <div class="diagram"><svg class="rr" viewBox="0 0 420 92" width="420" height="92" role="img" aria-label="Railroad diagram: document">
 <path class="cap" d="M8 12v16m4 -16v16"/>
 <path d="M12 20H30"/>
 <path d="M30 20H50"/>
-<path d="M254 20H274"/>
-<path d="M50 20H254"/>
+<path d="M250 20H270"/>
+<path d="M50 20H250"/>
 <path d="M30 20a10 10 0 0 1 10 10v0a10 10 0 0 0 10 10"/>
-<path d="M254 40a10 10 0 0 0 10 -10v0a10 10 0 0 1 10 -10"/>
+<path d="M250 40a10 10 0 0 0 10 -10v0a10 10 0 0 1 10 -10"/>
 <path d="M50 40H60"/>
 <a href="#directive">
 <rect class="n" x="60" y="28" width="85" height="24" rx="0"/>
@@ -148,34 +147,36 @@ tags: [
 <rect class="n" x="155" y="28" width="85" height="24" rx="0"/>
 <text class="n" x="197.5" y="40">separator</text>
 </a>
-<path d="M240 40H254"/>
-<path d="M244 40a10 10 0 0 1 10 10v12a10 10 0 0 1 -10 10"/>
+<path d="M240 40H250"/>
+<path d="M240 40a10 10 0 0 1 10 10v12a10 10 0 0 1 -10 10"/>
 <path d="M60 72a10 10 0 0 1 -10 -10v-12a10 10 0 0 1 10 -10"/>
-<text class="l" x="64" y="72">each directive at most once</text>
-<path d="M274 20H284"/>
-<path d="M284 20H304"/>
-<path d="M374 20H394"/>
+<path d="M60 72H81"/>
+<text class="l" x="85" y="72">%strict at most once</text>
+<path d="M219 72H240"/>
+<path d="M270 20H280"/>
+<path d="M280 20H300"/>
+<path d="M370 20H390"/>
 <a href="#value">
-<rect class="n" x="304" y="8" width="56" height="24" rx="0"/>
-<text class="n" x="332" y="20">value</text>
+<rect class="n" x="300" y="8" width="56" height="24" rx="0"/>
+<text class="n" x="328" y="20">value</text>
 </a>
-<path d="M360 20H374"/>
-<path d="M284 20a10 10 0 0 1 10 10v12a10 10 0 0 0 10 10"/>
-<path d="M374 52a10 10 0 0 0 10 -10v-12a10 10 0 0 1 10 -10"/>
+<path d="M356 20H370"/>
+<path d="M280 20a10 10 0 0 1 10 10v12a10 10 0 0 0 10 10"/>
+<path d="M370 52a10 10 0 0 0 10 -10v-12a10 10 0 0 1 10 -10"/>
 <a href="#members">
-<rect class="n" x="304" y="40" width="70" height="24" rx="0"/>
-<text class="n" x="339" y="52">members</text>
+<rect class="n" x="300" y="40" width="70" height="24" rx="0"/>
+<text class="n" x="335" y="52">members</text>
 </a>
-<path d="M394 20H412"/>
-<path class="cap" d="M412 12v16m4 -16v16"/>
+<path d="M390 20H408"/>
+<path class="cap" d="M408 12v16m4 -16v16"/>
 </svg></div>
   </section>
 
   <section class="form" id="directive">
     <h3>directive</h3>
-    <p>A <dfn>directive</dfn> is a statement at the start of the document. There are two, <code>%strict</code> and <code>%extends</code>. They are written in lower case, without white space after the <code>%</code>, in either order and each at most once, and are separated from each other and from the content like items. Any other directive is an error.</p>
+    <p>A <dfn>directive</dfn> is a statement at the start of the document. There are two, <code>%strict</code> and <code>%extends</code>. They are written in lower case, without white space after the <code>%</code>, and are separated from each other and from the content like items. <code>%strict</code> occurs at most once, <code>%extends</code> any number of times, and <code>%strict</code> can stand before, between or after the <code>%extends</code>. Any other directive is an error.</p>
     <p><code>%strict: true</code> makes the parser read the content of the document in <a href="#strict-mode">strict mode</a>. The value is <code>true</code> or <code>false</code>. If the application has requested strict mode, <code>%strict: false</code> is an error.</p>
-    <p><code>%extends: './defaults.json'</code> makes the document extend a base value according to <a href="https://www.rfc-editor.org/rfc/rfc7396">JSON Merge Patch</a>: members of the document replace or add members of the base, objects are merged at any depth, and a member with the value <code>null</code> or <code>nil</code> removes the member of the base. The string is passed to a resolver of the application, which returns the base value; a URI is recommended. The base need not be an XTJSON document. Support for <code>%extends</code> is optional, and without a resolver a document with <code>%extends</code> is an error.</p>
+    <p><code>%extends: './defaults.json'</code> makes the document extend a base value according to <a href="https://www.rfc-editor.org/rfc/rfc7396">JSON Merge Patch</a>: members of the document replace or add members of the base, objects are merged at any depth, and a member with the value <code>null</code> removes the member of the base. The string is passed to a resolver of the application, which returns the base value; a URI is recommended. With several <code>%extends</code>, the base values are merged in the order of the document, each later one as a merge patch on the earlier ones, and the document is applied last. The base need not be an XTJSON document. Support for <code>%extends</code> is optional, and without a resolver a document with <code>%extends</code> is an error.</p>
     <div class="diagram"><svg class="rr" viewBox="0 0 534 104" width="534" height="104" role="img" aria-label="Railroad diagram: directive">
 <path class="cap" d="M8 12v16m4 -16v16"/>
 <path d="M12 20H30"/>
@@ -346,60 +347,52 @@ tags: [
 
   <section class="form" id="value">
     <h3>value</h3>
-    <p>A <dfn>value</dfn> can be an <a href="#object">object</a>, an <a href="#array">array</a>, a <a href="#string">string</a>, a <a href="#number">number</a>, or <code>true</code>, <code>false</code> or <code>null</code> as in JSON, or <code>nil</code>, another notation for <code>null</code>. These structures can be nested. The four values without quotation marks are written in lower case and cannot be changed; any other word without quotation marks at a value position is an error and is never read as a string.</p>
-    <div class="diagram"><svg class="rr" viewBox="0 0 266 264" width="266" height="264" role="img" aria-label="Railroad diagram: value">
+    <p>A <dfn>value</dfn> can be an <a href="#object">object</a>, an <a href="#array">array</a>, a <a href="#string">string</a>, a <a href="#number">number</a>, or <code>true</code>, <code>false</code> or <code>null</code> as in JSON. These structures can be nested. The three values without quotation marks are written in lower case and cannot be changed; any other word without quotation marks at a value position is an error and is never read as a string.</p>
+    <div class="diagram"><svg class="rr" viewBox="0 0 163 232" width="163" height="232" role="img" aria-label="Railroad diagram: value">
 <path class="cap" d="M8 12v16m4 -16v16"/>
 <path d="M12 20H30"/>
 <path d="M30 20H50"/>
-<path d="M216 20H236"/>
+<path d="M113 20H133"/>
 <a href="#object">
 <rect class="n" x="50" y="8" width="63" height="24" rx="0"/>
 <text class="n" x="81.5" y="20">object</text>
 </a>
-<path d="M113 20H216"/>
 <path d="M30 20a10 10 0 0 1 10 10v12a10 10 0 0 0 10 10"/>
-<path d="M216 52a10 10 0 0 0 10 -10v-12a10 10 0 0 1 10 -10"/>
+<path d="M113 52a10 10 0 0 0 10 -10v-12a10 10 0 0 1 10 -10"/>
 <a href="#array">
 <rect class="n" x="50" y="40" width="56" height="24" rx="0"/>
 <text class="n" x="78" y="52">array</text>
 </a>
-<path d="M106 52H216"/>
+<path d="M106 52H113"/>
 <path d="M30 20a10 10 0 0 1 10 10v44a10 10 0 0 0 10 10"/>
-<path d="M216 84a10 10 0 0 0 10 -10v-44a10 10 0 0 1 10 -10"/>
+<path d="M113 84a10 10 0 0 0 10 -10v-44a10 10 0 0 1 10 -10"/>
 <a href="#string">
 <rect class="n" x="50" y="72" width="63" height="24" rx="0"/>
 <text class="n" x="81.5" y="84">string</text>
 </a>
-<path d="M113 84H216"/>
 <path d="M30 20a10 10 0 0 1 10 10v76a10 10 0 0 0 10 10"/>
-<path d="M216 116a10 10 0 0 0 10 -10v-76a10 10 0 0 1 10 -10"/>
+<path d="M113 116a10 10 0 0 0 10 -10v-76a10 10 0 0 1 10 -10"/>
 <a href="#number">
 <rect class="n" x="50" y="104" width="63" height="24" rx="0"/>
 <text class="n" x="81.5" y="116">number</text>
 </a>
-<path d="M113 116H216"/>
 <path d="M30 20a10 10 0 0 1 10 10v108a10 10 0 0 0 10 10"/>
-<path d="M216 148a10 10 0 0 0 10 -10v-108a10 10 0 0 1 10 -10"/>
+<path d="M113 148a10 10 0 0 0 10 -10v-108a10 10 0 0 1 10 -10"/>
 <rect class="t" x="50" y="136" width="52" height="24" rx="12"/>
 <text class="t" x="76" y="148">true</text>
-<path d="M102 148H216"/>
+<path d="M102 148H113"/>
 <path d="M30 20a10 10 0 0 1 10 10v140a10 10 0 0 0 10 10"/>
-<path d="M216 180a10 10 0 0 0 10 -10v-140a10 10 0 0 1 10 -10"/>
+<path d="M113 180a10 10 0 0 0 10 -10v-140a10 10 0 0 1 10 -10"/>
 <rect class="t" x="50" y="168" width="60" height="24" rx="12"/>
 <text class="t" x="80" y="180">false</text>
-<path d="M110 180H216"/>
+<path d="M110 180H113"/>
 <path d="M30 20a10 10 0 0 1 10 10v172a10 10 0 0 0 10 10"/>
-<path d="M216 212a10 10 0 0 0 10 -10v-172a10 10 0 0 1 10 -10"/>
+<path d="M113 212a10 10 0 0 0 10 -10v-172a10 10 0 0 1 10 -10"/>
 <rect class="t" x="50" y="200" width="52" height="24" rx="12"/>
 <text class="t" x="76" y="212">null</text>
-<path d="M102 212H216"/>
-<path d="M30 20a10 10 0 0 1 10 10v204a10 10 0 0 0 10 10"/>
-<path d="M216 244a10 10 0 0 0 10 -10v-204a10 10 0 0 1 10 -10"/>
-<rect class="t" x="50" y="232" width="44" height="24" rx="12"/>
-<text class="t" x="72" y="244">nil</text>
-<text class="l" x="108" y="244">the same as null</text>
-<path d="M236 20H254"/>
-<path class="cap" d="M254 12v16m4 -16v16"/>
+<path d="M102 212H113"/>
+<path d="M133 20H151"/>
+<path class="cap" d="M151 12v16m4 -16v16"/>
 </svg></div>
   </section>
 
@@ -1138,23 +1131,22 @@ tags: [
     <li>A name without quotation marks becomes the JSON string with the same characters.</li>
     <li>Strings become JSON strings in double quotation marks with the same value.</li>
     <li>Numbers are written as JSON numbers: without <code>_</code>, in decimal notation, and with the suffix replaced by the result of its conversion.</li>
-    <li><code>nil</code> is replaced by <code>null</code>.</li>
     <li>The directives are removed.</li>
-    <li>With <code>%extends</code>, the result is applied to the base value as a JSON Merge Patch.</li>
+    <li>With <code>%extends</code>, the base values are merged in the order of the document, and the result is applied to them as a JSON Merge Patch.</li>
   </ol>
   <p>A document that uses at least one of the extensions is not a JSON text. It must not be labelled with the media type <code>application/json</code> or sent to recipients that expect JSON.</p>
 </section>
 
 <section id="strict-mode">
   <h2>Strict mode</h2>
-  <p>In <dfn>strict mode</dfn> a parser also rejects documents with duplicate names, with surrogates or Unicode noncharacters in names and strings, or with a root value that is not an object or an array. Strict mode applies if the application requests it or if the document contains <code>%strict: true</code>, and it covers the content of the document and, with <code>%extends</code>, the result of the merge. Every conforming parser offers it. The JSON equivalent of a document that is valid in strict mode, and whose numbers stay within the range of IEEE 754 binary64, is an <a href="https://www.rfc-editor.org/rfc/rfc7493">I-JSON</a> message.</p>
+  <p>In <dfn>strict mode</dfn> a parser also rejects documents with duplicate names, with surrogates or Unicode noncharacters in names and strings, or with a root value that is not an object or an array. Strict mode applies if the application requests it or if the document contains <code>%strict: true</code>, and it covers the content of the document and, with <code>%extends</code>, the result of all merges. Every conforming parser offers it. The JSON equivalent of a document that is valid in strict mode, and whose numbers stay within the range of IEEE 754 binary64, is an <a href="https://www.rfc-editor.org/rfc/rfc7493">I-JSON</a> message.</p>
 </section>
 
 <section id="principles">
   <h2>Principles</h2>
   <ul>
-    <li><strong>Documents are portable.</strong> The values without quotation marks, the suffixes and the directives are fixed by the specification. Neither the document nor the application can define values or add any of them, so the value of a document without <code>%extends</code> depends only on its text, and every conforming parser reads it in the same way. The value of a document with <code>%extends</code> also depends on the base value that the resolver of the application provides.</li>
-    <li><strong>Errors instead of guessing.</strong> Unknown escape sequences, white space after a line continuation, words other than <code>true</code>, <code>false</code>, <code>null</code> and <code>nil</code> at a value position, unknown directives, unknown suffixes and mixed indentation are errors and are not silently interpreted.</li>
+    <li><strong>Documents are portable.</strong> The values without quotation marks, the suffixes and the directives are fixed by the specification. Neither the document nor the application can define values or add any of them, so the value of a document without <code>%extends</code> depends only on its text, and every conforming parser reads it in the same way. The value of a document with <code>%extends</code> also depends on the base values that the resolver of the application provides.</li>
+    <li><strong>Errors instead of guessing.</strong> Unknown escape sequences, white space after a line continuation, words other than <code>true</code>, <code>false</code> and <code>null</code> at a value position, unknown directives, unknown suffixes and mixed indentation are errors and are not silently interpreted.</li>
     <li><strong>Never code.</strong> XTJSON is not a subset of a programming language and is never read by evaluating it as program code.</li>
   </ul>
 </section>
@@ -1175,8 +1167,9 @@ XTJSON-text    = S [ directives item-sep ] ( value / member-list ) S [ line-comm
                                              ; member-list: implicit root object
 
 ; ---------- Directives ----------
-directives     = strict-directive [ item-sep extends-directive ]
-               / extends-directive [ item-sep strict-directive ]
+directives     = extends-list [ item-sep strict-directive [ item-sep extends-list ] ]
+               / strict-directive [ item-sep extends-list ]
+extends-list   = extends-directive *( item-sep extends-directive )
 strict-directive  = %x25.73.74.72.69.63.74 S &quot;:&quot; S
                     ( %x74.72.75.65 / %x66.61.6C.73.65 )   ; %strict: true / false
 extends-directive = %x25.65.78.74.65.6E.64.73 S &quot;:&quot; S string   ; %extends
@@ -1184,7 +1177,7 @@ extends-directive = %x25.65.78.74.65.6E.64.73 S &quot;:&quot; S string   ; %exte
 ; ---------- Values ----------
 value          = object / array / string / number /
                  %x74.72.75.65 / %x66.61.6C.73.65 /  ; true false
-                 %x6E.75.6C.6C / %x6E.69.6C          ; null nil (the same value)
+                 %x6E.75.6C.6C                       ; null
 
 ; ---------- Objects ----------
 object         = &quot;{&quot; S [ member-list S ] &quot;}&quot;
@@ -1261,7 +1254,7 @@ e              = %x65 / %x45                 ; e E</code></pre>
 
 <footer>
   <div class="wrap">
-    <p>XTJSON specification draft 0.7 · <a href="https://github.com/cwkr/xtjson">github.com/cwkr/xtjson</a></p>
+    <p>XTJSON specification draft 0.8 · <a href="https://github.com/cwkr/xtjson">github.com/cwkr/xtjson</a></p>
   </div>
 </footer>
 
