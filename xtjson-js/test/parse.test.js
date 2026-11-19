@@ -4,7 +4,7 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import * as xtjson from '../xtjson.js';
-import { parse, Parser, Options, ParserError } from '../xtjson.js';
+import { parse, parseAsync, Parser, ParserError } from '../xtjson.js';
 
 /** Asserts a ParserError and returns it. */
 function error(text, options) {
@@ -17,9 +17,20 @@ function error(text, options) {
   assert.fail(`should be invalid: ${JSON.stringify(text)}`);
 }
 
+/** Asserts that parseAsync rejects with a ParserError and returns it. */
+async function errorAsync(text, options) {
+  try {
+    await parseAsync(text, options);
+  } catch (e) {
+    assert.ok(e instanceof ParserError, `expected ParserError, got ${e}`);
+    return e;
+  }
+  assert.fail(`should be invalid: ${JSON.stringify(text)}`);
+}
+
 describe('API', () => {
   test('named exports only, no default export', () => {
-    assert.deepEqual(Object.keys(xtjson).sort(), ['Options', 'Parser', 'ParserError', 'format', 'parse']);
+    assert.deepEqual(Object.keys(xtjson).sort(), ['Parser', 'ParserError', 'format', 'parse', 'parseAsync']);
     assert.equal('default' in xtjson, false);
   });
 
@@ -29,7 +40,7 @@ describe('API', () => {
     assert.deepEqual(parser.parse('[1, 2]'), [1, 2]);
     assert.throws(() => parser.parse('{a: 1, a: 2}'), /Duplicate name/);
     assert.deepEqual(Object.keys(parser), []);
-    assert.deepEqual(Object.getOwnPropertyNames(Parser.prototype).sort(), ['constructor', 'parse']);
+    assert.deepEqual(Object.getOwnPropertyNames(Parser.prototype).sort(), ['constructor', 'parse', 'parseAsync']);
   });
 
   test('Parser can be reused after an error', () => {
@@ -70,14 +81,20 @@ describe('API', () => {
 
 describe('options argument', () => {
   const init = { strict: true };
-  const defs = new Options(init);
   const text = '[null, 50pct, 1]';
   const expected = [null, 0.5, 1];
 
-  test('options as second argument: instance or plain object', () => {
-    assert.deepEqual(parse(text, defs), expected);
+  test('options as second argument: a plain object', () => {
     assert.deepEqual(parse(text, init), expected);
     assert.deepEqual(parse('[1, 1k]', {}), [1, 1000]);
+    assert.deepEqual(new Parser(init).parse(text), expected);
+  });
+
+  test('a Parser keeps a copy of its options', () => {
+    const options = { strict: true };
+    const parser = new Parser(options);
+    options.strict = false;
+    assert.throws(() => parser.parse('{a: 1, a: 2}'), /Duplicate name/);
   });
 
   test('null and undefined mean no options', () => {
@@ -88,8 +105,14 @@ describe('options argument', () => {
   test('other values as second argument are a TypeError', () => {
     for (const arg of [(k, v) => v, [], 'not options', 1, true, 1n, Symbol('s')]) {
       assert.throws(() => parse('[1]', arg), (e) => e instanceof TypeError && /must be an object/.test(e.message));
+      assert.throws(() => new Parser(arg), TypeError);
     }
     assert.throws(() => parse(text, { namedValues: { nil: null } }), TypeError);
+  });
+
+  test('parseAsync rejects invalid options with a TypeError', async () => {
+    await assert.rejects(parseAsync('[1]', 'not options'), TypeError);
+    await assert.rejects(parseAsync('[1]', { resolver: 'file' }), /"resolver" must be a function/);
   });
 });
 
@@ -163,14 +186,12 @@ describe('%extends', () => {
     assert.deepEqual(calls, ['./defaults.json']);
     // the value of the resolver is not changed
     assert.deepEqual(base, { name: 'demo', server: { host: '0.0.0.0', port: 8080, debug: true }, tags: ['a', 'b'] });
-    assert.equal(new Options({ resolver }).resolver, resolver);
-    assert.equal(new Options().resolver, undefined);
   });
 
   test('without a resolver %extends is an error', () => {
     assert.throws(() => parse(text), /%extends is disabled/);
     assert.throws(() => parse(text, { resolver: null }), /%extends is disabled/);
-    assert.throws(() => new Options({ resolver: 'file' }), /"resolver" must be a function/);
+    assert.throws(() => new Parser({ resolver: 'file' }), /"resolver" must be a function/);
   });
 
   test('an error of the resolver is an error of the document, with the cause', () => {
@@ -268,28 +289,168 @@ describe('several %extends', () => {
   });
 });
 
+describe('resolver: strict mode argument', () => {
+  const run = (text, options = {}) => {
+    const seen = [];
+    parse(text, { ...options, resolver: (reference, strict) => (seen.push([reference, strict]), {}) });
+    return seen;
+  };
+
+  test('the second argument tells whether the document is read in strict mode', () => {
+    assert.deepEqual(run("%extends: 'a'\n{}"), [['a', false]]);
+    assert.deepEqual(run("%extends: 'a'\n{}", { strict: true }), [['a', true]]);
+    assert.deepEqual(run("%extends: 'a'\n%strict: true\n%extends: 'b'\n{}"), [['a', true], ['b', true]]);
+    assert.deepEqual(run("%strict: false\n%extends: 'a'\n{}"), [['a', false]]);
+  });
+
+  test('a resolver can parse XTJSON base values with %extends in the same mode', () => {
+    const sources = {
+      'base.xtj': "name: 'demo'\nport: 80",
+      'web.xtj': "%extends: 'base.xtj'\nport: 8080\ntls: false",
+    };
+    // a resolver that reuses the same parser instance
+    const resolver = (reference, strict) => {
+      assert.equal(strict, true);
+      return same.parse(sources[reference]);
+    };
+    const same = new Parser({ strict: true, resolver });
+    assert.deepEqual(same.parse("%extends: 'web.xtj'\ntls: true"), { name: 'demo', port: 8080, tls: true });
+    // a duplicate name in a base value is an error, because it is read in strict mode
+    sources['base.xtj'] = "name: 'demo'\nname: 'x'";
+    assert.match(error("%extends: 'web.xtj'\n{}", { strict: true, resolver }).message,
+      /The resolver of %extends reports an error for "web\.xtj": The resolver of %extends reports an error for "base\.xtj": Duplicate name/);
+  });
+
+  test('parse rejects a resolver that returns a promise', () => {
+    let rejected = false;
+    const e = error("%extends: 'a'\n{}", { resolver: async () => { rejected = true; throw new Error('x'); } });
+    assert.match(e.message, /The resolver of %extends returned a promise for "a"; use parseAsync for an asynchronous resolver/);
+    assert.deepEqual([e.line, e.column], [1, 11]);
+    assert.ok(rejected);
+  });
+});
+
+describe('parseAsync', () => {
+  const bases = {
+    'defaults.json': { name: 'demo', server: { port: 8080, debug: true } },
+    'production.json': { server: { port: 443, debug: null } },
+  };
+  const delay = (ms, value) => new Promise((resolve) => setTimeout(() => resolve(value), ms));
+
+  test('works like parse without %extends, also with Parser', async () => {
+    assert.deepEqual(await parseAsync('a: 1\nb: [true, 10k]'), { a: 1, b: [true, 10000] });
+    assert.deepEqual(await new Parser({ strict: true }).parseAsync('{a: 1}'), { a: 1 });
+    assert.ok(parseAsync('[1]') instanceof Promise);
+  });
+
+  test('errors of the document are rejections, not exceptions', async () => {
+    const promise = parseAsync('[1 2]');
+    assert.ok(promise instanceof Promise);
+    await assert.rejects(promise, ParserError);
+    const e = await errorAsync('[1 2]');
+    assert.deepEqual([e.line, e.column], [1, 4]);
+    await assert.rejects(parseAsync("%extends: 'a'\n{}"), /%extends is disabled/);
+  });
+
+  test('accepts asynchronous and synchronous resolvers', async () => {
+    const text = "%extends: 'defaults.json'\n%extends: 'production.json'\nextra: 1";
+    const expected = { name: 'demo', server: { port: 443 }, extra: 1 };
+    assert.deepEqual(await parseAsync(text, { resolver: async (reference) => bases[reference] }), expected);
+    assert.deepEqual(await parseAsync(text, { resolver: (reference) => bases[reference] }), expected);
+    assert.deepEqual(bases['production.json'], { server: { port: 443, debug: null } });
+  });
+
+  test('calls the resolver in document order, merges in document order, whatever finishes first', async () => {
+    const calls = [];
+    const resolver = (reference, strict) => {
+      calls.push([reference, strict]);
+      // the first base value arrives last
+      return delay(reference === 'defaults.json' ? 30 : 1, bases[reference]);
+    };
+    const value = await parseAsync("%strict: true\n%extends: 'defaults.json'\n%extends: 'production.json'\n{}", { resolver });
+    assert.deepEqual(calls, [['defaults.json', true], ['production.json', true]]);
+    assert.deepEqual(value, { name: 'demo', server: { port: 443 } });
+  });
+
+  test('the resolver is called for all %extends before a result is awaited', async () => {
+    let pending = 0;
+    let most = 0;
+    const resolver = async () => {
+      most = Math.max(most, ++pending);
+      await delay(5);
+      pending--;
+      return {};
+    };
+    await parseAsync("%extends: 'a', %extends: 'b', %extends: 'c', {}", { resolver });
+    assert.equal(most, 3);
+  });
+
+  test('reports the error of the first %extends in the document that fails', async () => {
+    const cause = new Error('not found');
+    const resolver = (reference) => {
+      if (reference === 'a') return {};
+      if (reference === 'b') return delay(20).then(() => { throw cause; });
+      return Promise.reject(new Error('also not found'));
+    };
+    const e = await errorAsync("%extends: 'a'\n%extends: 'b'\n%extends: 'c'\n{}", { resolver });
+    assert.match(e.message, /The resolver of %extends reports an error for "b": not found/);
+    assert.deepEqual([e.line, e.column], [2, 11]);
+    assert.equal(e.cause, cause);
+    // an exception thrown synchronously by the resolver is reported the same way
+    const f = await errorAsync("%extends: 'x'\n{}", { resolver: () => { throw new Error('sync'); } });
+    assert.match(f.message, /reports an error for "x": sync/);
+  });
+
+  test('checks the resolved values: JSON values only, strict mode on the result', async () => {
+    const e = await errorAsync("%extends: 'a'\n{}", { resolver: async () => NaN });
+    assert.match(e.message, /returned a value that is not a JSON value for "a"/);
+    const f = await errorAsync("%extends: 'a'\n{}", { strict: true, resolver: async () => ({ s: '\uFFFF' }) });
+    assert.match(f.message, /The result of %extends contains a string with the noncharacter U\+FFFF/);
+    const g = await errorAsync("%extends: 'a'\n'x'", { strict: true, resolver: async () => ({}) });
+    assert.match(g.message, /with %extends this applies to the result of the merge/);
+  });
+
+  test('a Parser can be used again while parseAsync waits for its resolver', async () => {
+    const parser = new Parser({ resolver: (reference) => delay(5, { from: reference }) });
+    const promise = parser.parseAsync("%extends: 'a'\nline: 2");
+    assert.deepEqual(parser.parse('{"x": [1]}'), { x: [1] });
+    assert.throws(() => parser.parse('[1 2]'), ParserError);
+    const other = parser.parseAsync("%extends: 'b'\n{}");
+    assert.deepEqual(await promise, { from: 'a', line: 2 });
+    assert.deepEqual(await other, { from: 'b' });
+  });
+
+  test('a recursive asynchronous resolver loads XTJSON documents with %extends', async () => {
+    const files = {
+      '/config/base.xtj': "name: 'demo'\nserver: {port: 80, debug: true}",
+      '/config/prod.xtj': "%extends: './base.xtj'\nserver: {port: 443, debug: null}",
+      '/config/loop.xtj': "%extends: './loop.xtj'\n{}",
+    };
+    const fetchText = async (url) => {
+      await delay(1);
+      if (!Object.hasOwn(files, url.pathname)) throw new Error(`404 ${url.pathname}`);
+      return files[url.pathname];
+    };
+    const resolverFor = (base, seen) => async (reference, strict) => {
+      const url = new URL(reference, base);
+      if (seen.has(url.href)) throw new Error(`cycle at ${url.href}`);
+      const text = await fetchText(url);
+      return parseAsync(text, { strict, resolver: resolverFor(url, new Set(seen).add(url.href)) });
+    };
+    const root = new URL('https://example.org/config/app.xtj');
+    const value = await parseAsync("%extends: './prod.xtj'\nname: 'app'", { resolver: resolverFor(root, new Set([root.href])) });
+    assert.deepEqual(value, { name: 'app', server: { port: 443 } });
+    const e = await errorAsync("%extends: './loop.xtj'\n{}", { resolver: resolverFor(root, new Set([root.href])) });
+    assert.match(e.message, /cycle at https:\/\/example\.org\/config\/loop\.xtj/);
+  });
+});
+
 describe('options', () => {
-  test('Options is immutable', () => {
-    const init = { strict: true };
-    const options = new Options(init);
-    init.strict = false;
-    assert.equal(options.strict, true);
-    assert.ok(Object.isFrozen(options));
-  });
-
-  test('an Options instance can be used as init', () => {
-    const copy = new Options(new Options({ strict: true, maxDepth: 7 }));
-    assert.equal(copy.strict, true);
-    assert.equal(copy.maxDepth, 7);
-  });
-
   test('the application cannot define values or suffixes', () => {
-    assert.throws(() => new Options({ namedValues: { nil: null } }),
+    assert.throws(() => new Parser({ namedValues: { nil: null } }),
       /Unknown XTJSON option "namedValues"; there are no named values, only the literals true, false and null/);
-    assert.throws(() => new Options({ suffixes: { q: Math.abs } }), /Unknown XTJSON option "suffixes"\./);
-    assert.throws(() => new Options({ maxExpansion: 10 }), /Unknown XTJSON option "maxExpansion"; there are no named values/);
-    assert.equal('namedValues' in new Options(), false);
-    assert.equal('maxExpansion' in new Options(), false);
+    assert.throws(() => new Parser({ suffixes: { q: Math.abs } }), /Unknown XTJSON option "suffixes"\./);
+    assert.throws(() => new Parser({ maxExpansion: 10 }), /Unknown XTJSON option "maxExpansion"; there are no named values/);
   });
 
   test('unknown options are a TypeError', () => {
@@ -308,26 +469,24 @@ describe('options', () => {
       ['abc', /must be an object/],
     ];
     for (const [options, pattern] of cases) {
-      assert.throws(() => new Options(options), (e) => e instanceof TypeError && pattern.test(e.message));
+      assert.throws(() => new Parser(options), (e) => e instanceof TypeError && pattern.test(e.message));
       assert.throws(() => parse('1', options), TypeError);
     }
   });
 });
 
 describe('strict mode', () => {
-  const strict = new Options({ strict: true });
+  const strict = { strict: true };
 
-  test('is off by default and can be read back', () => {
-    assert.equal(new Options().strict, false);
-    assert.equal(strict.strict, true);
-    assert.equal(new Options(strict).strict, true);
+  test('is off by default', () => {
     assert.deepEqual(parse('{"a": 1, "a": 2}'), { a: 2 });
+    assert.throws(() => parse('{"a": 1, "a": 2}', strict), /Duplicate name/);
   });
 
   test('"strict" must be a boolean', () => {
     for (const value of [1, 'true', null, {}]) {
       if (value === null) continue; // null means "not given"
-      assert.throws(() => new Options({ strict: value }), /"strict" must be true or false/);
+      assert.throws(() => new Parser({ strict: value }), /"strict" must be true or false/);
     }
   });
 
@@ -580,14 +739,13 @@ describe('limits', () => {
     assert.deepEqual(parse('a: 1', { maxDepth: 1 }), { a: 1 });
     assert.match(error('a: []', { maxDepth: 1 }).message, /limit of 1/);
     assert.equal(parse(nested(1500), { maxDepth: 2000 }).length, 1);
-    assert.equal(new Options().maxDepth, 1000);
-    assert.equal(new Options({ maxDepth: 5 }).maxDepth, 5);
-    assert.equal(new Options(new Options({ maxDepth: 5 })).maxDepth, 5);
+    assert.equal(parse(nested(1000)).length, 1);
+    assert.match(error(nested(1001)).message, /limit of 1000/);
   });
 
   test('maxDepth must be a positive integer', () => {
     for (const maxDepth of [0, -1, 1.5, Infinity, NaN, '10', 2 ** 53, true]) {
-      assert.throws(() => new Options({ maxDepth }), /"maxDepth" must be a positive integer/, String(maxDepth));
+      assert.throws(() => new Parser({ maxDepth }), /"maxDepth" must be a positive integer/, String(maxDepth));
     }
   });
 

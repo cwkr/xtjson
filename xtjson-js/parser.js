@@ -1,7 +1,7 @@
 /**
- * XTJSON parser: `Parser`, `ParserError`, `Options` and `parse()`.
+ * XTJSON parser: `Parser`, `ParserError`, `parse()` and `parseAsync()`.
  *
- * Implements the XTJSON specification, draft 0.7 (docs/xtjson-spec-en.md).
+ * Implements the XTJSON specification, draft 0.8 (docs/xtjson-spec-en.md).
  *
  * Design notes:
  * - Single-pass recursive descent parser working directly on UTF-16 code
@@ -255,133 +255,53 @@ const OPTION_NAMES = ['maxDepth', 'resolver', 'strict'];
 const OPTION_LIST = '"maxDepth", "resolver" and "strict"';
 
 /**
- * Internal state of an `Options` instance, read by the parser.
+ * Validated options, read by the parser.
  * @typedef {object} OptionsState
  * @property {number} maxDepth
- * @property {((reference: string) => any) | undefined} resolver
+ * @property {((reference: string, strict: boolean) => any) | undefined} resolver
  * @property {boolean} strict
  */
 
-/** Set in the static block of `Options`; see `resolveOptions`. */
-let resolve;
-
 /**
- * Validated, immutable options for `parse()`: strict mode (12), limits (11)
- * and the resolver for `%extends` (6.6).
+ * Validates the options of `parse()`, `parseAsync()` and `new Parser()`: a
+ * plain object with the properties `maxDepth`, `resolver` and `strict`, or
+ * null/undefined for the defaults.
  *
  * The values without quotation marks, the directives and the number suffixes
- * are fixed by sections 6.3 to 6.6 and 9.5; the application can define none
- * of them. Validate once and reuse the instance for many calls.
- */
-export class Options {
-  /** @type {OptionsState} */
-  #state;
-
-  /** @type {OptionsState | undefined} State without options, created on first use. */
-  static #defaultState;
-
-  static {
-    resolve = (options) => {
-      if (options === undefined || options === null) {
-        return (Options.#defaultState ??= new Options().#state);
-      }
-      if (typeof options === 'object' && #state in options) return options.#state;
-      return new Options(options).#state;
-    };
-  }
-
-  /**
-   * @param {{maxDepth?: number, resolver?: (reference: string) => any, strict?: boolean} | Options} [init]
-   *   `maxDepth`: maximum nesting depth of objects and arrays (default 1000).
-   *   `resolver`: a function that returns the base value for the string of
-   *   `%extends` (default none: `%extends` is an error).
-   *   `strict`: true for strict mode (default false).
-   * @throws {TypeError} if an option is unknown or invalid
-   */
-  constructor(init) {
-    if (init !== undefined && init !== null) {
-      if (typeof init !== 'object' || Array.isArray(init)) {
-        throw new TypeError(`XTJSON options must be an object with the properties ${OPTION_LIST}`);
-      }
-      if (#state in init) {
-        this.#state = init.#state; // immutable, so it can be shared
-        Object.freeze(this);
-        return;
-      }
-      for (const key of Object.keys(init)) {
-        if (!OPTION_NAMES.includes(key)) {
-          const hint = key === 'namedValues'
-            ? '; there are no named values, only the literals true, false and null'
-            : key === 'maxExpansion' ? '; there are no named values whose replacement could be limited'
-              : key === 'ijson' ? '; the I-JSON mode is strict mode, option "strict"' : '';
-          throw new TypeError(`Unknown XTJSON option ${quote(key)}${hint}. The options are ${OPTION_LIST}`);
-        }
-      }
-    }
-    const strict = init?.strict ?? false;
-    if (typeof strict !== 'boolean') {
-      throw new TypeError(`Invalid XTJSON option: "strict" must be true or false, not ${quote(strict)}`);
-    }
-    const maxDepth = Options.#limitOption(init, 'maxDepth', DEFAULT_MAX_DEPTH);
-    const resolver = init?.resolver ?? undefined;
-    if (resolver !== undefined && typeof resolver !== 'function') {
-      throw new TypeError(`Invalid XTJSON option: "resolver" must be a function, not ${quote(resolver)}`);
-    }
-    this.#state = { maxDepth, resolver, strict };
-    Object.freeze(this);
-  }
-
-  /**
-   * Maximum nesting depth of objects and arrays. An implicit root object
-   * counts as a level.
-   * @returns {number}
-   */
-  get maxDepth() {
-    return this.#state.maxDepth;
-  }
-
-  /**
-   * The function that returns the base value for the string of `%extends`
-   * (6.6), or undefined if `%extends` is disabled.
-   * @returns {((reference: string) => any) | undefined}
-   */
-  get resolver() {
-    return this.#state.resolver;
-  }
-
-  /**
-   * True for strict mode (section 12): duplicate names, unpaired surrogates
-   * and noncharacters in names and strings, and a root value that is not an
-   * object or an array are errors. A document can also request strict mode
-   * with `%strict: true`; with this option, `%strict: false` is an error.
-   * @returns {boolean}
-   */
-  get strict() {
-    return this.#state.strict;
-  }
-
-  get [Symbol.toStringTag]() {
-    return 'Options';
-  }
-
-  /** A limit: a positive safe integer; `fallback` if not given. */
-  static #limitOption(init, name, fallback) {
-    const value = init?.[name] ?? fallback;
-    if (!Number.isSafeInteger(value) || value < 1) {
-      throw new TypeError(`Invalid XTJSON option: "${name}" must be a positive integer, not ${quote(value)}`);
-    }
-    return value;
-  }
-}
-
-/**
- * The internal state for an `options` argument: an `Options` instance, a
- * plain object (validated now) or null/undefined for the defaults.
+ * are fixed by sections 6.3 to 6.6 and 9.5; there are no options for them.
+ *
+ * @param {object | null | undefined} options
  * @returns {OptionsState}
- * @throws {TypeError} if the options are invalid
+ * @throws {TypeError} if the argument is not an object or an option is
+ *   unknown or invalid
  */
 function resolveOptions(options) {
-  return resolve(options);
+  if (options === undefined || options === null) return { maxDepth: DEFAULT_MAX_DEPTH, resolver: undefined, strict: false };
+  if (typeof options !== 'object' || Array.isArray(options)) {
+    throw new TypeError(`XTJSON options must be an object with the properties ${OPTION_LIST}`);
+  }
+  for (const key of Object.keys(options)) {
+    if (!OPTION_NAMES.includes(key)) {
+      const hint = key === 'namedValues'
+        ? '; there are no named values, only the literals true, false and null'
+        : key === 'maxExpansion' ? '; there are no named values whose replacement could be limited'
+          : key === 'ijson' ? '; the I-JSON mode is strict mode, option "strict"' : '';
+      throw new TypeError(`Unknown XTJSON option ${quote(key)}${hint}. The options are ${OPTION_LIST}`);
+    }
+  }
+  const strict = options.strict ?? false;
+  if (typeof strict !== 'boolean') {
+    throw new TypeError(`Invalid XTJSON option: "strict" must be true or false, not ${quote(strict)}`);
+  }
+  const maxDepth = options.maxDepth ?? DEFAULT_MAX_DEPTH;
+  if (!Number.isSafeInteger(maxDepth) || maxDepth < 1) {
+    throw new TypeError(`Invalid XTJSON option: "maxDepth" must be a positive integer, not ${quote(maxDepth)}`);
+  }
+  const resolver = options.resolver ?? undefined;
+  if (resolver !== undefined && typeof resolver !== 'function') {
+    throw new TypeError(`Invalid XTJSON option: "resolver" must be a function, not ${quote(resolver)}`);
+  }
+  return { maxDepth, resolver, strict };
 }
 
 // ---------------------------------------------------------------------------
@@ -399,7 +319,12 @@ export class Parser {
   /** Strict mode requested by the application (12). */
   #strict = false;
   #maxDepth = 0;
-  /** @type {((reference: string) => any) | undefined} resolver for %extends (6.6) */
+  /**
+   * Resolver for %extends (6.6): receives the string and true if the
+   * document is read in strict mode; returns the base value, or with
+   * parseAsync also a promise of it.
+   * @type {((reference: string, strict: boolean) => any) | undefined}
+   */
   #resolver;
   /** @type {Uint8Array} */
   #flags;
@@ -432,7 +357,8 @@ export class Parser {
   static #suffixTable;
 
   /**
-   * @param {Options | object | null} [options] strict mode and the limits
+   * @param {{maxDepth?: number, resolver?: Function, strict?: boolean} | null} [options]
+   *   strict mode, the limits and the resolver for `%extends`
    * @throws {TypeError} if the options are invalid
    */
   constructor(options) {
@@ -451,7 +377,9 @@ export class Parser {
   }
 
   /**
-   * Parses an XTJSON document and returns its value.
+   * Parses an XTJSON document and returns its value. The resolver for
+   * `%extends` must return the base value itself; for a resolver that
+   * returns a promise, use `parseAsync`.
    *
    * @param {string} text the document; converted to a string as in
    *   `JSON.parse`
@@ -459,8 +387,66 @@ export class Parser {
    * @throws {ParserError} if the text is not a valid XTJSON document
    */
   parse(text) {
+    const doc = this.#read(text);
+    const bases = doc.extends.map(({ reference, offset }) => {
+      let base;
+      try {
+        base = this.#resolver(reference, doc.check);
+      } catch (error) {
+        resolverFailed(doc.text, reference, offset, error);
+      }
+      if (isThenable(base)) {
+        base.then(undefined, () => {}); // not awaited; avoid an unhandled rejection
+        failAt(doc.text, `The resolver of %extends returned a promise for ${JSON.stringify(reference)}; use parseAsync for an asynchronous resolver`, offset);
+      }
+      return base;
+    });
+    return this.#complete(doc, bases);
+  }
+
+  /**
+   * Parses an XTJSON document and returns a promise of its value. Like
+   * `parse`, but the resolver for `%extends` may return a promise of the
+   * base value (an `async` function). The resolver is called for every
+   * `%extends` in document order before any of its results is awaited, so
+   * the sources can be loaded in parallel; the base values are merged in
+   * document order. If several calls fail, the error of the first
+   * `%extends` in the document is reported.
+   *
+   * @param {string} text the document; converted to a string as in
+   *   `JSON.parse`
+   * @returns {Promise<any>} the value; rejected with a `ParserError` if the
+   *   text is not a valid XTJSON document
+   */
+  async parseAsync(text) {
+    const doc = this.#read(text);
+    const calls = doc.extends.map(({ reference }) => {
+      try {
+        return Promise.resolve(this.#resolver(reference, doc.check));
+      } catch (error) {
+        return Promise.reject(error);
+      }
+    });
+    const results = await Promise.allSettled(calls);
+    const bases = results.map((result, i) => {
+      if (result.status === 'rejected') {
+        const { reference, offset } = doc.extends[i];
+        resolverFailed(doc.text, reference, offset, result.reason);
+      }
+      return result.value;
+    });
+    return this.#complete(doc, bases);
+  }
+
+  /**
+   * Reads the document up to the end; the `%extends` are not resolved yet.
+   * Afterwards the state of the run is reset, so the parser can be used
+   * again, also by a resolver.
+   * @returns {ReadDocument}
+   */
+  #read(text) {
     const source = String(text);
-    let value;
+    let doc;
     this.#text = source;
     this.#len = source.length;
     this.#pos = 0;
@@ -472,7 +458,8 @@ export class Parser {
         const offset = source.search(LONE_SURROGATE);
         this.#fail(`Unpaired surrogate ${hex4(source.charCodeAt(offset))}; the text is not valid Unicode and cannot be encoded as UTF-8`, offset);
       }
-      value = this.#parseDocument();
+      const { value, start } = this.#parseDocument();
+      doc = { text: source, value, start, check: this.#check, extends: this.#extends };
     } catch (error) {
       // A large maxDepth can exceed the call stack of the engine (RangeError
       // in V8 and JavaScriptCore, InternalError in SpiderMonkey).
@@ -484,8 +471,9 @@ export class Parser {
     } finally {
       this.#text = '';
       this.#len = 0;
+      this.#extends = [];
     }
-    return value;
+    return doc;
   }
 
   // ----- Messages ---------------------------------------------------------
@@ -510,8 +498,7 @@ export class Parser {
   // ----- Errors -----------------------------------------------------------
 
   #fail(reason, offset = this.#pos, cause) {
-    const { line, column } = locate(this.#text, offset);
-    throw new ParserError(reason, line, column, offset, cause === undefined ? undefined : { cause });
+    failAt(this.#text, reason, offset, cause);
   }
 
   #failUnexpected(expected, offset = this.#pos) {
@@ -624,49 +611,47 @@ export class Parser {
       if (this.#peek() === PERCENT && this.#pos > end) this.#failDirectivePosition();
       this.#fail(`Unexpected ${describeAt(this.#text, this.#pos)} after the root value; a document contains exactly one value`);
     }
-    if (this.#extends.length > 0) value = this.#extendBases(value);
-    if (this.#check && (value === null || typeof value !== 'object')) {
-      this.#fail(this.#extends.length === 0
-        ? 'In strict mode the root value must be an object or an array'
-        : 'In strict mode the root value must be an object or an array; with %extends this applies to the result of the merge', start);
-    }
-    return value;
+    return { value, start };
   }
 
   // ----- %extends (6.6) ---------------------------------------------------
 
   /**
-   * Calls the resolver for the string of every `%extends` in document order,
-   * merges the base values in this order, each later one as a JSON Merge
-   * Patch (RFC 7396) on the earlier ones, and applies the content `patch`
-   * last.
+   * Completes a document read by `#read`: merges the base values `bases`,
+   * one for every `%extends` in document order, each later one as a JSON
+   * Merge Patch (RFC 7396) on the earlier ones, applies the content last and
+   * checks the result in strict mode. Uses no state of the run.
+   * @param {ReadDocument} doc
+   * @param {any[]} bases
    */
-  #extendBases(patch) {
-    let target;
-    this.#extends.forEach(({ reference, offset }, i) => {
-      let base;
-      try {
-        base = this.#resolver(reference);
-      } catch (error) {
-        const reason = error instanceof Error ? error.message : String(error);
-        this.#fail(`The resolver of %extends reports an error for ${JSON.stringify(reference)}: ${reason}`, offset, error);
-      }
-      // A copy, so that merging does not change the value of the resolver.
-      const copy = this.#copyBase(base, 0, reference, offset);
-      target = i === 0 ? copy : mergePatch(target, copy);
-    });
-    const result = mergePatch(target, patch);
-    // Names and strings of the result come from the base values; an error
-    // is reported at the string of the first %extends.
-    if (this.#check) this.#checkBase(result, this.#extends[0].offset);
-    return result;
+  #complete(doc, bases) {
+    let value = doc.value;
+    if (bases.length > 0) {
+      let target;
+      bases.forEach((base, i) => {
+        const { reference, offset } = doc.extends[i];
+        // A copy, so that merging does not change the value of the resolver.
+        const copy = this.#copyBase(doc, base, 0, reference, offset);
+        target = i === 0 ? copy : mergePatch(target, copy);
+      });
+      value = mergePatch(target, value);
+      // Names and strings of the result can come from any base value; an
+      // error is reported at the string of the first %extends.
+      if (doc.check) checkBase(doc.text, value, doc.extends[0].offset);
+    }
+    if (doc.check && (value === null || typeof value !== 'object')) {
+      failAt(doc.text, bases.length === 0
+        ? 'In strict mode the root value must be an object or an array'
+        : 'In strict mode the root value must be an object or an array; with %extends this applies to the result of the merge', doc.start);
+    }
+    return value;
   }
 
   /**
    * A copy of the base value for `reference`; an error if it is not a JSON
    * value or nests deeper than maxDepth.
    */
-  #copyBase(value, depth, reference, offset) {
+  #copyBase(doc, value, depth, reference, offset) {
     if (value === null || typeof value === 'string' || typeof value === 'boolean' || typeof value === 'bigint') {
       return value;
     }
@@ -674,37 +659,17 @@ export class Parser {
       if (Number.isFinite(value)) return value;
     } else if (typeof value === 'object') {
       if (depth >= this.#maxDepth) {
-        this.#fail(`The base value of %extends is nested deeper than the limit of ${this.#maxDepth} (option maxDepth)`, offset);
+        failAt(doc.text, `The base value of %extends is nested deeper than the limit of ${this.#maxDepth} (option maxDepth)`, offset);
       }
-      if (Array.isArray(value)) return value.map((item) => this.#copyBase(item, depth + 1, reference, offset));
+      if (Array.isArray(value)) return value.map((item) => this.#copyBase(doc, item, depth + 1, reference, offset));
       const proto = Object.getPrototypeOf(value);
       if (proto === Object.prototype || proto === null) {
         const obj = {};
-        for (const name of Object.keys(value)) setMember(obj, name, this.#copyBase(value[name], depth + 1, reference, offset));
+        for (const name of Object.keys(value)) setMember(obj, name, this.#copyBase(doc, value[name], depth + 1, reference, offset));
         return obj;
       }
     }
-    return this.#fail(`The resolver of %extends returned a value that is not a JSON value for ${JSON.stringify(reference)}`, offset);
-  }
-
-  /** Strict mode for the result of %extends: names and strings (12). */
-  #checkBase(value, offset) {
-    if (typeof value === 'string') {
-      const issue = strictStringIssue(value);
-      if (issue !== undefined) {
-        this.#fail(`The result of %extends contains a string with ${issue}, which is not permitted in strict mode`, offset);
-      }
-    } else if (Array.isArray(value)) {
-      for (const item of value) this.#checkBase(item, offset);
-    } else if (value !== null && typeof value === 'object') {
-      for (const name of Object.keys(value)) {
-        const issue = strictStringIssue(name);
-        if (issue !== undefined) {
-          this.#fail(`The result of %extends contains a name with ${issue}, which is not permitted in strict mode`, offset);
-        }
-        this.#checkBase(value[name], offset);
-      }
-    }
+    return failAt(doc.text, `The resolver of %extends returned a value that is not a JSON value for ${JSON.stringify(reference)}`, offset);
   }
 
   // ----- Directives (6.4 to 6.6) ------------------------------------------
@@ -1518,6 +1483,54 @@ export class Parser {
 }
 
 /**
+ * A document read by `Parser#read`, before its `%extends` are resolved.
+ * @typedef {object} ReadDocument
+ * @property {string} text the document
+ * @property {any} value the value of the content
+ * @property {number} start offset of the content, for errors on the root value
+ * @property {boolean} check true if the document is read in strict mode (12)
+ * @property {{reference: string, offset: number}[]} extends the `%extends` in
+ *   document order: the value of each string and the offset of the string
+ */
+
+/** Throws a `ParserError` for `reason` at `offset` in `text`. */
+function failAt(text, reason, offset, cause) {
+  const { line, column } = locate(text, offset);
+  throw new ParserError(reason, line, column, offset, cause === undefined ? undefined : { cause });
+}
+
+/** Reports an error of the resolver for the `%extends` at `offset`. */
+function resolverFailed(text, reference, offset, error) {
+  const reason = error instanceof Error ? error.message : String(error);
+  failAt(text, `The resolver of %extends reports an error for ${JSON.stringify(reference)}: ${reason}`, offset, error);
+}
+
+/** True for a promise or another object with a `then` method. */
+function isThenable(value) {
+  return (typeof value === 'object' || typeof value === 'function') && value !== null && typeof value.then === 'function';
+}
+
+/** Strict mode for the result of %extends: names and strings (12). */
+function checkBase(text, value, offset) {
+  if (typeof value === 'string') {
+    const issue = strictStringIssue(value);
+    if (issue !== undefined) {
+      failAt(text, `The result of %extends contains a string with ${issue}, which is not permitted in strict mode`, offset);
+    }
+  } else if (Array.isArray(value)) {
+    for (const item of value) checkBase(text, item, offset);
+  } else if (value !== null && typeof value === 'object') {
+    for (const name of Object.keys(value)) {
+      const issue = strictStringIssue(name);
+      if (issue !== undefined) {
+        failAt(text, `The result of %extends contains a name with ${issue}, which is not permitted in strict mode`, offset);
+      }
+      checkBase(text, value[name], offset);
+    }
+  }
+}
+
+/**
  * MergePatch(target, patch) of RFC 7396 (6.6). `target` is a copy that may be
  * changed; the result is returned.
  */
@@ -1561,11 +1574,27 @@ function parserFor(options) {
  * Parses an XTJSON document and returns its value.
  *
  * @param {string} text the document
- * @param {Options | object | null} [options] strict mode and the limits
+ * @param {object | null} [options] strict mode, the limits and the resolver
+ *   for `%extends`
  * @returns {any} the value; an integer with the suffix `n` becomes a BigInt
  * @throws {ParserError} if the text is not a valid XTJSON document
  * @throws {TypeError} if the options are invalid
  */
 export function parse(text, options) {
   return parserFor(options).parse(text);
+}
+
+/**
+ * Parses an XTJSON document and returns a promise of its value. The
+ * resolver for `%extends` may be an `async` function.
+ *
+ * @param {string} text the document
+ * @param {object | null} [options] strict mode, the limits and the resolver
+ *   for `%extends`
+ * @returns {Promise<any>} the value; rejected with a `ParserError` if the
+ *   text is not a valid XTJSON document, and with a `TypeError` if the
+ *   options are invalid
+ */
+export async function parseAsync(text, options) {
+  return parserFor(options).parseAsync(text);
 }

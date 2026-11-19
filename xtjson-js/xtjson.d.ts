@@ -1,7 +1,8 @@
 /**
- * XTJSON parser for JavaScript. `parse` works like `JSON.parse`; `Parser`
- * keeps validated options for many calls. `format` lays out a document
- * again.
+ * XTJSON parser for JavaScript. `parse` works like `JSON.parse`;
+ * `parseAsync` also accepts an asynchronous resolver for `%extends`;
+ * `Parser` keeps validated options for many calls. `format` lays out a
+ * document again.
  *
  * @example
  * import { parse, format } from '@cwkr/xtjson';
@@ -19,14 +20,28 @@ export type JSONValue =
   | { [name: string]: JSONValue };
 
 /**
- * Options for `parse`.
+ * Resolver for the directive `%extends` (section 6.6).
+ *
+ * @param reference the value of the string after `%extends`
+ * @param strict true if the document is read in strict mode (section 12):
+ *   requested by the application with the option `strict` or by the
+ *   document with `%strict: true`. A resolver that parses an XTJSON base
+ *   value can pass it on as the option `strict`.
+ * @returns the base value, a JSON value (an object, an array, a string, a
+ *   finite number, a bigint, `true`, `false` or `null`); with `parseAsync`
+ *   also a promise of it
+ */
+export type Resolver = (reference: string, strict: boolean) => unknown;
+
+/**
+ * Options for `parse`, `parseAsync` and `new Parser`, a plain object.
  *
  * There are no options for values, directives or number suffixes: the
  * values without quotation marks, the directives and the suffixes are fixed
  * by the specification (6.3 to 6.6, 9.5). Unknown properties are a
  * `TypeError`.
  */
-export interface OptionsInit {
+export interface ParseOptions {
   /**
    * Maximum nesting depth of objects and arrays, a positive integer; an
    * implicit root object counts as a level. `parse` reports a deeper
@@ -36,17 +51,18 @@ export interface OptionsInit {
    */
   maxDepth?: number;
   /**
-   * Resolver for the directive `%extends` (section 6.6): receives the string
-   * after `%extends` and returns the base value, a JSON value (an object, an
-   * array, a string, a finite number, a bigint, `true`, `false` or `null`).
-   * It is called once for every `%extends`, in document order. The base
-   * values are merged in this order and the document is merged into the
-   * result, according to JSON Merge Patch (RFC 7396); the values of the
-   * resolver are copied, not changed. An exception of the resolver or another
-   * value is a `ParserError`. Default: none; then a document with `%extends` is an
-   * error. The resolver decides which sources a document may name.
+   * Resolver for the directive `%extends` (section 6.6), see `Resolver`. It
+   * is called once for every `%extends`, in document order, after the
+   * content has been read. The base values are merged in this order and the
+   * document is merged into the result, according to JSON Merge Patch
+   * (RFC 7396); the values of the resolver are copied, not changed. An
+   * exception of the resolver, a rejected promise or a value that is not a
+   * JSON value is a `ParserError`. With `parse` the resolver must return the
+   * base value itself; a promise is a `ParserError`, use `parseAsync`.
+   * Default: none; then a document with `%extends` is an error. The
+   * resolver decides which sources a document may name.
    */
-  resolver?: ((reference: string) => any) | null;
+  resolver?: Resolver | null;
   /**
    * Strict mode (section 12). `parse` rejects a document in which an object
    * contains a name twice, in which a name or string value contains an
@@ -56,22 +72,6 @@ export interface OptionsInit {
    * `%strict: true`, and the member that comes last applies.
    */
   strict?: boolean;
-}
-
-/**
- * Validated, immutable options. Create them once and pass them to every
- * call; plain `OptionsInit` objects are validated again on each call.
- */
-export class Options implements OptionsInit {
-  /** @throws {TypeError} if an option is unknown or invalid. */
-  constructor(init?: OptionsInit | null);
-  /** The maximum nesting depth of objects and arrays. */
-  get maxDepth(): number;
-  /** The resolver for `%extends`, or undefined if `%extends` is disabled. */
-  get resolver(): ((reference: string) => any) | undefined;
-  /** True for strict mode. */
-  get strict(): boolean;
-  get [Symbol.toStringTag](): 'Options';
 }
 
 /** Error in an XTJSON document. */
@@ -92,11 +92,26 @@ export class ParserError extends SyntaxError {
  * an integer with the suffix `n` becomes a `bigint` (`10n`, `0xFFn`).
  *
  * @param text the document
- * @param options strict mode and the limits
+ * @param options strict mode, the limits and the resolver
  * @throws {ParserError} if the text is not a valid XTJSON document
  * @throws {TypeError} if the options are invalid
  */
-export function parse(text: string, options?: Options | OptionsInit | null): any;
+export function parse(text: string, options?: ParseOptions | null): any;
+
+/**
+ * Parses an XTJSON document and returns a promise of its value, like
+ * `parse`. The resolver for `%extends` may return a promise (an `async`
+ * function). It is called for every `%extends` in document order before
+ * any result is awaited, so sources can be loaded in parallel; the base
+ * values are merged in document order. If several calls fail, the error of
+ * the first `%extends` in the document is reported.
+ *
+ * @param text the document
+ * @param options strict mode, the limits and the resolver
+ * @returns the value; rejected with a `ParserError` if the text is not a
+ *   valid XTJSON document and with a `TypeError` if the options are invalid
+ */
+export function parseAsync(text: string, options?: ParseOptions | null): Promise<any>;
 
 /**
  * Formats an XTJSON document with the indentation `space`, as
@@ -123,10 +138,15 @@ export function format(text: string, space?: string | number | null): string;
  */
 export class Parser {
   /** @throws {TypeError} if the options are invalid */
-  constructor(options?: Options | OptionsInit | null);
+  constructor(options?: ParseOptions | null);
   /**
    * Parses an XTJSON document, see `parse`.
    * @throws {ParserError} if the text is not a valid XTJSON document
    */
   parse(text: string): any;
+  /**
+   * Parses an XTJSON document, see `parseAsync`. The parser can be used
+   * again while it waits for the resolver.
+   */
+  parseAsync(text: string): Promise<any>;
 }

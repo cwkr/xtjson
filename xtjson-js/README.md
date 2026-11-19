@@ -9,8 +9,10 @@ configuration files. See the specification in
   them has no side effects.
 - No dependencies. Runs in current browsers and JavaScript runtimes; tested
   with Node.js (18 or later) and Bun.
-- `parse()` works like `JSON.parse`; `Parser` keeps validated options for
-  many calls. `format()` lays out a document again and keeps its comments.
+- `parse()` works like `JSON.parse`; `parseAsync()` also accepts an
+  asynchronous resolver for `%extends`, for example one that uses `fetch`.
+  `Parser` keeps validated options for many calls. `format()` lays out a
+  document again and keeps its comments.
 
 ```js
 import { parse, format } from '@cwkr/xtjson';
@@ -46,9 +48,9 @@ Parses an XTJSON document and returns its value.
 - `text`: the document. Like `JSON.parse`, the argument is converted to a
   string. It must be decoded text; when reading bytes, decode them as UTF-8
   first (for example with `new TextDecoder('utf-8', { fatal: true })`).
-- `options`: optional strict mode and limits, see [Options](#options);
-  `null` and `undefined` mean none. Anything other than an object is a
-  `TypeError`.
+- `options`: optional strict mode, limits and resolver, a plain object, see
+  [Options](#options); `null` and `undefined` mean none. Anything other than
+  an object is a `TypeError`.
 
 Every JSON text gives the same value as with `JSON.parse`, with two
 exceptions allowed by the specification (section 11): numbers whose magnitude
@@ -59,6 +61,16 @@ exceeds the range of a JavaScript number (`1e400`) are an error instead of
 If a name occurs more than once in an object, the member that comes last in
 the document applies, as with `JSON.parse`. In [strict mode](#strict-mode)
 it is an error instead.
+
+### `parseAsync(text, options?)`
+
+Works like `parse`, but returns a promise, and the resolver for `%extends`
+may return a promise of the base value, for example an `async` function that
+uses `fetch` (see [Directives](#directives) and
+[In the browser](#in-the-browser)). An invalid document or a failing
+resolver rejects the promise with a `ParserError`, invalid options with a
+`TypeError`. Without `%extends`, or with a synchronous resolver, the result
+is the same as with `parse`.
 
 ### Names and values without quotation marks
 
@@ -103,32 +115,56 @@ according to JSON Merge Patch (RFC 7396): members of the document replace or
 add members of the base value, objects are merged at any depth, arrays are
 replaced, and a member with the value `null` removes the member of the base
 value. The base value comes from the option `resolver`, a function
-that receives the string and returns the base value; how it reads the
-source, and whether the source is JSON, XTJSON or something else, is up to
-the application. Without a resolver, `%extends` is an error.
+`(reference, strict) => value`: it receives the string and whether the
+document is read in strict mode, and returns the base value. How it reads
+the source, and whether the source is JSON, XTJSON or something else, is up
+to the application. Without a resolver, `%extends` is an error.
+
+The following resolver for Node.js reads files below a configuration
+directory. Because every JSON text is also an XTJSON document, it reads
+every base value with `parse`, and a base value can use `%extends` itself:
 
 ```js
 import { readFileSync } from 'node:fs';
-import { resolve, dirname } from 'node:path';
+import { resolve, dirname, sep } from 'node:path';
+import { parse } from '@cwkr/xtjson';
 
-const file = 'config/app.xtj';
-const config = parse(readFileSync(file, 'utf8'), {
-  // Resolve only paths below the directory of the document.
-  resolver: (reference) => {
-    const dir = resolve(dirname(file));
-    const path = resolve(dir, reference);
-    if (!path.startsWith(dir)) throw new Error('outside the configuration directory');
-    return JSON.parse(readFileSync(path, 'utf8'));
-  },
-});
+const root = resolve('config');
+
+/**
+ * A resolver for the document `file`: resolves a reference relative to the
+ * document that names it, only below `root`, and rejects cycles.
+ */
+function resolverFor(file, seen = new Set([file])) {
+  return (reference, strict) => {
+    const path = resolve(dirname(file), reference);
+    if (!path.startsWith(root + sep)) throw new Error(`${reference} is outside the configuration directory`);
+    if (seen.has(path)) throw new Error(`${reference} extends itself`);
+    // the base value is read in the same mode as the document that names it
+    return parse(readFileSync(path, 'utf8'), { strict, resolver: resolverFor(path, new Set(seen).add(path)) });
+  };
+}
+
+const file = resolve(root, 'app.xtj');
+const config = parse(readFileSync(file, 'utf8'), { resolver: resolverFor(file) });
 ```
 
 - The resolver is called after the content has been read, once for every
-  `%extends`, in document order, with the value of its string. It must be synchronous and return a JSON value: an
-  object, an array, a string, a finite number, a BigInt, `true`, `false` or
-  `null`. Any other value, or an exception of the resolver, is a
-  `ParserError` (the exception is its `cause`). The returned value is
-  copied, not changed.
+  `%extends`, in document order, with the value of its string and `strict`.
+  `strict` is `true` if the document is read in strict mode, because the
+  application requested it with the option `strict` or the document contains
+  `%strict: true`. A resolver that parses an XTJSON base value can pass it on,
+  so that the base value is checked in the same way.
+- The resolver returns a JSON value: an object, an array, a string, a finite
+  number, a BigInt, `true`, `false` or `null`. Any other value, or an
+  exception of the resolver, is a `ParserError` (the exception is its
+  `cause`). The returned value is copied, not changed.
+- With `parse` the resolver must be synchronous; a promise is a
+  `ParserError`. With [`parseAsync`](#parseasynctext-options) it may return a
+  promise. `parseAsync` calls the resolver for all `%extends` before it
+  awaits a result, so the sources are loaded in parallel; the base values
+  are merged in document order nevertheless. If several calls fail, the error
+  of the first `%extends` in the document is reported.
 - With several `%extends`, the base values are merged in document order,
   each later one as a merge patch on the earlier ones, and the document is
   merged into the result last. A later base value therefore takes precedence,
@@ -145,21 +181,99 @@ const config = parse(readFileSync(file, 'utf8'), {
   ```
 
 - A base value that itself uses `%extends` is the task of the resolver; it
-  can call `parse` with a resolver of its own. Guard against cycles.
+  can call `parse` or `parseAsync` with a resolver of its own, as above.
+  Guard against cycles. An error in a base document is reported as an error
+  of the resolver, with the message of the base document and its position.
 - A document from an untrusted source can make the resolver read files or
   fetch URLs. Restrict the resolver, or do not give one (section 13).
 - In strict mode the result of all merges is checked as well: its names and
   strings must not contain surrogates or noncharacters, and its root value
   must be an object or an array.
 
-### Options
+### In the browser
+
+The package consists of ES modules without dependencies. Load
+`xtjson.js` with a bundler, or with an import map:
+
+```html
+<script type="importmap">
+  { "imports": { "@cwkr/xtjson": "/js/xtjson/xtjson.js" } }
+</script>
+```
+
+Read documents with the Fetch API and decode them as UTF-8. `response.text()`
+would replace invalid UTF-8 silently; a `TextDecoder` with `fatal: true`
+reports it, as section 4 requires:
 
 ```js
-import { parse, Options } from '@cwkr/xtjson';
+import { parseAsync } from '@cwkr/xtjson';
 
-const options = new Options({ strict: true });
+/** Loads the text at `url`; an HTTP error or invalid UTF-8 is an error. */
+async function fetchText(url) {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`${response.status} ${response.statusText} for ${url}`);
+  return new TextDecoder('utf-8', { fatal: true }).decode(await response.arrayBuffer());
+}
 
-parse('ratio: 50pct\nowner: "me"', options);   // { ratio: 0.5, owner: 'me' }
+const settings = await parseAsync(await fetchText('/config/settings.xtj'), { strict: true });
+```
+
+A resolver that loads base values with `fetch` is an `async` function, so
+use `parseAsync`. The following resolver resolves a reference relative to
+the URL of the document that names it, loads only from the origin of the
+document, rejects cycles, and reads every base value with `parseAsync` and a
+resolver of its own, so that a base value can be a JSON or XTJSON document
+and use `%extends` itself:
+
+```js
+/**
+ * A resolver for the document at `url`. `seen` contains the URLs of the
+ * documents on the way to it, to detect cycles.
+ */
+function resolverFor(url, seen = new Set([url.href])) {
+  return async (reference, strict) => {
+    const source = new URL(reference, url);
+    if (source.origin !== url.origin) throw new Error(`${source} is not on ${url.origin}`);
+    if (seen.has(source.href)) throw new Error(`${source} extends itself`);
+    if (seen.size >= 10) throw new Error('more than 10 nested base documents');
+    const text = await fetchText(source);
+    // the base value is read in the same mode as the document that names it
+    return parseAsync(text, { strict, resolver: resolverFor(source, new Set(seen).add(source.href)) });
+  };
+}
+
+/** Loads the XTJSON document at `path` and its base values. */
+async function loadConfig(path) {
+  const url = new URL(path, document.baseURI);
+  return parseAsync(await fetchText(url), { resolver: resolverFor(url) });
+}
+
+const config = await loadConfig('config/app.xtj');
+```
+
+With `config/app.xtj`
+
+```
+%extends: './base.xtj'
+%extends: './production.json'
+
+name: 'app'
+```
+
+the resolver loads `config/base.xtj` and `config/production.json` in
+parallel; if `base.xtj` itself contains `%extends: './defaults.json'`, it
+loads `config/defaults.json` as well. A document that names a base on
+another server, or that extends itself directly or through other documents,
+is rejected with a `ParserError`.
+
+### Options
+
+Options are a plain object:
+
+```js
+import { parse } from '@cwkr/xtjson';
+
+parse('ratio: 50pct\nowner: "me"', { strict: true });   // { ratio: 0.5, owner: 'me' }
 ```
 
 - `maxDepth`: the maximum nesting depth of objects and arrays, a positive
@@ -168,9 +282,9 @@ parse('ratio: 50pct\nowner: "me"', options);   // { ratio: 0.5, owner: 'me' }
   `ParserError`. A very large
   limit can exceed the call stack of the JavaScript engine (with Node.js at
   a depth of a few thousand); `parse` then reports a `ParserError` too.
-- `resolver`: a function `(reference) => value` that returns the base value
-  for the string of an `%extends`, see [Directives](#directives). Default none:
-  `%extends` is an error.
+- `resolver`: a function `(reference, strict) => value` that returns the base
+  value for the string of an `%extends`, or with `parseAsync` a promise of
+  it, see [Directives](#directives). Default none: `%extends` is an error.
 - `strict`: `true` for strict mode, see [below](#strict-mode). Default
   `false`.
 
@@ -187,10 +301,9 @@ The suffixes are fixed by section 9.5 and always active when parsing: `k`
 permitted only after an integer and yields a BigInt, see
 [Numbers](#numbers).
 
-`Options` validates the options once. Create it once and reuse it for
-`parse`, or create a [`Parser`](#parser) with it. A plain object with the
-same properties can be passed as well, but `parse` validates it again on
-every call.
+`parse` and `parseAsync` validate the options on every call. To validate
+them once, create a [`Parser`](#parser) and reuse it; it takes the place of
+the class `Options` of earlier versions.
 
 ### `format(text, space?)`
 
@@ -284,25 +397,29 @@ value.
 ### Parser
 
 ```js
-import { Parser, Options } from '@cwkr/xtjson';
+import { Parser } from '@cwkr/xtjson';
 
-const parser = new Parser(new Options({ strict: true }));
+const parser = new Parser({ strict: true });
 
 parser.parse('owner: null');  // { owner: null }
 ```
 
-- `new Parser(options?)` takes an `Options` instance or a plain object with
-  the same properties and validates it once. An instance can be reused for
-  any number of documents.
-- `parser.parse(text)` works like `parse` with these options.
+- `new Parser(options?)` takes the options as a plain object, validates them
+  once and keeps a copy; later changes to the object have no effect. An
+  instance can be reused for any number of documents.
+- `parser.parse(text)` and `parser.parseAsync(text)` work like `parse` and
+  `parseAsync` with these options. The parser can be used again, also by its
+  own resolver, while `parseAsync` waits for the resolver.
 - The configuration and the state of a call are private.
 
-`parse` uses such an instance internally.
+`parse` and `parseAsync` use such an instance internally.
 
 ### Exports
 
-The package has only named exports: `parse`, `format`,
-`Parser`, `Options` and `ParserError`. There is no default export.
+The package has only named exports: `parse`, `parseAsync`, `format`,
+`Parser` and `ParserError`. There is no default export. The TypeScript
+declarations also export the types `ParseOptions`, `Resolver` and
+`JSONValue`.
 
 ## Numbers
 
@@ -331,7 +448,7 @@ The source consists of three modules:
 | File | Contents |
 |---|---|
 | `xtjson.js` | entry point of the package; only re-exports |
-| `parser.js` | `Parser`, `ParserError`, `Options`, `parse` |
+| `parser.js` | `Parser`, `ParserError`, `parse`, `parseAsync` |
 | `formatter.js` | `format` |
 
 Rules for the modules:
@@ -362,9 +479,10 @@ are the supported test environments; Deno uses the same engine as Node.js
   python3 scripts/export_corpus.py --check   # fails if it is out of date
   ```
 
-- `test/parse.test.js` tests the API of `parse` and `Parser`, the
-  names and values, the directives and `%extends`, strict mode, error messages and
-  positions, numbers and limits.
+- `test/parse.test.js` tests the API of `parse`, `parseAsync` and `Parser`,
+  the names and values, the directives and `%extends` with synchronous and
+  asynchronous resolvers, strict mode, error messages and positions, numbers
+  and limits.
 - `test/format.test.js` tests `format`: the layout, and that every valid text
   of the corpus and the specification keeps its value and is formatted
   stably.

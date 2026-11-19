@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-import { parse, ParserError } from '../xtjson.js';
+import { parse, parseAsync, ParserError } from '../xtjson.js';
 
 const corpus = JSON.parse(readFileSync(new URL('./corpus.json', import.meta.url), 'utf8'));
 
@@ -132,6 +132,19 @@ test('tests_direktiven.py: %extends with a resolver, valid texts', () => {
 test('tests_direktiven.py: %extends with a resolver, invalid texts', () => {
   for (const [text, bases] of corpus.d_extends_invalid) {
     assert.throws(() => parse(text, { resolver: resolverFor(bases) }), ParserError, `should be invalid: ${show(text)}`);
+  }
+});
+
+test('tests_direktiven.py: %extends with parseAsync and an async resolver', async () => {
+  const asyncResolverFor = (bases) => {
+    const resolver = resolverFor(bases);
+    return async (reference) => resolver(reference);
+  };
+  for (const [text, bases, expected] of corpus.d_extends_valid) {
+    assert.deepEqual(asNumbers(await parseAsync(text, { resolver: asyncResolverFor(bases) })), expected, show(text));
+  }
+  for (const [text, bases] of corpus.d_extends_invalid) {
+    await assert.rejects(parseAsync(text, { resolver: asyncResolverFor(bases) }), ParserError, `should be invalid: ${show(text)}`);
   }
 });
 
