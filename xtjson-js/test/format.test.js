@@ -77,9 +77,9 @@ describe('format', () => {
   });
 
   test('lays out directives like members', () => {
-    const text = "%strict:true,%extends:'./a.json'\n# c\n\nid: 1\nproxy: nil";
-    assert.equal(format(text, 2), "%strict: true,\n%extends: './a.json'\n# c\n\nid: 1\nproxy: nil");
-    assert.equal(format(text), "%strict:true,%extends:'./a.json' # c\nid:1,proxy:nil");
+    const text = "%strict:true,%extends:'./a.json'\n# c\n\nid: 1\nproxy: null";
+    assert.equal(format(text, 2), "%strict: true,\n%extends: './a.json'\n# c\n\nid: 1\nproxy: null");
+    assert.equal(format(text), "%strict:true,%extends:'./a.json' # c\nid:1,proxy:null");
     assert.equal(format('%strict:\n  true,[1]', 2), '%strict: true,\n[\n  1\n]');
   });
 

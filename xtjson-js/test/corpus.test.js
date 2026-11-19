@@ -136,7 +136,7 @@ test('tests_direktiven.py: %extends with a resolver, invalid texts', () => {
 });
 
 test('tests_definitionen.py: the application cannot define values or suffixes', () => {
-  assert.throws(() => parse('nil', { namedValues: { nil: null } }), (error) => {
+  assert.throws(() => parse('[nil]', { namedValues: { nil: null } }), (error) => {
     return error instanceof TypeError && /there are no named values/.test(error.message);
   });
   assert.throws(() => parse('1', { suffixes: { q: Math.abs } }), TypeError);
@@ -154,10 +154,15 @@ for (const lang of ['de', 'en']) {
     blocks.forEach(([tag, body], i) => {
       if (tag !== 'xtjson') return;
       count++;
-      // A json block directly before an xtjson block is the base value of its %extends.
-      const before = blocks[i - 1];
-      const options = before?.[0] === 'json' ? { resolver: () => JSON.parse(before[1]) } : undefined;
-      const value = parse(body, options);
+      // The json blocks directly before an xtjson block are the base values of
+      // its %extends: the last ones, in the order of the %extends.
+      const bases = [];
+      for (let j = i - 1; j >= 0 && blocks[j][0] === 'json'; j--) bases.unshift(JSON.parse(blocks[j][1]));
+      let calls = 0;
+      parse(body, { resolver: () => (calls++, {}) }); // count the %extends
+      const queue = bases.slice(bases.length - calls);
+      const value = parse(body, { resolver: () => queue.shift() });
+      assert.equal(queue.length, 0, `example ${count}: base values`);
       if (blocks[i + 1]?.[0] === 'json') {
         assert.deepEqual(asNumbers(value), JSON.parse(blocks[i + 1][1]), `example ${count}`);
       }

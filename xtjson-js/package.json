@@ -1,6 +1,6 @@
 {
   "name": "@cwkr/xtjson",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "XTJSON parser: a superset of JSON for files maintained by people, with an API like JSON",
   "keywords": [
     "xtjson",

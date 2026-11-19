@@ -39,9 +39,11 @@ export interface OptionsInit {
    * Resolver for the directive `%extends` (section 6.6): receives the string
    * after `%extends` and returns the base value, a JSON value (an object, an
    * array, a string, a finite number, a bigint, `true`, `false` or `null`).
-   * The document is merged into a copy of it according to JSON Merge Patch
-   * (RFC 7396). An exception of the resolver or another value is a
-   * `ParserError`. Default: none; then a document with `%extends` is an
+   * It is called once for every `%extends`, in document order. The base
+   * values are merged in this order and the document is merged into the
+   * result, according to JSON Merge Patch (RFC 7396); the values of the
+   * resolver are copied, not changed. An exception of the resolver or another
+   * value is a `ParserError`. Default: none; then a document with `%extends` is an
    * error. The resolver decides which sources a document may name.
    */
   resolver?: ((reference: string) => any) | null;
@@ -117,7 +119,7 @@ export function format(text: string, space?: string | number | null): string;
  *
  * @example
  * const parser = new Parser({ strict: true });
- * const value = parser.parse('owner: nil');
+ * const value = parser.parse('owner: null');
  */
 export class Parser {
   /** @throws {TypeError} if the options are invalid */

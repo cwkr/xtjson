@@ -3,7 +3,7 @@
 XTJSON parser for JavaScript. XTJSON is a syntactic superset of
 JSON for files that are written and maintained by people, such as
 configuration files. See the specification in
-[`docs/xtjson-spec-en.md`](../docs/xtjson-spec-en.md) (draft 0.7).
+[`docs/xtjson-spec-en.md`](../docs/xtjson-spec-en.md) (draft 0.8).
 
 - ES modules in plain JavaScript, with TypeScript declarations. Importing
   them has no side effects.
@@ -22,7 +22,7 @@ const config = parse(`
 name: 'demo-service'
 host: "0.0.0.0"
 port: 8080            // a line break replaces the comma
-proxy: nil            // the same as null
+proxy: null           // no proxy
 cache: 64mb
 motd: "
   Welcome.
@@ -62,11 +62,11 @@ it is an error instead.
 
 ### Names and values without quotation marks
 
-The values without quotation marks are `true`, `false`, `null` and `nil`
-(section 6.3); `nil` is another notation for `null`. They are written in
-lower case. Any other identifier at a value position is an error; it is
-never read as a string. At a name position they are ordinary names:
-`{nil: nil}` is `{ nil: null }`.
+The values without quotation marks are `true`, `false` and `null`
+(section 6.3). They are written in lower case. Any other identifier at a
+value position is an error, `nil` included; it is never read as a string.
+At a name position they are ordinary names: `{null: null}` is
+`{ null: null }`, and `{nil: 1}` is `{ nil: 1 }`.
 
 A name without quotation marks (7.2) consists of ASCII letters, `_`, `$`,
 `µ` and the letters `À` to `ÿ` of Latin-1 Supplement without `×` and `÷`
@@ -77,14 +77,15 @@ normalized.
 ### Directives
 
 A document can begin with the directives `%strict` (6.5) and `%extends`
-(6.6), in either order and each at most once. `%strict: true` makes the
+(6.6). `%strict` occurs at most once, `%extends` any number of times, and
+`%strict` can stand before, between or after the `%extends`. `%strict: true` makes the
 parser read the content of the document in [strict mode](#strict-mode).
 
 ```js
 parse(`
 %strict: true
 
-owner: nil
+owner: null
 tags: [true, false, null]
 `);
 // { owner: null, tags: [true, false, null] }
@@ -100,8 +101,8 @@ tags: [true, false, null]
 `%extends: './defaults.json'` makes the document extend a base value
 according to JSON Merge Patch (RFC 7396): members of the document replace or
 add members of the base value, objects are merged at any depth, arrays are
-replaced, and a member with the value `null` or `nil` removes the member of
-the base value. The base value comes from the option `resolver`, a function
+replaced, and a member with the value `null` removes the member of the base
+value. The base value comes from the option `resolver`, a function
 that receives the string and returns the base value; how it reads the
 source, and whether the source is JSON, XTJSON or something else, is up to
 the application. Without a resolver, `%extends` is an error.
@@ -122,17 +123,32 @@ const config = parse(readFileSync(file, 'utf8'), {
 });
 ```
 
-- The resolver is called once, after the content has been read, with the
-  value of the string. It must be synchronous and return a JSON value: an
+- The resolver is called after the content has been read, once for every
+  `%extends`, in document order, with the value of its string. It must be synchronous and return a JSON value: an
   object, an array, a string, a finite number, a BigInt, `true`, `false` or
   `null`. Any other value, or an exception of the resolver, is a
   `ParserError` (the exception is its `cause`). The returned value is
   copied, not changed.
+- With several `%extends`, the base values are merged in document order,
+  each later one as a merge patch on the earlier ones, and the document is
+  merged into the result last. A later base value therefore takes precedence,
+  and its members with the value `null` remove members of the earlier ones:
+
+  ```js
+  parse("%extends: 'defaults.json'\n%extends: 'production.json'\nlog: {file: 'demo.log'}", {
+    resolver: (reference) => ({
+      'defaults.json': { port: 8080, debug: true, log: { level: 'debug' } },
+      'production.json': { port: 443, debug: null, log: { level: 'warn' } },
+    })[reference],
+  });
+  // { port: 443, log: { level: 'warn', file: 'demo.log' } }
+  ```
+
 - A base value that itself uses `%extends` is the task of the resolver; it
   can call `parse` with a resolver of its own. Guard against cycles.
 - A document from an untrusted source can make the resolver read files or
   fetch URLs. Restrict the resolver, or do not give one (section 13).
-- In strict mode the result of the merge is checked as well: its names and
+- In strict mode the result of all merges is checked as well: its names and
   strings must not contain surrogates or noncharacters, and its root value
   must be an object or an array.
 
@@ -153,7 +169,7 @@ parse('ratio: 50pct\nowner: "me"', options);   // { ratio: 0.5, owner: 'me' }
   limit can exceed the call stack of the JavaScript engine (with Node.js at
   a depth of a few thousand); `parse` then reports a `ParserError` too.
 - `resolver`: a function `(reference) => value` that returns the base value
-  for the string of `%extends`, see [Directives](#directives). Default none:
+  for the string of an `%extends`, see [Directives](#directives). Default none:
   `%extends` is an error.
 - `strict`: `true` for strict mode, see [below](#strict-mode). Default
   `false`.
@@ -238,7 +254,7 @@ enforced.
 Strict mode applies if the application requests it with `strict: true` or if
 the document contains `%strict: true` (6.5). It applies to the content of
 the document, the part after the directives, and with `%extends` also to the
-result of the merge. With `strict: true`, a
+result of all merges. With `strict: true`, a
 document with `%strict: false` is an error, because it contradicts the
 application.
 
@@ -257,7 +273,7 @@ value.
 
 - An invalid document throws a `ParserError`, a subclass of `SyntaxError`.
   Its message names the violated rule and the position, for example
-  `Unexpected identifier 'ture'; the values without quotation marks are true, false, null and nil; text without quotation marks is not a string, write "ture" for a string (line 3, column 9)`.
+  `Unexpected identifier 'ture'; the values without quotation marks are true, false and null; text without quotation marks is not a string, write "ture" for a string (line 3, column 9)`.
   The properties `reason`, `line`, `column` (both 1-based; columns count
   Unicode code points) and `offset` (0-based, in UTF-16 code units) give the
   details.
@@ -272,7 +288,7 @@ import { Parser, Options } from '@cwkr/xtjson';
 
 const parser = new Parser(new Options({ strict: true }));
 
-parser.parse('owner: nil');  // { owner: null }
+parser.parse('owner: null');  // { owner: null }
 ```
 
 - `new Parser(options?)` takes an `Options` instance or a plain object with

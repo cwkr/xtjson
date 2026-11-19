@@ -25,7 +25,7 @@ describe('API', () => {
 
   test('Parser keeps its options and hides its state', () => {
     const parser = new Parser({ strict: true });
-    assert.deepEqual(parser.parse('a: nil'), { a: null });
+    assert.deepEqual(parser.parse('a: null'), { a: null });
     assert.deepEqual(parser.parse('[1, 2]'), [1, 2]);
     assert.throws(() => parser.parse('{a: 1, a: 2}'), /Duplicate name/);
     assert.deepEqual(Object.keys(parser), []);
@@ -71,7 +71,7 @@ describe('API', () => {
 describe('options argument', () => {
   const init = { strict: true };
   const defs = new Options(init);
-  const text = '[nil, 50pct, 1]';
+  const text = '[null, 50pct, 1]';
   const expected = [null, 0.5, 1];
 
   test('options as second argument: instance or plain object', () => {
@@ -94,16 +94,20 @@ describe('options argument', () => {
 });
 
 describe('literals and the directive', () => {
-  test('true, false, null and nil (6.4)', () => {
-    assert.deepEqual(parse('[true, false, null, nil]'), [true, false, null, null]);
-    assert.equal(parse('nil'), null);
-    assert.deepEqual(parse('{nil: nil, true: false}'), { nil: null, true: false });
+  test('true, false and null (6.3)', () => {
+    assert.deepEqual(parse('[true, false, null]'), [true, false, null]);
+    assert.equal(parse('null'), null);
+    assert.deepEqual(parse('{null: null, true: false}'), { null: null, true: false });
     assert.deepEqual(parse('nil: 1'), { nil: 1 });
   });
 
   test('every other identifier at a value position is an error', () => {
-    assert.match(error('[red]').message, /Unexpected identifier 'red'; the values without quotation marks are true, false, null and nil; text without quotation marks is not a string, write "red" for a string/);
-    assert.match(error('a: Nil').message, /did you mean 'nil'\? Literals are case-sensitive/);
+    assert.match(error('[red]').message, /Unexpected identifier 'red'; the values without quotation marks are true, false and null; text without quotation marks is not a string, write "red" for a string/);
+    assert.match(error('a: Null').message, /did you mean 'null'\? Literals are case-sensitive/);
+    for (const text of ['nil', '[nil]', 'a: nil', '{nil: nil}']) {
+      assert.match(error(text).message, /Unexpected identifier 'nil'; the values without quotation marks are true, false and null; write null for the null value/, text);
+    }
+    assert.match(error('a: Nil').message, /Unexpected identifier 'Nil'; .*; write null for the null value/);
     assert.match(error('[nullable]').message, /Unexpected identifier 'nullable'/);
     assert.match(error('undefined').message, /undefined is not a JSON value/);
   });
@@ -111,7 +115,7 @@ describe('literals and the directive', () => {
   test('%strict: true and %strict: false (6.5)', () => {
     assert.deepEqual(parse('%strict: true\n{a: 1}'), { a: 1 });
     assert.deepEqual(parse('%strict: false, [1]'), [1]);
-    assert.deepEqual(parse('# c\n%strict /* k */ :\n  true // k\n\na: nil'), { a: null });
+    assert.deepEqual(parse('# c\n%strict /* k */ :\n  true // k\n\na: null'), { a: null });
   });
 
   test('error messages for the directive', () => {
@@ -124,11 +128,11 @@ describe('literals and the directive', () => {
       ['%strict true\n{}', /expected ':' after '%strict'/, [1, 9]],
       ['%strict: 1\n{}', /The value of %strict must be true or false/, [1, 10]],
       ["%strict: 'true'\n{}", /The value of %strict must be true or false/, [1, 10]],
-      ['%strict: nil\n{}', /The value of %strict must be true or false/, [1, 10]],
+      ['%strict: null\n{}', /The value of %strict must be true or false/, [1, 10]],
       ['%strict: s = true\n{}', /The value of %strict must be true or false/, [1, 10]],
-      ['%extends: nil\n{}', /The value of %extends must be a string/, [1, 11]],
+      ['%extends: null\n{}', /The value of %extends must be a string/, [1, 11]],
       ["%extends: 'a.json'\n{}", /%extends is disabled: the application has given the parser no resolver \(option resolver\)/, [1, 1]],
-      ['%strict: true, %strict: false\n{}', /%strict is already stated at line 1, column 1; each directive may occur only once/, [1, 16]],
+      ['%strict: true, %strict: false\n{}', /%strict is already stated at line 1, column 1; %strict may occur only once/, [1, 16]],
       ['%strict: true [1]', /Expected a comma or a line break after the directive, found '\['/, [1, 15]],
       ['%strict: true /*\n*/ [1]', /a line break inside a block comment does not separate items/, [2, 4]],
       ['%strict: true\n', /The document contains only directives/, [2, 1]],
@@ -147,7 +151,7 @@ describe('literals and the directive', () => {
 
 describe('%extends', () => {
   const base = { name: 'demo', server: { host: '0.0.0.0', port: 8080, debug: true }, tags: ['a', 'b'] };
-  const text = "%extends: './defaults.json'\nserver: {port: 8443, debug: nil}\ntags: ['c']";
+  const text = "%extends: './defaults.json'\nserver: {port: 8443, debug: null}\ntags: ['c']";
 
   test('merges the content into the base value (RFC 7396)', () => {
     const calls = [];
@@ -205,6 +209,65 @@ describe('%extends', () => {
   });
 });
 
+describe('several %extends', () => {
+  const bases = {
+    'defaults.json': { name: 'demo', server: { host: '0.0.0.0', port: 8080, debug: true }, log: { level: 'debug' } },
+    'production.json': { server: { port: 443, debug: null }, log: { level: 'warn' } },
+  };
+  const resolver = (reference) => {
+    if (!Object.hasOwn(bases, reference)) throw new Error('not found');
+    return bases[reference];
+  };
+
+  test('merges the base values in document order, the content last', () => {
+    const text = "%extends: 'defaults.json'\n%extends: 'production.json'\nlog: {file: 'demo.log'}";
+    assert.deepEqual(parse(text, { resolver }), {
+      name: 'demo', server: { host: '0.0.0.0', port: 443 }, log: { level: 'warn', file: 'demo.log' },
+    });
+    const reversed = "%extends: 'production.json'\n%extends: 'defaults.json'\n{}";
+    assert.deepEqual(parse(reversed, { resolver }), {
+      server: { port: 8080, debug: true, host: '0.0.0.0' }, log: { level: 'debug' }, name: 'demo',
+    });
+    // the values of the resolver are not changed
+    assert.deepEqual(bases['production.json'], { server: { port: 443, debug: null }, log: { level: 'warn' } });
+  });
+
+  test('the resolver is called once per %extends, in document order', () => {
+    const calls = [];
+    const value = parse("%extends: 'c'\n%strict: true\n%extends: 'a', %extends: 'c'\n{}", {
+      resolver: (reference) => {
+        calls.push(reference);
+        return { [reference]: calls.length };
+      },
+    });
+    assert.deepEqual(calls, ['c', 'a', 'c']);
+    assert.deepEqual(value, { c: 3, a: 2 });
+  });
+
+  test('errors name the %extends concerned', () => {
+    const e = error("%extends: 'defaults.json'\n%extends: 'missing.json'\n{}", { resolver });
+    assert.match(e.message, /The resolver of %extends reports an error for "missing\.json": not found/);
+    assert.deepEqual([e.line, e.column], [2, 11]);
+    const f = error("%extends: 'a'\n%extends: 'b'\n{}", { resolver: (reference) => (reference === 'a' ? {} : NaN) });
+    assert.match(f.message, /returned a value that is not a JSON value for "b"/);
+    assert.deepEqual([f.line, f.column], [2, 11]);
+  });
+
+  test('strict mode checks the final result', () => {
+    const strictBases = { a: { s: '\uFFFF' }, b: { s: null } };
+    const r = (reference) => strictBases[reference];
+    assert.deepEqual(parse("%strict: true\n%extends: 'a'\n%extends: 'b'\n{}", { resolver: r }), {});
+    assert.match(error("%extends: 'b'\n%extends: 'a'\n{}", { resolver: r, strict: true }).message,
+      /The result of %extends contains a string with the noncharacter U\+FFFF/);
+  });
+
+  test('%strict at most once, also with %extends between', () => {
+    const e = error("%strict: true\n%extends: 'a'\n%strict: true\n{}", { resolver: () => ({}) });
+    assert.match(e.message, /%strict is already stated at line 1, column 1; %strict may occur only once/);
+    assert.deepEqual([e.line, e.column], [3, 1]);
+  });
+});
+
 describe('options', () => {
   test('Options is immutable', () => {
     const init = { strict: true };
@@ -222,7 +285,7 @@ describe('options', () => {
 
   test('the application cannot define values or suffixes', () => {
     assert.throws(() => new Options({ namedValues: { nil: null } }),
-      /Unknown XTJSON option "namedValues"; there are no named values, only the literals true, false, null and nil/);
+      /Unknown XTJSON option "namedValues"; there are no named values, only the literals true, false and null/);
     assert.throws(() => new Options({ suffixes: { q: Math.abs } }), /Unknown XTJSON option "suffixes"\./);
     assert.throws(() => new Options({ maxExpansion: 10 }), /Unknown XTJSON option "maxExpansion"; there are no named values/);
     assert.equal('namedValues' in new Options(), false);
@@ -311,7 +374,7 @@ describe('strict mode', () => {
   });
 
   test('the root value must be an object or an array', () => {
-    for (const text of ['1', '"x"', 'null', 'nil', 'true', '10n', '%strict: true, 1', '  \n\n  "x" // k']) {
+    for (const text of ['1', '"x"', 'null', 'true', '10n', '%strict: true, 1', '  \n\n  "x" // k']) {
       const e = error(text, strict);
       assert.match(e.message, /In strict mode the root value must be an object or an array/, text);
     }
@@ -321,7 +384,7 @@ describe('strict mode', () => {
 
   test('%strict: true requests strict mode for the document', () => {
     assert.deepEqual(parse('%strict: true\n{a: 1}'), { a: 1 });
-    assert.deepEqual(parse('%strict: true, [nil]'), [null]);
+    assert.deepEqual(parse('%strict: true, [null]'), [null]);
     assert.match(error('%strict: true\n{a: 1, a: 2}').message, /Duplicate name "a"; names must be unique in strict mode/);
     assert.match(error('%strict: true\n1').message, /root value must be an object or an array/);
     assert.match(error('%strict: true\n["\\uFFFF"]').message, /noncharacter U\+FFFF/);
@@ -550,7 +613,7 @@ describe('error messages', () => {
     ['[1, 2', /Unterminated array: expected '\]' for the array opened at line 1, column 1/, 1, 6],
     ['x: {\n  a: 1\n', /Unterminated object: expected '}' for the object opened at line 1, column 4/, 3, 1],
     ['{a 1}', /expected ':' after the name "a"/, 1, 4],
-    ['[ture]', /Unexpected identifier 'ture'; the values without quotation marks are true, false, null and nil; text without quotation marks is not a string/, 1, 2],
+    ['[ture]', /Unexpected identifier 'ture'; the values without quotation marks are true, false and null; text without quotation marks is not a string/, 1, 2],
     ['[True]', /did you mean 'true'\? Literals are case-sensitive/, 1, 2],
     ['NaN', /NaN is not a JSON value/, 1, 1],
     ['{2fa: true}', /must begin with a letter/, 1, 2],

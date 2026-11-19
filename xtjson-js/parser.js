@@ -120,9 +120,9 @@ function quote(x) {
   return typeof x === 'string' ? JSON.stringify(x) : String(x);
 }
 
-/** True for the literals `true`, `false`, `null` and `nil` (6.4). */
+/** True for the literals `true`, `false` and `null` (6.3). */
 function isLiteral(id) {
-  return id === 'true' || id === 'false' || id === 'null' || id === 'nil';
+  return id === 'true' || id === 'false' || id === 'null';
 }
 
 /**
@@ -311,7 +311,7 @@ export class Options {
       for (const key of Object.keys(init)) {
         if (!OPTION_NAMES.includes(key)) {
           const hint = key === 'namedValues'
-            ? '; there are no named values, only the literals true, false, null and nil'
+            ? '; there are no named values, only the literals true, false and null'
             : key === 'maxExpansion' ? '; there are no named values whose replacement could be limited'
               : key === 'ijson' ? '; the I-JSON mode is strict mode, option "strict"' : '';
           throw new TypeError(`Unknown XTJSON option ${quote(key)}${hint}. The options are ${OPTION_LIST}`);
@@ -415,10 +415,12 @@ export class Parser {
   #depth = 0;
   /** True if the content is read in strict mode (12). */
   #check = false;
-  /** @type {string | undefined} the string of `%extends` (6.6) */
-  #extends;
-  /** Offset of the string of `%extends`. */
-  #extendsOffset = 0;
+  /**
+   * The `%extends` of the document in document order (6.6): the value of
+   * each string and the offset of the string.
+   * @type {{reference: string, offset: number}[]}
+   */
+  #extends = [];
 
   /**
    * The number suffixes of 9.5, built on first use; the table is exhaustive.
@@ -464,7 +466,7 @@ export class Parser {
     this.#pos = 0;
     this.#depth = 0;
     this.#check = false;
-    this.#extends = undefined;
+    this.#extends = [];
     try {
       if (typeof source.isWellFormed === 'function' ? !source.isWellFormed() : LONE_SURROGATE.test(source)) {
         const offset = source.search(LONE_SURROGATE);
@@ -622,9 +624,9 @@ export class Parser {
       if (this.#peek() === PERCENT && this.#pos > end) this.#failDirectivePosition();
       this.#fail(`Unexpected ${describeAt(this.#text, this.#pos)} after the root value; a document contains exactly one value`);
     }
-    if (this.#extends !== undefined) value = this.#extendBase(value);
+    if (this.#extends.length > 0) value = this.#extendBases(value);
     if (this.#check && (value === null || typeof value !== 'object')) {
-      this.#fail(this.#extends === undefined
+      this.#fail(this.#extends.length === 0
         ? 'In strict mode the root value must be an object or an array'
         : 'In strict mode the root value must be an object or an array; with %extends this applies to the result of the merge', start);
     }
@@ -634,31 +636,37 @@ export class Parser {
   // ----- %extends (6.6) ---------------------------------------------------
 
   /**
-   * Calls the resolver for the string of `%extends` and applies the content
-   * `patch` to the base value as a JSON Merge Patch (RFC 7396).
+   * Calls the resolver for the string of every `%extends` in document order,
+   * merges the base values in this order, each later one as a JSON Merge
+   * Patch (RFC 7396) on the earlier ones, and applies the content `patch`
+   * last.
    */
-  #extendBase(patch) {
-    const reference = this.#extends;
-    const offset = this.#extendsOffset;
-    let base;
-    try {
-      base = this.#resolver(reference);
-    } catch (error) {
-      const reason = error instanceof Error ? error.message : String(error);
-      this.#fail(`The resolver of %extends reports an error for ${JSON.stringify(reference)}: ${reason}`, offset, error);
-    }
-    // A copy, so that merging does not change the value of the resolver.
-    const target = this.#copyBase(base, 0, offset);
+  #extendBases(patch) {
+    let target;
+    this.#extends.forEach(({ reference, offset }, i) => {
+      let base;
+      try {
+        base = this.#resolver(reference);
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error);
+        this.#fail(`The resolver of %extends reports an error for ${JSON.stringify(reference)}: ${reason}`, offset, error);
+      }
+      // A copy, so that merging does not change the value of the resolver.
+      const copy = this.#copyBase(base, 0, reference, offset);
+      target = i === 0 ? copy : mergePatch(target, copy);
+    });
     const result = mergePatch(target, patch);
-    if (this.#check) this.#checkBase(result, offset);
+    // Names and strings of the result come from the base values; an error
+    // is reported at the string of the first %extends.
+    if (this.#check) this.#checkBase(result, this.#extends[0].offset);
     return result;
   }
 
   /**
-   * A copy of the base value; an error if it is not a JSON value or nests
-   * deeper than maxDepth.
+   * A copy of the base value for `reference`; an error if it is not a JSON
+   * value or nests deeper than maxDepth.
    */
-  #copyBase(value, depth, offset) {
+  #copyBase(value, depth, reference, offset) {
     if (value === null || typeof value === 'string' || typeof value === 'boolean' || typeof value === 'bigint') {
       return value;
     }
@@ -668,15 +676,15 @@ export class Parser {
       if (depth >= this.#maxDepth) {
         this.#fail(`The base value of %extends is nested deeper than the limit of ${this.#maxDepth} (option maxDepth)`, offset);
       }
-      if (Array.isArray(value)) return value.map((item) => this.#copyBase(item, depth + 1, offset));
+      if (Array.isArray(value)) return value.map((item) => this.#copyBase(item, depth + 1, reference, offset));
       const proto = Object.getPrototypeOf(value);
       if (proto === Object.prototype || proto === null) {
         const obj = {};
-        for (const name of Object.keys(value)) setMember(obj, name, this.#copyBase(value[name], depth + 1, offset));
+        for (const name of Object.keys(value)) setMember(obj, name, this.#copyBase(value[name], depth + 1, reference, offset));
         return obj;
       }
     }
-    return this.#fail(`The resolver of %extends returned a value that is not a JSON value for ${JSON.stringify(this.#extends)}`, offset);
+    return this.#fail(`The resolver of %extends returned a value that is not a JSON value for ${JSON.stringify(reference)}`, offset);
   }
 
   /** Strict mode for the result of %extends: names and strings (12). */
@@ -708,9 +716,9 @@ export class Parser {
   }
 
   /**
-   * A directive, `%strict` (6.5) or `%extends` (6.6), with the separator
-   * after it. `seen` maps the names of the directives read so far to their
-   * offsets.
+   * A directive, `%strict` (6.5, at most once) or `%extends` (6.6, any
+   * number of times), with the separator after it. `seen` maps the names of
+   * the directives read so far to the offset of their first occurrence.
    */
   #parseDirective(seen) {
     const start = this.#pos;
@@ -726,11 +734,11 @@ export class Parser {
       this.#fail(`Unknown directive '%${name}'${hint}. The directives are ${DIRECTIVE_LIST}`, start);
     }
     const earlier = seen.get(name);
-    if (earlier !== undefined) {
+    if (earlier !== undefined && name === 'strict') {
       const { line, column } = locate(text, earlier);
-      this.#fail(`%${name} is already stated at line ${line}, column ${column}; each directive may occur only once`, start);
+      this.#fail(`%strict is already stated at line ${line}, column ${column}; %strict may occur only once`, start);
     }
-    seen.set(name, start);
+    if (earlier === undefined) seen.set(name, start);
     this.#skipSpace();
     if (this.#peek() !== COLON) this.#failUnexpected(`':' after '%${name}'`);
     this.#pos++;
@@ -756,8 +764,7 @@ export class Parser {
       if (this.#resolver === undefined) {
         this.#fail('%extends is disabled: the application has given the parser no resolver (option resolver)', start);
       }
-      this.#extends = reference;
-      this.#extendsOffset = valueStart;
+      this.#extends.push({ reference, offset: valueStart });
     }
 
     const before = this.#pos;
@@ -814,7 +821,7 @@ export class Parser {
     }
   }
 
-  /** Value of a literal (6.4); `start` is the offset of the identifier. */
+  /** Value of a literal (6.3); `start` is the offset of the identifier. */
   #literal(id, start) {
     switch (id) {
       case 'true':
@@ -822,19 +829,20 @@ export class Parser {
       case 'false':
         return false;
       case 'null':
-      case 'nil':
         return null;
     }
     let hint;
     const lower = id.toLowerCase();
     if (isLiteral(lower)) {
       hint = `; did you mean '${lower}'? Literals are case-sensitive`;
+    } else if (lower === 'nil' || lower === 'none') {
+      hint = '; write null for the null value';
     } else if (id === 'NaN' || id === 'Infinity' || id === 'undefined') {
       hint = `; ${id} is not a JSON value`;
     } else {
       hint = `; text without quotation marks is not a string, write "${id}" for a string`;
     }
-    return this.#fail(`Unexpected identifier '${id}'; the values without quotation marks are true, false, null and nil${hint}`, start);
+    return this.#fail(`Unexpected identifier '${id}'; the values without quotation marks are true, false and null${hint}`, start);
   }
 
   // ----- Objects and arrays (7) -------------------------------------------
