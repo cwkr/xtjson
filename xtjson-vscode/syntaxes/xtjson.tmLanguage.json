@@ -149,9 +149,9 @@
     "literals": {
       "patterns": [
         {
-          "comment": "The values without quotation marks of 6.3; nil is the same value as null.",
+          "comment": "The values without quotation marks of 6.3.",
           "name": "constant.language.xtjson",
-          "match": "(?<![A-Za-z0-9_$\\x{B5}\\x{C0}-\\x{D6}\\x{D8}-\\x{F6}\\x{F8}-\\x{FF}])(?:true|false|null|nil)(?![A-Za-z0-9_$\\x{B5}\\x{C0}-\\x{D6}\\x{D8}-\\x{F6}\\x{F8}-\\x{FF}])"
+          "match": "(?<![A-Za-z0-9_$\\x{B5}\\x{C0}-\\x{D6}\\x{D8}-\\x{F6}\\x{F8}-\\x{FF}])(?:true|false|null)(?![A-Za-z0-9_$\\x{B5}\\x{C0}-\\x{D6}\\x{D8}-\\x{F6}\\x{F8}-\\x{FF}])"
         },
         {
           "comment": "Any other identifier that is not followed by ':' on its line: a name whose ':' follows on a later line, or an error at a value position (6.3). A lexical grammar cannot tell them apart, so it is not marked as invalid.",

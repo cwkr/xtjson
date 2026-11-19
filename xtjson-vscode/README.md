@@ -7,7 +7,7 @@ of JSON for files maintained by people, in files with the extension
 - **Syntax highlighting** for comments (`//`, `#`, `/* */`), names with and
   without quotation marks (also with letters such as `ö` or `é`), strings across several lines, escape
   sequences including the line continuation, numbers in all bases with digit grouping, number suffixes,
-  the values `true`, `false`, `null` and `nil`, and the directives `%strict` and `%extends`. Invalid escape
+  the values `true`, `false` and `null`, and the directives `%strict` and `%extends`. Invalid escape
   sequences, unescaped control characters in strings, three quotation marks
   in a row, malformed numbers (`0755`, `10_k`, `10K`, `1.5n`), `=` and unknown
   directives such as `%define` are marked as errors.
@@ -22,14 +22,14 @@ of JSON for files maintained by people, in files with the extension
   between items is kept.
 - Comment toggling, bracket matching and auto-closing of brackets and quotes.
 
-Implements the XTJSON specification, draft 0.7
+Implements the XTJSON specification, draft 0.8
 ([`docs/xtjson-spec-en.md`](https://github.com/cwkr/xtjson/blob/main/docs/xtjson-spec-en.md)).
 
 ## Limits
 
 - Highlighting and folding are lexical. They do not check the structure of
   the document: an identifier at a value position other than `true`,
-  `false`, `null` and `nil` is an error, but it is not marked as one,
+  `false` and `null` (for example `nil`) is an error, but it is not marked as one,
   because it could also be a name whose `:` follows on a later line; a
   directive is highlighted wherever it stands. The base value of `%extends`
   is not resolved. A name that extends across several lines is highlighted as a

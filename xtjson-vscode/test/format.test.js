@@ -26,7 +26,7 @@ describe('formatText', () => {
   });
 
   test('lays out the directive like a member', () => {
-    assert.equal(formatText('%strict:true,x:nil\n', spaces(2)), '%strict: true,\nx: nil\n');
+    assert.equal(formatText('%strict:true,x:null\n', spaces(2)), '%strict: true,\nx: null\n');
   });
 
   test('keeps comments', () => {

@@ -48,7 +48,7 @@ describe('foldingRanges', () => {
   });
 
   test('values after the directive fold like other values', () => {
-    const text = "%strict: true\naddress: {\n  city: 'x'\n  lines: [\n    1\n  ]\n}\n\nhome: nil";
+    const text = "%strict: true\naddress: {\n  city: 'x'\n  lines: [\n    1\n  ]\n}\n\nhome: null";
     assert.deepEqual(foldingRanges(text), [
       { start: 1, end: 5 },
       { start: 3, end: 4 },

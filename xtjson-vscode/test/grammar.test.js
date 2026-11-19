@@ -59,19 +59,21 @@ describe('grammar', () => {
     assert.equal(scopeOf('$schema: 1', '$schema'), 'support.type.property-name.xtjson');
     assert.equal(scopeOf('{"max-age" : 1}', 'max-age'), 'support.type.property-name.xtjson');
     assert.equal(scopeOf("{'a\\'b': 1}", '\\\''), 'constant.character.escape.xtjson');
-    assert.equal(scopeOf('{nil: nil}', 'nil'), 'support.type.property-name.xtjson');
+    assert.equal(scopeOf('{null: null}', 'null'), 'support.type.property-name.xtjson');
+    assert.equal(scopeOf('{nil: 1}', 'nil'), 'support.type.property-name.xtjson');
     for (const n of ['größe', 'µm', 'À', 'ÿ', 'Ö9_$']) {
       assert.equal(scopeOf(`{${n}: 1}`, n), 'support.type.property-name.xtjson', n);
     }
     assert.equal(scopeOf('a: größe', 'größe'), 'variable.other.xtjson');
-    assert.deepEqual(tokens('{nil: nil}').filter(([t]) => t === 'nil').map(([, s]) => s), [
+    assert.deepEqual(tokens('{null: null}').filter(([t]) => t === 'null').map(([, s]) => s), [
       'support.type.property-name.xtjson',
       'constant.language.xtjson',
     ]);
   });
 
   test('literals', () => {
-    for (const v of ['true', 'false', 'null', 'nil']) assert.equal(scopeOf(`a: ${v}`, v), 'constant.language.xtjson');
+    for (const v of ['true', 'false', 'null']) assert.equal(scopeOf(`a: ${v}`, v), 'constant.language.xtjson');
+    assert.equal(scopeOf('a: nil', 'nil'), 'variable.other.xtjson');
     assert.equal(scopeOf('a: unknown', 'unknown'), 'variable.other.xtjson');
     assert.equal(scopeOf('a: True', 'True'), 'variable.other.xtjson');
     assert.equal(scopeOf('a: nullable', 'nullable'), 'variable.other.xtjson');
